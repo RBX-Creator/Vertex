@@ -2,6 +2,8 @@
 
 Info-Seite für das Roblox-Spiel **Seelenfrüchte (Soul Fruits)**. Alles steckt in einer einzigen Datei: `index.html`.
 
+Standardsprache ist Englisch, oben rechts lässt sich auf Deutsch umschalten (die Wahl wird im Browser gemerkt). Englische Texte stehen direkt im HTML, die deutschen im Objekt `DE` im Script.
+
 ## Links eintragen
 
 Oben im `<script>`-Bereich von `index.html`:

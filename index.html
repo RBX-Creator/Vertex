@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Seelenfrüchte</title>
-<meta name="description" content="Seelenfrüchte (Soul Fruits): Roblox-Abenteuer auf einer Inselwelt. Wähle Gut oder Böse, finde Früchte mit besonderen Kräften, besiege Bosse und sammle Kopfgeld.">
+<meta name="description" content="Seelenfrüchte (Soul Fruits): a Roblox island adventure. Pick Good or Evil, find fruits with special powers, defeat bosses and collect bounty.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pirata+One&family=Rubik:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap">
@@ -266,24 +266,35 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: s
   *, *::before, *::after { animation: none !important; transition: none !important; }
   html { scroll-behavior: auto; }
 }
+
+/* Sprachumschalter */
+.lang { flex: none; display: inline-flex; padding: 3px; border-radius: 8px; background: var(--sea-2); border: 1px solid var(--line); }
+.lang button { font: 700 .75rem/1 var(--f-mono); letter-spacing: .06em; padding: 7px 9px; border-radius: 5px; border: 0; background: transparent; color: var(--mist); cursor: pointer; }
+.lang button[aria-pressed="true"] { background: var(--foam); color: var(--abyss); }
+.gloss { font-family: var(--f-body); font-size: .9rem; color: var(--mist); margin-left: 6px; }
+@media (max-width: 520px) { .nav .btn-sm { display: none; } }
 </style>
 </head>
 <body>
 
-<nav class="nav" aria-label="Hauptmenü">
+<nav class="nav" data-i18n-label="navLabel" aria-label="Main menu">
   <div class="wrap">
     <a class="brand" href="#top">Seelenfrüchte</a>
     <div class="nav-links">
-      <a href="#seiten">Gut &amp; Böse</a>
-      <a href="#inseln">Inseln</a>
-      <a href="#fruechte">Früchte</a>
-      <a href="#haendler">Fruchthändler</a>
-      <a href="#kampf">Kampf</a>
-      <a href="#steuerung">Steuerung</a>
-      <a href="#ausruestung">Ausrüstung</a>
-      <a href="#welt">Welt</a>
+      <a href="#seiten" data-i18n="nav1">Good &amp; Evil</a>
+      <a href="#inseln" data-i18n="nav2">Islands</a>
+      <a href="#fruechte" data-i18n="nav3">Fruits</a>
+      <a href="#haendler" data-i18n="nav4">Fruit Dealer</a>
+      <a href="#kampf" data-i18n="nav5">Combat</a>
+      <a href="#steuerung" data-i18n="nav6">Controls</a>
+      <a href="#ausruestung" data-i18n="nav7">Gear</a>
+      <a href="#welt" data-i18n="nav8">World</a>
     </div>
-    <a class="btn btn-play btn-sm js-play" href="#" target="_blank" rel="noopener">Spielen</a>
+    <div class="lang" role="group" aria-label="Language / Sprache">
+      <button id="lang-en" data-lang="en" aria-pressed="true" type="button">EN</button>
+      <button id="lang-de" data-lang="de" aria-pressed="false" type="button">DE</button>
+    </div>
+    <a class="btn btn-play btn-sm js-play" href="#" target="_blank" rel="noopener" data-i18n="play">Play</a>
   </div>
 </nav>
 
@@ -291,20 +302,21 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: s
   <canvas id="stars" aria-hidden="true"></canvas>
   <div class="moon" aria-hidden="true"></div>
   <div class="wrap hero-inner">
-    <span class="eyebrow">Ein Roblox-Abenteuer</span>
+    <span class="eyebrow" data-i18n="heroEyebrow">A Roblox adventure</span>
     <h1>Seelenfrüchte<small>Soul Fruits</small></h1>
-    <p class="lead">Kämpf dich von Insel zu Insel, finde Früchte mit besonderen Kräften und tritt gegen Bosse und andere Spieler an. Du startest am Steg der Muschelbucht, nur mit deinen Fäusten.</p>
+    <p class="lead" data-i18n="heroLead">Fight your way from island to island, find fruits with special powers and take on bosses and other players. You start on the dock of Muschelbucht with nothing but your fists.</p>
     <div class="hero-cta">
-      <a class="btn btn-play js-play" href="#" target="_blank" rel="noopener">▶ Jetzt auf Roblox spielen</a>
-      <a class="btn btn-ghost js-discord" href="#" target="_blank" rel="noopener">Discord beitreten</a>
+      <a class="btn btn-play js-play" href="#" target="_blank" rel="noopener" data-i18n="playRoblox">▶ Play on Roblox</a>
+      <a class="btn btn-ghost js-discord" href="#" target="_blank" rel="noopener" data-i18n="discord">Join the Discord</a>
     </div>
     <div class="facts">
-      <div class="fact"><b>700</b><span>Max-Level</span></div>
-      <div class="fact"><b>10</b><span>Früchte</span></div>
-      <div class="fact"><b>8</b><span>Inseln</span></div>
-      <div class="fact"><b>6+</b><span>Bosse</span></div>
-      <div class="fact"><b>2</b><span>Seiten</span></div>
+      <div class="fact"><b>700</b><span data-i18n="f1">Max level</span></div>
+      <div class="fact"><b>10</b><span data-i18n="f2">Fruits</span></div>
+      <div class="fact"><b>8</b><span data-i18n="f3">Islands</span></div>
+      <div class="fact"><b>6+</b><span data-i18n="f4">Bosses</span></div>
+      <div class="fact"><b>2</b><span data-i18n="f5">Sides</span></div>
     </div>
+    <p class="sim-note" data-i18n="germanNote">The game itself is currently in German.</p>
   </div>
   <div class="waves" aria-hidden="true">
     <svg viewBox="0 0 1440 90" preserveAspectRatio="none"><path fill="#0c1a2b" d="M0 40 Q90 10 180 40 T360 40 T540 40 T720 40 T900 40 T1080 40 T1260 40 T1440 40 V90 H0Z"/></svg>
@@ -317,27 +329,27 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: s
 <section id="seiten">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow">Deine erste Entscheidung</span>
-      <h2>Gut oder Böse?</h2>
-      <p class="lead">Beim ersten Start wählst du eine Seite. Die Wahl gilt für immer, also überleg gut.</p>
+      <span class="eyebrow" data-i18n="sidesEyebrow">Your first choice</span>
+      <h2 data-i18n="sidesTitle">Good or Evil?</h2>
+      <p class="lead" data-i18n="sidesLead">On your first start you pick a side. The choice is permanent, so think it over.</p>
     </div>
     <div class="sides">
       <div class="side good">
-        <span class="eyebrow">Seite</span>
-        <h3>Gut</h3>
-        <p>Du kannst nur Spielern der bösen Seite Schaden machen. Jeder besiegte Böse lässt dein Kopfgeld steigen.</p>
+        <span class="eyebrow" data-i18n="side">Side</span>
+        <h3 data-i18n="good">Good</h3>
+        <p data-i18n="goodText">You can only damage players on the Evil side. Every Evil player you defeat raises your bounty.</p>
       </div>
       <div class="side evil">
-        <span class="eyebrow">Seite</span>
-        <h3>Böse</h3>
-        <p>Du kannst nur Spielern der guten Seite Schaden machen. Böse Spieler können sich verbünden, damit sie sich nicht gegenseitig angreifen.</p>
+        <span class="eyebrow" data-i18n="side">Side</span>
+        <h3 data-i18n="evil">Evil</h3>
+        <p data-i18n="evilText">You can only damage players on the Good side. Evil players can form alliances so they don't attack each other.</p>
       </div>
     </div>
     <ul class="rules">
-      <li><b>Leveln bis 700</b>Über Quests auf jeder Insel. Pro Level gibt es 3 Punkte zum Verteilen.</li>
-      <li><b>Früchte meistern</b>Mit jeder Frucht schaltest du durch Kämpfen neue Attacken frei.</li>
-      <li><b>Bosse besiegen</b>Jede Insel nach der Startinsel hat ihren eigenen Boss.</li>
-      <li><b>Kopfgeld jagen</b>Im PvP gegen die andere Seite steigt dein Kopfgeld.</li>
+      <li data-i18n="rule1"><b>Level up to 700</b>Through quests on every island. Each level gives you 3 points to spend.</li>
+      <li data-i18n="rule2"><b>Master fruits</b>Fighting with a fruit unlocks its next attacks.</li>
+      <li data-i18n="rule3"><b>Defeat bosses</b>Every island after the starter island has its own boss.</li>
+      <li data-i18n="rule4"><b>Hunt bounty</b>Beat players of the other side in PvP to raise your bounty.</li>
     </ul>
   </div>
 </section>
@@ -345,9 +357,9 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: s
 <section id="inseln" class="alt">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow">Die Reiseroute</span>
-      <h2>Inseln und Bosse</h2>
-      <p class="lead">Auf jeder Insel steht ein Quest-NPC. Ab der zweiten Insel gibt es zwei Gegnergruppen: Die zweite gibt mehr Erfahrung und öffnet sich erst ab einem bestimmten Level. Danach wartet die Boss-Quest.</p>
+      <span class="eyebrow" data-i18n="islesEyebrow">The route</span>
+      <h2 data-i18n="islesTitle">Islands and Bosses</h2>
+      <p class="lead" data-i18n="islesLead">Every island has a quest NPC. From the second island on there are two enemy groups: the second gives more XP and only unlocks at a certain level. After that comes the boss quest.</p>
     </div>
     <ol class="voyage" id="voyage"></ol>
   </div>
@@ -356,22 +368,22 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: s
 <section id="fruechte">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow">Die Kräfte</span>
-      <h2>Alle Früchte</h2>
-      <p class="lead">Jede Frucht hat vier Attacken auf Z, X, C und V. Neue Attacken schaltest du über Mastery frei, also durch Kämpfen mit der Frucht. Mastery wird pro Frucht getrennt gespeichert.</p>
+      <span class="eyebrow" data-i18n="fruitsEyebrow">The powers</span>
+      <h2 data-i18n="fruitsTitle">All Fruits</h2>
+      <p class="lead" data-i18n="fruitsLead">Every fruit has four attacks on Z, X, C and V. You unlock new attacks with mastery, which you earn by fighting with the fruit. Mastery is saved separately for each fruit.</p>
     </div>
-    <div class="filters" role="group" aria-label="Nach Seltenheit filtern">
-      <button class="chip" id="f-alle" data-r="alle" aria-pressed="true">Alle</button>
-      <button class="chip" id="f-mythisch" data-r="mythisch" aria-pressed="false">Mythisch</button>
-      <button class="chip" id="f-legendaer" data-r="legendaer" aria-pressed="false">Legendär</button>
-      <button class="chip" id="f-selten" data-r="selten" aria-pressed="false">Selten</button>
-      <button class="chip" id="f-normal" data-r="normal" aria-pressed="false">Normal</button>
+    <div class="filters" role="group" data-i18n-label="filterLabel" aria-label="Filter by rarity">
+      <button class="chip" id="f-alle" data-r="alle" aria-pressed="true" data-i18n="all">All</button>
+      <button class="chip" id="f-mythisch" data-r="mythisch" aria-pressed="false" data-i18n="r_mythisch">Mythical</button>
+      <button class="chip" id="f-legendaer" data-r="legendaer" aria-pressed="false" data-i18n="r_legendaer">Legendary</button>
+      <button class="chip" id="f-selten" data-r="selten" aria-pressed="false" data-i18n="r_selten">Rare</button>
+      <button class="chip" id="f-normal" data-r="normal" aria-pressed="false" data-i18n="r_normal">Common</button>
     </div>
     <div class="fruits" id="fruits"></div>
     <div class="bonus">
-      <span><b>Legendär:</b> +15 % Schaden</span>
-      <span><b>Mythisch:</b> +35 % Schaden</span>
-      <span><b>Frucht-Stat:</b> +1 % Frucht-Schaden pro Punkt</span>
+      <span data-i18n="bonus1"><b>Legendary:</b> +15% damage</span>
+      <span data-i18n="bonus2"><b>Mythical:</b> +35% damage</span>
+      <span data-i18n="bonus3"><b>Fruit stat:</b> +1% fruit damage per point</span>
     </div>
   </div>
 </section>
@@ -379,30 +391,30 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: s
 <section id="haendler" class="alt">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow">Fruchthändler Fio</span>
-      <h2>Versuch dein Glück</h2>
-      <p class="lead">Früchte ziehst du beim Fruchthändler Fio mit Splitz, einmal alle 2 Stunden. Meistens kommt nichts, manchmal eine Frucht. Hier kannst du mit den echten Chancen so oft ziehen, wie du willst.</p>
+      <span class="eyebrow" data-i18n="dealerEyebrow">Fruit dealer Fio</span>
+      <h2 data-i18n="dealerTitle">Try your luck</h2>
+      <p class="lead" data-i18n="dealerLead">You pull fruits from the fruit dealer Fio with Splitz, once every 2 hours. Most of the time you get nothing, sometimes a fruit. Here you can pull as often as you like, with the real odds.</p>
     </div>
     <div class="dealer">
       <ol class="steps">
-        <li><span><b>Ziehen.</b> Eine gezogene Frucht landet in deiner Hand bzw. im Inventar.</span></li>
-        <li><span><b>Ausrüsten.</b> Antippen, dann hältst du sie in der Hand.</span></li>
-        <li><span><b>Essen.</b> Die Kräfte sind sofort da. Eine gegessene Frucht kommt nicht zurück.</span></li>
-        <li><span><b>Mastery sammeln.</b> Kämpfe mit der Frucht, um X, C und V freizuschalten.</span></li>
+        <li><span data-i18n="step1"><b>Pull.</b> A fruit you pull goes into your hand or inventory.</span></li>
+        <li><span data-i18n="step2"><b>Equip.</b> Tap it and you hold it in your hand.</span></li>
+        <li><span data-i18n="step3"><b>Eat.</b> The powers are yours right away. An eaten fruit never comes back.</span></li>
+        <li><span data-i18n="step4"><b>Gain mastery.</b> Fight with the fruit to unlock X, C and V.</span></li>
       </ol>
       <div class="sim" aria-live="polite">
         <div class="sim-stage">
           <div class="sim-orb" id="simOrb"></div>
-          <div class="sim-result" id="simResult">Bereit?</div>
-          <div class="sim-sub" id="simSub">Fio wartet auf deinen Zug.</div>
+          <div class="sim-result" id="simResult"></div>
+          <div class="sim-sub" id="simSub"></div>
         </div>
-        <button class="btn btn-play" id="simBtn" type="button">Frucht ziehen</button>
+        <button class="btn btn-play" id="simBtn" type="button" data-i18n="pull">Pull a fruit</button>
         <div class="sim-stats">
-          <span>Züge: <b id="simPulls">0</b></span>
-          <span>Früchte: <b id="simHits">0</b></span>
-          <span>Bester Fund: <b id="simBest">–</b></span>
+          <span><span data-i18n="pulls">Pulls</span>: <b id="simPulls">0</b></span>
+          <span><span data-i18n="hits">Fruits</span>: <b id="simHits">0</b></span>
+          <span><span data-i18n="best">Best find</span>: <b id="simBest">–</b></span>
         </div>
-        <p class="sim-note">Nur zum Spaß. Im Spiel kostet jeder Zug Splitz und geht nur alle 2 Stunden.</p>
+        <p class="sim-note" data-i18n="simNote">Just for fun. In the game every pull costs Splitz and only works every 2 hours.</p>
       </div>
     </div>
   </div>
@@ -411,29 +423,29 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: s
 <section id="verwandlungen">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow">Mythische Formen</span>
-      <h2>Verwandlungen</h2>
-      <p class="lead">Jaguar und Scharingan haben eine Verwandlung, die du über eine eigene Leiste auflädst.</p>
+      <span class="eyebrow" data-i18n="formsEyebrow">Mythical forms</span>
+      <h2 data-i18n="formsTitle">Transformations</h2>
+      <p class="lead" data-i18n="formsLead">Jaguar and Scharingan each have a transformation that you charge with its own meter.</p>
     </div>
     <div class="forms">
       <div class="form jaguar">
-        <span class="tag">Jaguar-Frucht</span>
-        <h3>Jaguar-Form</h3>
-        <p>Du wirst ein leuchtender blauer Jaguar: schneller, kannst auf Wasser laufen und kämpfst mit Biss (Hochreißen und Schmettern), Pranken-Wirbel und Jaguar-Sprung. Deine Treffer vergiften.</p>
+        <span class="tag" data-i18n="jagTag">Jaguar fruit</span>
+        <h3 data-i18n="jagTitle">Jaguar Form</h3>
+        <p data-i18n="jagText">You become a glowing blue jaguar: faster, able to run on water, fighting with Bite (launch and slam), Claw Whirl and Jaguar Leap. Your hits poison.</p>
       </div>
       <div class="form blood">
-        <span class="tag">Scharingan-Frucht</span>
-        <h3>Blutwächter</h3>
-        <p>Ein 110 Studs großer roter Riese mit Armschlägen, Blutscheibe und Stampfer. Mit T erschafft er ein Riesenschwert, packt Gegner und schmettert sie in den Boden.</p>
+        <span class="tag" data-i18n="bloodTag">Scharingan fruit</span>
+        <h3 data-i18n="bloodTitle">Blutwächter</h3>
+        <p data-i18n="bloodText">A 110-stud red giant with arm strikes, a blood disc and a stomp. With T it creates a giant sword, grabs enemies and slams them into the ground.</p>
       </div>
     </div>
     <div class="meter">
       <div class="meter-bar" aria-hidden="true"><div class="meter-fill"></div></div>
       <ol>
-        <li>Mach mit der Frucht Schaden. <b>Je mehr Schaden, desto schneller füllt sich die Leiste.</b></li>
-        <li>Ist sie voll, erscheint <b>„METER VOLL“</b>.</li>
-        <li>Drück <b>V</b> zum Verwandeln. Die Leiste sinkt langsam, jede Attacke zieht etwas ab.</li>
-        <li>Bei <b>Vollmond</b> hält die Verwandlung 30 Sekunden länger.</li>
+        <li data-i18n="m1">Deal damage with the fruit. <b>The more damage, the faster the meter fills.</b></li>
+        <li data-i18n="m2">When it's full, <b>“METER VOLL”</b> appears.</li>
+        <li data-i18n="m3">Press <b>V</b> to transform. The meter drains slowly and each attack takes a bit more.</li>
+        <li data-i18n="m4">During a <b>full moon</b> the transformation lasts 30 seconds longer.</li>
       </ol>
     </div>
   </div>
@@ -442,44 +454,44 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: s
 <section id="kampf" class="alt">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow">Kampf und PvP</span>
-      <h2>So gewinnst du Kämpfe</h2>
+      <span class="eyebrow" data-i18n="combatEyebrow">Combat and PvP</span>
+      <h2 data-i18n="combatTitle">How to win fights</h2>
     </div>
     <div class="cols">
       <ul class="tips">
-        <li><b>Automatisches Zielen.</b> Attacken rasten auf das nächste Ziel ein. Wer knapp danebenzielt, trifft trotzdem.</li>
-        <li><b>Combos bauen.</b> Viele Attacken ziehen Gegner heran (Dreck Z, Frost Z, Schatten Z, Flamme C) oder schleudern sie weg (Jaguar-Biss, Erdhügel, Stoß-Kugel).</li>
-        <li><b>Luft-Combo.</b> Gegner in der Luft oder im Griff nehmen 20 % mehr Schaden.</li>
-        <li><b>Blocken.</b> R halten verringert den Schaden.</li>
-        <li><b>Gegner-KI.</b> Gegner greifen erst an, wenn du direkt vor ihnen stehst. Ziehst du ihnen mehr als 25 % Leben ab, werden sie wütend und verfolgen dich, bis du ihr Gebiet verlässt.</li>
+        <li data-i18n="tip1"><b>Auto-aim.</b> Attacks lock onto the nearest target. Even a near miss still hits.</li>
+        <li data-i18n="tip2"><b>Build combos.</b> Many attacks pull enemies in (Dreck Z, Frost Z, Schatten Z, Flamme C) or knock them away (Jaguar Bite, Erdhügel, Stoß-Kugel).</li>
+        <li data-i18n="tip3"><b>Air combo.</b> Enemies in the air or in a grab take 20% more damage.</li>
+        <li data-i18n="tip4"><b>Block.</b> Hold R to reduce damage.</li>
+        <li data-i18n="tip5"><b>Enemy AI.</b> Enemies only attack when you stand right in front of them. Take more than 25% of their health and they get angry and chase you until you leave their area.</li>
       </ul>
       <div class="table-box">
         <table>
-          <thead><tr><th>Effekt</th><th>Wirkung</th></tr></thead>
+          <thead><tr><th data-i18n="effect">Effect</th><th data-i18n="whatItDoes">What it does</th></tr></thead>
           <tbody>
-            <tr><td>Brennen</td><td>Schaden über Zeit (Flamme)</td></tr>
-            <tr><td>Gift</td><td>Schaden über Zeit (Jaguar)</td></tr>
-            <tr><td>Einfrieren</td><td>Im Eisblock gefangen (Frost)</td></tr>
-            <tr><td>Verlangsamen</td><td>Läuft langsamer (Frost, Dreck)</td></tr>
-            <tr><td>Betäubung</td><td>Kann sich kurz nicht bewegen</td></tr>
+            <tr><td data-i18n="e1">Burn</td><td data-i18n="e1d">Damage over time (Flamme)</td></tr>
+            <tr><td data-i18n="e2">Poison</td><td data-i18n="e2d">Damage over time (Jaguar)</td></tr>
+            <tr><td data-i18n="e3">Freeze</td><td data-i18n="e3d">Trapped in a block of ice (Frost)</td></tr>
+            <tr><td data-i18n="e4">Slow</td><td data-i18n="e4d">Moves slower (Frost, Dreck)</td></tr>
+            <tr><td data-i18n="e5">Stun</td><td data-i18n="e5d">Briefly can't move</td></tr>
           </tbody>
         </table>
       </div>
     </div>
     <div class="sec-head" style="margin-top:56px">
-      <span class="eyebrow">Level und Stats</span>
-      <h3>3 Punkte pro Level</h3>
-      <p class="lead">Ungenutzte Punkte bleiben liegen und können später verteilt werden.</p>
+      <span class="eyebrow" data-i18n="statsEyebrow">Levels and stats</span>
+      <h3 data-i18n="statsTitle">3 points per level</h3>
+      <p class="lead" data-i18n="statsLead">Unspent points stay saved and can be spent later.</p>
     </div>
     <div class="table-box">
       <table>
-        <thead><tr><th>Stat</th><th>Wirkung</th></tr></thead>
+        <thead><tr><th>Stat</th><th data-i18n="whatItDoes">What it does</th></tr></thead>
         <tbody>
-          <tr><td>Melee</td><td>Stärkere Faustschläge</td></tr>
-          <tr><td>Leben</td><td>Mehr Lebenspunkte</td></tr>
-          <tr><td>Chakra</td><td>Mehr Energie für Dash und Fliegen</td></tr>
-          <tr><td>Schwert</td><td>Stärkere Schwertangriffe</td></tr>
-          <tr><td>Frucht</td><td>+1 % Frucht-Schaden pro Punkt</td></tr>
+          <tr><td>Melee</td><td data-i18n="s1">Stronger punches</td></tr>
+          <tr><td data-i18n="s2n">Health</td><td data-i18n="s2">More hit points</td></tr>
+          <tr><td>Chakra</td><td data-i18n="s3">More energy for dash and flying</td></tr>
+          <tr><td data-i18n="s4n">Sword</td><td data-i18n="s4">Stronger sword attacks</td></tr>
+          <tr><td data-i18n="s5n">Fruit</td><td data-i18n="s5">+1% fruit damage per point</td></tr>
         </tbody>
       </table>
     </div>
@@ -489,13 +501,13 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: s
 <section id="steuerung">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow">Steuerung</span>
-      <h2>PC und Handy</h2>
-      <p class="lead">Am PC spielst du mit Maus und Tasten, am Handy mit runden Knöpfen rechts. Unter Einstellungen → „Anzeigen verschieben“ kannst du Anzeigen und Knöpfe verschieben, vergrößern und festmachen.</p>
+      <span class="eyebrow" data-i18n="ctrlEyebrow">Controls</span>
+      <h2 data-i18n="ctrlTitle">PC and Mobile</h2>
+      <p class="lead" data-i18n="ctrlLead">On PC you play with mouse and keyboard, on mobile with round buttons on the right. Under Settings → “Anzeigen verschieben” you can move, resize and lock your HUD and buttons.</p>
     </div>
-    <div class="toggle" role="group" aria-label="Gerät wählen">
+    <div class="toggle" role="group" data-i18n-label="deviceLabel" aria-label="Choose device">
       <button id="dev-pc" data-dev="pc" aria-pressed="true" type="button">PC</button>
-      <button id="dev-mobile" data-dev="mobile" aria-pressed="false" type="button">Handy</button>
+      <button id="dev-mobile" data-dev="mobile" aria-pressed="false" type="button" data-i18n="mobile">Mobile</button>
     </div>
     <div class="controls" id="controls"></div>
   </div>
@@ -504,53 +516,47 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: s
 <section id="ausruestung" class="alt">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow">Ausrüstung, Boote, Währungen</span>
-      <h2>Rüste dich aus</h2>
+      <span class="eyebrow" data-i18n="gearEyebrow">Gear, boats, currencies</span>
+      <h2 data-i18n="gearTitle">Gear up</h2>
     </div>
     <div class="coins">
-      <div class="coin"><i aria-hidden="true"></i><p><b>Coins</b>Für fast alles. Gibt es für Quests und besiegte Gegner.</p></div>
-      <div class="coin splitz"><i aria-hidden="true"></i><p><b>Splitz</b>Nur für den Fruchthändler, zum Ziehen von Früchten.</p></div>
+      <div class="coin"><i aria-hidden="true"></i><p data-i18n="coins"><b>Coins</b>For almost everything. Earned from quests and defeated enemies.</p></div>
+      <div class="coin splitz"><i aria-hidden="true"></i><p data-i18n="splitz"><b>Splitz</b>Only for the fruit dealer, to pull fruits.</p></div>
     </div>
     <div class="gear">
       <div class="gear-col">
-        <h3>Schwerter</h3>
-        <p>Beim Schmied gegen Coins. M1 ist ein Hieb, länger halten gibt einen Halten-Schlag, dazu kommen eigene Attacken. Du hältst immer nur eine Waffe oder eine Frucht.</p>
+        <h3 data-i18n="swords">Swords</h3>
+        <p data-i18n="swordsText">Bought from the blacksmith with Coins. M1 is a slash, holding gives a charged strike, plus each sword's own attacks. You can only hold one weapon or one fruit at a time.</p>
         <ul class="swords">
           <li>Treibholz</li>
           <li>Koralle</li>
           <li>Sturm</li>
-          <li>Glutkatana <span>Attacken folgen</span></li>
-          <li>Mondsichel <span>Attacken folgen</span></li>
+          <li>Glutkatana <span data-i18n="soon">attacks coming</span></li>
+          <li>Mondsichel <span data-i18n="soon">attacks coming</span></li>
         </ul>
       </div>
       <div class="gear-col">
-        <h3>Tränke</h3>
+        <h3 data-i18n="potions">Potions</h3>
         <div class="table-box">
           <table>
-            <thead><tr><th>Trank</th><th>Wirkung</th></tr></thead>
+            <thead><tr><th data-i18n="potion">Potion</th><th data-i18n="whatItDoes">What it does</th></tr></thead>
             <tbody>
-              <tr><td>Krafttrank</td><td>+25 % Schaden für 60 s</td></tr>
-              <tr><td>Tempotrank</td><td>Schneller laufen für 60 s</td></tr>
-              <tr><td>Chakratrank</td><td>Füllt 60 % Chakra auf</td></tr>
+              <tr><td>Krafttrank</td><td data-i18n="p1">+25% damage for 60 s</td></tr>
+              <tr><td>Tempotrank</td><td data-i18n="p2">Run faster for 60 s</td></tr>
+              <tr><td>Chakratrank</td><td data-i18n="p3">Restores 60% chakra</td></tr>
             </tbody>
           </table>
         </div>
-        <h3 style="margin-top:12px">Home und Kopfgeld</h3>
-        <p>Beim Home-NPC setzt du deinen Rückkehrpunkt, der Haus-Knopf bringt dich hin (nicht im Kampf). Dein Kopfgeld steigt nur, wenn du einen Spieler der anderen Seite besiegst.</p>
+        <h3 style="margin-top:12px" data-i18n="homeTitle">Home and bounty</h3>
+        <p data-i18n="homeText">The Home NPC sets your return point and the house button takes you there (not during combat). Your bounty only rises when you defeat a player of the other side.</p>
       </div>
       <div class="gear-col">
-        <h3>Boote</h3>
-        <p>Bei Bootsbauer Kalle. Gekaufte Boote gehören dir für immer und lassen sich an jedem Steg rufen. Gesteuert wird mit W.</p>
+        <h3 data-i18n="boats">Boats</h3>
+        <p data-i18n="boatsText">From boatbuilder Kalle. Boats you buy are yours forever and can be called at any dock. Steer with W.</p>
         <div class="table-box">
           <table>
-            <thead><tr><th>Boot</th><th class="price">Preis</th></tr></thead>
-            <tbody>
-              <tr><td>Holzboot</td><td class="price">kostenlos</td></tr>
-              <tr><td>Fischerboot</td><td class="price">2.500 Coins</td></tr>
-              <tr><td>Segelschiff</td><td class="price">9.000 Coins</td></tr>
-              <tr><td>Brigantine</td><td class="price">25.000 Coins</td></tr>
-              <tr><td>Galeone</td><td class="price">60.000 Coins</td></tr>
-            </tbody>
+            <thead><tr><th data-i18n="boat">Boat</th><th class="price" data-i18n="price">Price</th></tr></thead>
+            <tbody id="boats"></tbody>
           </table>
         </div>
       </div>
@@ -561,31 +567,29 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: s
 <section id="welt">
   <div class="wrap">
     <div class="sec-head">
-      <span class="eyebrow">Die Welt</span>
-      <h2>Tag, Nacht und Mond</h2>
-      <p class="lead">Zwischen den Inseln liegt offenes Meer. Du schwimmst an der Oberfläche oder fährst mit dem Boot. Nachts gehen die Laternen an.</p>
+      <span class="eyebrow" data-i18n="worldEyebrow">The world</span>
+      <h2 data-i18n="worldTitle">Day, Night and Moon</h2>
+      <p class="lead" data-i18n="worldLead">Open sea lies between the islands. Swim on the surface or take a boat. At night the lanterns light up.</p>
     </div>
     <div class="cycle">
-      <div class="cycle-bar"><div class="day">☀ Tag · ca. 12 min</div><div class="night">☾ Nacht · ca. 8 min</div></div>
+      <div class="cycle-bar"><div class="day" data-i18n="day">☀ Day · ~12 min</div><div class="night" data-i18n="night">☾ Night · ~8 min</div></div>
     </div>
-    <h3>8 Mondphasen</h3>
-    <p class="lead" style="margin-top:6px">Jede Nacht eine Phase weiter. Die aktuelle Phase steht unter der Uhr. Bei Vollmond halten Verwandlungen länger.</p>
+    <h3 data-i18n="phasesTitle">8 moon phases</h3>
+    <p class="lead" style="margin-top:6px" data-i18n="phasesLead">Each night moves one phase forward. The current phase is shown below the clock. During a full moon, transformations last longer.</p>
     <div class="phases" id="phases"></div>
-    <h3 style="margin-top:36px">Alles wird automatisch gespeichert</h3>
-    <div class="saves">
-      <span>Seite</span><span>Level</span><span>Erfahrung</span><span>Stats</span><span>Coins</span><span>Splitz</span><span>Inventar</span><span>Gegessene Frucht</span><span>Mastery</span><span>Home-Insel</span><span>Kopfgeld</span><span>Boote</span><span>Lautstärke</span><span>Anordnung der Anzeigen</span>
-    </div>
+    <h3 style="margin-top:36px" data-i18n="savesTitle">Everything saves automatically</h3>
+    <div class="saves" id="saves"></div>
   </div>
 </section>
 
 <section class="final">
   <div class="wrap">
-    <span class="eyebrow">Der Steg in der Muschelbucht wartet</span>
-    <h2>Welche Frucht wird deine?</h2>
-    <p class="lead">Das Spiel ist komplett auf Deutsch. Wähl deine Seite und leg los.</p>
+    <span class="eyebrow" data-i18n="finalEyebrow">The dock at Muschelbucht is waiting</span>
+    <h2 data-i18n="finalTitle">Which fruit will be yours?</h2>
+    <p class="lead" data-i18n="finalLead">Pick your side and set sail.</p>
     <div class="hero-cta" style="justify-content:center">
-      <a class="btn btn-play js-play" href="#" target="_blank" rel="noopener">▶ Jetzt auf Roblox spielen</a>
-      <a class="btn btn-ghost js-discord" href="#" target="_blank" rel="noopener">Discord beitreten</a>
+      <a class="btn btn-play js-play" href="#" target="_blank" rel="noopener" data-i18n="playRoblox">▶ Play on Roblox</a>
+      <a class="btn btn-ghost js-discord" href="#" target="_blank" rel="noopener" data-i18n="discord">Join the Discord</a>
     </div>
   </div>
 </section>
@@ -594,8 +598,8 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: s
 
 <footer>
   <div class="wrap">
-    <span>Seelenfrüchte · ein Roblox-Spiel von @Leeam</span>
-    <span>Roblox ist eine Marke der Roblox Corporation. Diese Seite ist nicht mit Roblox verbunden.</span>
+    <span data-i18n="footer1">Seelenfrüchte · a Roblox game by @Leeam</span>
+    <span data-i18n="footer2">Roblox is a trademark of Roblox Corporation. This site is not affiliated with Roblox.</span>
   </div>
 </footer>
 
@@ -612,88 +616,200 @@ document.querySelectorAll(".js-discord").forEach(a => {
   if (DISCORD_LINK) a.href = DISCORD_LINK; else a.hidden = true;
 });
 
-// Inseln
+// ===== Übersetzungen =====
+// Englisch steht direkt im HTML (Standard). Hier stehen die deutschen Texte.
+const DE = {
+  navLabel: "Hauptmenü", nav1: "Gut &amp; Böse", nav2: "Inseln", nav3: "Früchte", nav4: "Fruchthändler", nav5: "Kampf", nav6: "Steuerung", nav7: "Ausrüstung", nav8: "Welt",
+  play: "Spielen", playRoblox: "▶ Jetzt auf Roblox spielen", discord: "Discord beitreten",
+  heroEyebrow: "Ein Roblox-Abenteuer",
+  heroLead: "Kämpf dich von Insel zu Insel, finde Früchte mit besonderen Kräften und tritt gegen Bosse und andere Spieler an. Du startest am Steg der Muschelbucht, nur mit deinen Fäusten.",
+  f1: "Max-Level", f2: "Früchte", f3: "Inseln", f4: "Bosse", f5: "Seiten",
+  germanNote: "Das Spiel ist komplett auf Deutsch.",
+  sidesEyebrow: "Deine erste Entscheidung", sidesTitle: "Gut oder Böse?",
+  sidesLead: "Beim ersten Start wählst du eine Seite. Die Wahl gilt für immer, also überleg gut.",
+  side: "Seite", good: "Gut", evil: "Böse",
+  goodText: "Du kannst nur Spielern der bösen Seite Schaden machen. Jeder besiegte Böse lässt dein Kopfgeld steigen.",
+  evilText: "Du kannst nur Spielern der guten Seite Schaden machen. Böse Spieler können sich verbünden, damit sie sich nicht gegenseitig angreifen.",
+  rule1: "<b>Leveln bis 700</b>Über Quests auf jeder Insel. Pro Level gibt es 3 Punkte zum Verteilen.",
+  rule2: "<b>Früchte meistern</b>Mit jeder Frucht schaltest du durch Kämpfen neue Attacken frei.",
+  rule3: "<b>Bosse besiegen</b>Jede Insel nach der Startinsel hat ihren eigenen Boss.",
+  rule4: "<b>Kopfgeld jagen</b>Im PvP gegen die andere Seite steigt dein Kopfgeld.",
+  islesEyebrow: "Die Reiseroute", islesTitle: "Inseln und Bosse",
+  islesLead: "Auf jeder Insel steht ein Quest-NPC. Ab der zweiten Insel gibt es zwei Gegnergruppen: Die zweite gibt mehr Erfahrung und öffnet sich erst ab einem bestimmten Level. Danach wartet die Boss-Quest.",
+  fruitsEyebrow: "Die Kräfte", fruitsTitle: "Alle Früchte",
+  fruitsLead: "Jede Frucht hat vier Attacken auf Z, X, C und V. Neue Attacken schaltest du über Mastery frei, also durch Kämpfen mit der Frucht. Mastery wird pro Frucht getrennt gespeichert.",
+  filterLabel: "Nach Seltenheit filtern", all: "Alle", r_mythisch: "Mythisch", r_legendaer: "Legendär", r_selten: "Selten", r_normal: "Normal",
+  bonus1: "<b>Legendär:</b> +15 % Schaden", bonus2: "<b>Mythisch:</b> +35 % Schaden", bonus3: "<b>Frucht-Stat:</b> +1 % Frucht-Schaden pro Punkt",
+  dealerEyebrow: "Fruchthändler Fio", dealerTitle: "Versuch dein Glück",
+  dealerLead: "Früchte ziehst du beim Fruchthändler Fio mit Splitz, einmal alle 2 Stunden. Meistens kommt nichts, manchmal eine Frucht. Hier kannst du mit den echten Chancen so oft ziehen, wie du willst.",
+  step1: "<b>Ziehen.</b> Eine gezogene Frucht landet in deiner Hand bzw. im Inventar.",
+  step2: "<b>Ausrüsten.</b> Antippen, dann hältst du sie in der Hand.",
+  step3: "<b>Essen.</b> Die Kräfte sind sofort da. Eine gegessene Frucht kommt nicht zurück.",
+  step4: "<b>Mastery sammeln.</b> Kämpfe mit der Frucht, um X, C und V freizuschalten.",
+  pull: "Frucht ziehen", pulls: "Züge", hits: "Früchte", best: "Bester Fund",
+  simNote: "Nur zum Spaß. Im Spiel kostet jeder Zug Splitz und geht nur alle 2 Stunden.",
+  formsEyebrow: "Mythische Formen", formsTitle: "Verwandlungen",
+  formsLead: "Jaguar und Scharingan haben eine Verwandlung, die du über eine eigene Leiste auflädst.",
+  jagTag: "Jaguar-Frucht", jagTitle: "Jaguar-Form",
+  jagText: "Du wirst ein leuchtender blauer Jaguar: schneller, kannst auf Wasser laufen und kämpfst mit Biss (Hochreißen und Schmettern), Pranken-Wirbel und Jaguar-Sprung. Deine Treffer vergiften.",
+  bloodTag: "Scharingan-Frucht", bloodTitle: "Blutwächter",
+  bloodText: "Ein 110 Studs großer roter Riese mit Armschlägen, Blutscheibe und Stampfer. Mit T erschafft er ein Riesenschwert, packt Gegner und schmettert sie in den Boden.",
+  m1: "Mach mit der Frucht Schaden. <b>Je mehr Schaden, desto schneller füllt sich die Leiste.</b>",
+  m2: "Ist sie voll, erscheint <b>„METER VOLL“</b>.",
+  m3: "Drück <b>V</b> zum Verwandeln. Die Leiste sinkt langsam, jede Attacke zieht etwas ab.",
+  m4: "Bei <b>Vollmond</b> hält die Verwandlung 30 Sekunden länger.",
+  combatEyebrow: "Kampf und PvP", combatTitle: "So gewinnst du Kämpfe",
+  tip1: "<b>Automatisches Zielen.</b> Attacken rasten auf das nächste Ziel ein. Wer knapp danebenzielt, trifft trotzdem.",
+  tip2: "<b>Combos bauen.</b> Viele Attacken ziehen Gegner heran (Dreck Z, Frost Z, Schatten Z, Flamme C) oder schleudern sie weg (Jaguar-Biss, Erdhügel, Stoß-Kugel).",
+  tip3: "<b>Luft-Combo.</b> Gegner in der Luft oder im Griff nehmen 20 % mehr Schaden.",
+  tip4: "<b>Blocken.</b> R halten verringert den Schaden.",
+  tip5: "<b>Gegner-KI.</b> Gegner greifen erst an, wenn du direkt vor ihnen stehst. Ziehst du ihnen mehr als 25 % Leben ab, werden sie wütend und verfolgen dich, bis du ihr Gebiet verlässt.",
+  effect: "Effekt", whatItDoes: "Wirkung",
+  e1: "Brennen", e1d: "Schaden über Zeit (Flamme)", e2: "Gift", e2d: "Schaden über Zeit (Jaguar)",
+  e3: "Einfrieren", e3d: "Im Eisblock gefangen (Frost)", e4: "Verlangsamen", e4d: "Läuft langsamer (Frost, Dreck)",
+  e5: "Betäubung", e5d: "Kann sich kurz nicht bewegen",
+  statsEyebrow: "Level und Stats", statsTitle: "3 Punkte pro Level", statsLead: "Ungenutzte Punkte bleiben liegen und können später verteilt werden.",
+  s1: "Stärkere Faustschläge", s2n: "Leben", s2: "Mehr Lebenspunkte", s3: "Mehr Energie für Dash und Fliegen",
+  s4n: "Schwert", s4: "Stärkere Schwertangriffe", s5n: "Frucht", s5: "+1 % Frucht-Schaden pro Punkt",
+  ctrlEyebrow: "Steuerung", ctrlTitle: "PC und Handy",
+  ctrlLead: "Am PC spielst du mit Maus und Tasten, am Handy mit runden Knöpfen rechts. Unter Einstellungen → „Anzeigen verschieben“ kannst du Anzeigen und Knöpfe verschieben, vergrößern und festmachen.",
+  deviceLabel: "Gerät wählen", mobile: "Handy",
+  gearEyebrow: "Ausrüstung, Boote, Währungen", gearTitle: "Rüste dich aus",
+  coins: "<b>Coins</b>Für fast alles. Gibt es für Quests und besiegte Gegner.",
+  splitz: "<b>Splitz</b>Nur für den Fruchthändler, zum Ziehen von Früchten.",
+  swords: "Schwerter",
+  swordsText: "Beim Schmied gegen Coins. M1 ist ein Hieb, länger halten gibt einen Halten-Schlag, dazu kommen eigene Attacken. Du hältst immer nur eine Waffe oder eine Frucht.",
+  soon: "Attacken folgen",
+  potions: "Tränke", potion: "Trank", p1: "+25 % Schaden für 60 s", p2: "Schneller laufen für 60 s", p3: "Füllt 60 % Chakra auf",
+  homeTitle: "Home und Kopfgeld",
+  homeText: "Beim Home-NPC setzt du deinen Rückkehrpunkt, der Haus-Knopf bringt dich hin (nicht im Kampf). Dein Kopfgeld steigt nur, wenn du einen Spieler der anderen Seite besiegst.",
+  boats: "Boote", boat: "Boot", price: "Preis",
+  boatsText: "Bei Bootsbauer Kalle. Gekaufte Boote gehören dir für immer und lassen sich an jedem Steg rufen. Gesteuert wird mit W.",
+  worldEyebrow: "Die Welt", worldTitle: "Tag, Nacht und Mond",
+  worldLead: "Zwischen den Inseln liegt offenes Meer. Du schwimmst an der Oberfläche oder fährst mit dem Boot. Nachts gehen die Laternen an.",
+  day: "☀ Tag · ca. 12 min", night: "☾ Nacht · ca. 8 min",
+  phasesTitle: "8 Mondphasen",
+  phasesLead: "Jede Nacht eine Phase weiter. Die aktuelle Phase steht unter der Uhr. Bei Vollmond halten Verwandlungen länger.",
+  savesTitle: "Alles wird automatisch gespeichert",
+  finalEyebrow: "Der Steg in der Muschelbucht wartet", finalTitle: "Welche Frucht wird deine?", finalLead: "Wähl deine Seite und leg los.",
+  footer1: "Seelenfrüchte · ein Roblox-Spiel von @Leeam",
+  footer2: "Roblox ist eine Marke der Roblox Corporation. Diese Seite ist nicht mit Roblox verbunden."
+};
+// Englische Originale aus dem HTML merken
+const EN = {};
+document.querySelectorAll("[data-i18n]").forEach(el => { EN[el.dataset.i18n] = el.innerHTML; });
+document.querySelectorAll("[data-i18n-label]").forEach(el => { EN[el.dataset.i18nLabel] = el.getAttribute("aria-label"); });
+
+// Texte, die per Script entstehen: [Englisch, Deutsch]
+const TXT = {
+  noBoss: ["No boss", "Kein Boss"], boss: ["Boss", "Boss"],
+  perPull: ["per pull", "pro Zug"], notPullable: ["not pullable", "nicht ziehbar"], mastery: ["Mastery", "Mastery"],
+  ready: ["Ready?", "Bereit?"], waiting: ["Fio is waiting for your pull.", "Fio wartet auf deinen Zug."],
+  nothing: ["Nothing …", "Nichts …"], nothingSub: ["Fio shrugs. Try again.", "Fio zuckt mit den Schultern. Versuch es nochmal."],
+  fruitSuffix: [" Fruit!", "-Frucht!"], chance: ["chance", "Chance"], free: ["free", "kostenlos"]
+};
+let lang = "en";
+const t = k => TXT[k][lang === "en" ? 0 : 1];
+const pick = v => Array.isArray(v) ? v[lang === "en" ? 0 : 1] : v;
+const fmtPct = v => lang === "en" ? v.toLocaleString("en-US", { maximumFractionDigits: 2 }) + "%" : v.toLocaleString("de-DE", { maximumFractionDigits: 2 }) + " %";
+
+// Inseln: Namen bleiben wie im Spiel
 const ISLANDS = [
-  ["Muschelbucht", "Startinsel", null],
-  ["Rankenhain", "Dschungel", "Dschungelkönig Brakka"],
-  ["Sonnendüne", "Wüste", "Pharao Sethor"],
-  ["Frostzinne", "Eis", "Yeti-Häuptling Brumm"],
-  ["Glutkessel", "Magma", "Feuerfaust Magnus"],
-  ["Hafenstadt Lumen", "Stadt", "Admiral Kragen"],
-  ["Wolkenthron", "Himmelsinsel", "Sturmkönig Aeris"],
-  ["Windfels", "Insel", "?"]
+  ["Muschelbucht", ["Starter island", "Startinsel"], null],
+  ["Rankenhain", ["Jungle", "Dschungel"], "Dschungelkönig Brakka"],
+  ["Sonnendüne", ["Desert", "Wüste"], "Pharao Sethor"],
+  ["Frostzinne", ["Ice", "Eis"], "Yeti-Häuptling Brumm"],
+  ["Glutkessel", ["Magma", "Magma"], "Feuerfaust Magnus"],
+  ["Hafenstadt Lumen", ["City", "Stadt"], "Admiral Kragen"],
+  ["Wolkenthron", ["Sky island", "Himmelsinsel"], "Sturmkönig Aeris"],
+  ["Windfels", ["Island", "Insel"], "?"]
 ];
-document.getElementById("voyage").innerHTML = ISLANDS.map(([name, type, boss], i) => `
-  <li class="isle">
-    <div class="isle-no">${i + 1}</div>
-    <div class="isle-body">
-      <div><h3>${name}</h3><div class="isle-type">${type}</div></div>
-      <div class="boss ${boss === null ? "none" : boss === "?" ? "mystery" : ""}">${
-        boss === null ? "Kein Boss" : boss === "?" ? "Boss: ???" : "Boss: " + boss}</div>
-    </div>
-  </li>`).join("");
+function renderIslands() {
+  document.getElementById("voyage").innerHTML = ISLANDS.map(([name, type, boss], i) => `
+    <li class="isle">
+      <div class="isle-no">${i + 1}</div>
+      <div class="isle-body">
+        <div><h3>${name}</h3><div class="isle-type">${pick(type)}</div></div>
+        <div class="boss ${boss === null ? "none" : boss === "?" ? "mystery" : ""}">${
+          boss === null ? t("noBoss") : boss === "?" ? t("boss") + ": ???" : t("boss") + ": " + boss}</div>
+      </div>
+    </li>`).join("");
+}
 
 // Früchte
-const RARITY = { mythisch: "Mythisch", legendaer: "Legendär", selten: "Selten", normal: "Normal" };
+const RARITY = { mythisch: ["Mythical", "Mythisch"], legendaer: ["Legendary", "Legendär"], selten: ["Rare", "Selten"], normal: ["Common", "Normal"] };
 const FRUITS = [
-  { n: "Leere", r: "mythisch", c: 0.15, g: "#8b5cf6", m: [["Sog-Kugel"], ["Stoß-Kugel", 100], ["Violette Vernichtung", 300], ["Sternenleere", 500]], note: "Passiv „Unendlichkeit“: 25 % weniger Schaden, solange du nicht betäubt bist." },
-  { n: "Schatten", r: "mythisch", c: 0.3, g: "#5b3f8a", m: [["Schattenklinge"], ["Schattenschritt", 150], ["Schattengrube", 300], ["Ewige Finsternis", 500]], note: "Zieht Gegner heran und lähmt sie." },
-  { n: "Jaguar", r: "mythisch", c: 0.4, g: "#3fa9ff", m: [["Höllen-Klaue"], ["Höllen-Wirbel", 150], ["Höllen-Explosion", 300], ["Jaguar-Verwandlung", 500]], note: "Vergiftet Gegner. V verwandelt dich in die Jaguar-Form." },
-  { n: "Scharingan", r: "mythisch", c: null, g: "#e0303f", m: [["Blickschlag"], ["Blutsprint", 150], ["Bannzug", 300], ["Blutwächter", 500]], note: "Nicht ziehbar, nur über Admins. Wer sie isst, bekommt einen weißen Kopf mit roten Augen." },
-  { n: "Mond", r: "legendaer", c: 1, g: "#ece5c4", m: [["Sichelhieb"], ["Mondsog"], ["Mondstrahl"], ["Mondfall"]] },
-  { n: "Frost", r: "legendaer", c: 1, g: "#9be3ff", m: [["Eisspeer"], ["Frostpfad"], ["Eisgefängnis"], ["Gletschersturz"]], note: "Friert ein und verlangsamt." },
-  { n: "Flamme", r: "selten", c: 4, g: "#ff7a2f", m: [["Feuerfaust"], ["Flammensäule", 50], ["Feuerring", 100], ["Phönix-Sturz", 150]], note: "Setzt Gegner in Brand." },
-  { n: "Böe", r: "selten", c: 4, g: "#9fe8b0", m: [["Windklinge"], ["Wirbelböe"], ["Sturmstoß"], ["Orkanschritt"]] },
-  { n: "Funke", r: "selten", c: 4, g: "#ffe14d", m: [["Funkenpfeil"], ["Funkenkette"], ["Donnerkreis"], ["Blitzsprung"]] },
-  { n: "Dreck", r: "normal", c: 20, g: "#8a6a44", m: [["Erdbrocken"], ["Schlammwelle", 25], ["Erdhügel", 60], ["Schlamm-Sprung", 100]], note: "Verlangsamt. Erdbrocken zieht heran, Erdhügel schleudert weg." }
+  { n: "Leere", en: "Void", r: "mythisch", c: 0.15, g: "#8b5cf6", m: [["Sog-Kugel"], ["Stoß-Kugel", 100], ["Violette Vernichtung", 300], ["Sternenleere", 500]],
+    note: ["Passive “Unendlichkeit” (Infinity): take 25% less damage while you're not stunned.", "Passiv „Unendlichkeit“: 25 % weniger Schaden, solange du nicht betäubt bist."] },
+  { n: "Schatten", en: "Shadow", r: "mythisch", c: 0.3, g: "#5b3f8a", m: [["Schattenklinge"], ["Schattenschritt", 150], ["Schattengrube", 300], ["Ewige Finsternis", 500]],
+    note: ["Pulls enemies in and paralyzes them.", "Zieht Gegner heran und lähmt sie."] },
+  { n: "Jaguar", en: "", r: "mythisch", c: 0.4, g: "#3fa9ff", m: [["Höllen-Klaue"], ["Höllen-Wirbel", 150], ["Höllen-Explosion", 300], ["Jaguar-Verwandlung", 500]],
+    note: ["Poisons enemies. V turns you into the Jaguar Form.", "Vergiftet Gegner. V verwandelt dich in die Jaguar-Form."] },
+  { n: "Scharingan", en: "", r: "mythisch", c: null, g: "#e0303f", m: [["Blickschlag"], ["Blutsprint", 150], ["Bannzug", 300], ["Blutwächter", 500]],
+    note: ["Can't be pulled, admins only. Eating it gives you a white head with red eyes.", "Nicht ziehbar, nur über Admins. Wer sie isst, bekommt einen weißen Kopf mit roten Augen."] },
+  { n: "Mond", en: "Moon", r: "legendaer", c: 1, g: "#ece5c4", m: [["Sichelhieb"], ["Mondsog"], ["Mondstrahl"], ["Mondfall"]] },
+  { n: "Frost", en: "", r: "legendaer", c: 1, g: "#9be3ff", m: [["Eisspeer"], ["Frostpfad"], ["Eisgefängnis"], ["Gletschersturz"]],
+    note: ["Freezes and slows.", "Friert ein und verlangsamt."] },
+  { n: "Flamme", en: "Flame", r: "selten", c: 4, g: "#ff7a2f", m: [["Feuerfaust"], ["Flammensäule", 50], ["Feuerring", 100], ["Phönix-Sturz", 150]],
+    note: ["Sets enemies on fire.", "Setzt Gegner in Brand."] },
+  { n: "Böe", en: "Gust", r: "selten", c: 4, g: "#9fe8b0", m: [["Windklinge"], ["Wirbelböe"], ["Sturmstoß"], ["Orkanschritt"]] },
+  { n: "Funke", en: "Spark", r: "selten", c: 4, g: "#ffe14d", m: [["Funkenpfeil"], ["Funkenkette"], ["Donnerkreis"], ["Blitzsprung"]] },
+  { n: "Dreck", en: "Dirt", r: "normal", c: 20, g: "#8a6a44", m: [["Erdbrocken"], ["Schlammwelle", 25], ["Erdhügel", 60], ["Schlamm-Sprung", 100]],
+    note: ["Slows. Erdbrocken pulls in, Erdhügel knocks away.", "Verlangsamt. Erdbrocken zieht heran, Erdhügel schleudert weg."] }
 ];
-const fmtPct = v => v.toLocaleString("de-DE", { maximumFractionDigits: 2 }) + " %";
 const KEYS = ["Z", "X", "C", "V"];
-document.getElementById("fruits").innerHTML = FRUITS.map(f => `
-  <article class="fruit r-${f.r}" data-r="${f.r}">
-    <div class="fruit-top">
-      <div class="orb" style="--glow:${f.g}" aria-hidden="true"></div>
-      <div><h3>${f.n}</h3><div class="rarity">${RARITY[f.r]}</div></div>
-      <div class="chance">${f.c === null ? "–" : fmtPct(f.c)}<small>${f.c === null ? "nicht ziehbar" : "pro Zug"}</small></div>
-    </div>
-    <ul class="moves">${f.m.map(([name, mas], i) => `
-      <li><span class="key">${KEYS[i]}</span><span>${name}</span><span class="mas">${mas ? "Mastery " + mas : ""}</span></li>`).join("")}
-    </ul>
-    ${f.note ? `<p class="fruit-note">${f.note}</p>` : ""}
-  </article>`).join("");
-
+let fruitFilter = "alle";
+function renderFruits() {
+  document.getElementById("fruits").innerHTML = FRUITS.map(f => `
+    <article class="fruit r-${f.r}" data-r="${f.r}"${fruitFilter !== "alle" && fruitFilter !== f.r ? " hidden" : ""}>
+      <div class="fruit-top">
+        <div class="orb" style="--glow:${f.g}" aria-hidden="true"></div>
+        <div><h3>${f.n}${lang === "en" && f.en ? `<span class="gloss">${f.en}</span>` : ""}</h3><div class="rarity">${pick(RARITY[f.r])}</div></div>
+        <div class="chance">${f.c === null ? "–" : fmtPct(f.c)}<small>${f.c === null ? t("notPullable") : t("perPull")}</small></div>
+      </div>
+      <ul class="moves">${f.m.map(([name, mas], i) => `
+        <li><span class="key">${KEYS[i]}</span><span>${name}</span><span class="mas">${mas ? t("mastery") + " " + mas : ""}</span></li>`).join("")}
+      </ul>
+      ${f.note ? `<p class="fruit-note">${pick(f.note)}</p>` : ""}
+    </article>`).join("");
+}
 document.querySelectorAll(".filters .chip").forEach(btn => btn.addEventListener("click", () => {
-  const r = btn.dataset.r;
+  fruitFilter = btn.dataset.r;
   document.querySelectorAll(".filters .chip").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
-  document.querySelectorAll(".fruit").forEach(card => { card.hidden = r !== "alle" && card.dataset.r !== r; });
+  document.querySelectorAll(".fruit").forEach(card => { card.hidden = fruitFilter !== "alle" && card.dataset.r !== fruitFilter; });
 }));
 
 // Fruchthändler-Simulator mit den echten Chancen
 const POOL = FRUITS.filter(f => f.c !== null);
 const ORDER = ["normal", "selten", "legendaer", "mythisch"];
-let pulls = 0, hits = 0, best = null;
+let pulls = 0, hits = 0, best = null, last;   // last: undefined = noch nicht gezogen, null = nichts, sonst Frucht
 const orb = document.getElementById("simOrb");
+function renderSim() {
+  const res = document.getElementById("simResult"), sub = document.getElementById("simSub");
+  if (last === undefined) { res.textContent = t("ready"); res.style.color = ""; sub.textContent = t("waiting"); }
+  else if (last === null) { res.textContent = t("nothing"); res.style.color = ""; sub.textContent = t("nothingSub"); }
+  else {
+    res.textContent = last.n + t("fruitSuffix");
+    res.style.color = `var(--r-${last.r})`;
+    sub.textContent = `${pick(RARITY[last.r])} · ${t("chance")} ${fmtPct(last.c)}`;
+  }
+}
 document.getElementById("simBtn").addEventListener("click", () => {
   pulls++;
   let roll = Math.random() * 100, got = null;
   for (const f of POOL) { if (roll < f.c) { got = f; break; } roll -= f.c; }
   orb.classList.remove("shake"); void orb.offsetWidth; orb.classList.add("shake");
-  const res = document.getElementById("simResult"), sub = document.getElementById("simSub");
+  last = got;
   if (got) {
     hits++;
     if (!best || ORDER.indexOf(got.r) > ORDER.indexOf(best.r) || (got.r === best.r && got.c < best.c)) best = got;
     orb.style.background = `radial-gradient(circle at 35% 30%, #fff8 0%, ${got.g} 45%, #000 120%)`;
     orb.style.boxShadow = `0 0 40px ${got.g}`;
-    res.textContent = got.n + "-Frucht!";
-    res.style.color = `var(--r-${got.r})`;
-    sub.textContent = `${RARITY[got.r]} · Chance ${fmtPct(got.c)}`;
   } else {
     orb.style.background = "";
     orb.style.boxShadow = "";
-    res.textContent = "Nichts …";
-    res.style.color = "";
-    sub.textContent = "Fio zuckt mit den Schultern. Versuch es nochmal.";
   }
+  renderSim();
   document.getElementById("simPulls").textContent = pulls;
   document.getElementById("simHits").textContent = hits;
   const b = document.getElementById("simBest");
@@ -701,35 +817,53 @@ document.getElementById("simBtn").addEventListener("click", () => {
   b.style.color = best ? `var(--r-${best.r})` : "";
 });
 
-// Steuerung
+// Steuerung: [Aktion, PC, Handy], jeweils [Englisch, Deutsch]
 const CONTROLS = [
-  ["Schlagen / Hieb", "Linksklick (M1)", "Knopf M1 oder Tippen"],
-  ["Attacken", "Z · X · C · V", "Knöpfe Z · X · C · V"],
-  ["Blutwächter-Schwert", "T", "Knopf T"],
-  ["Attacke aufladen", "Taste halten (bis 1,2 s)", "Knopf halten"],
-  ["Dash nach vorne", "Q (kostet Chakra)", "Knopf Dash"],
-  ["Fliegen", "F (10 Chakra/s)", "Knopf F"],
-  ["Blocken", "R halten", "Knopf Block halten"],
-  ["Mit NPC reden", "E", "Knopf Interact"],
-  ["Leiste wechseln", "1 bis 4", "Antippen"],
-  ["Kamera-Schloss", "L", "Schloss-Knopf unten rechts"],
-  ["Boot steuern", "W", "W"]
+  [["Punch / Slash", "Schlagen / Hieb"], ["Left click (M1)", "Linksklick (M1)"], ["M1 button or tap", "Knopf M1 oder Tippen"]],
+  [["Attacks", "Attacken"], "Z · X · C · V", ["Z · X · C · V buttons", "Knöpfe Z · X · C · V"]],
+  [["Blutwächter sword", "Blutwächter-Schwert"], "T", ["T button", "Knopf T"]],
+  [["Charge attack", "Attacke aufladen"], ["Hold key (up to 1.2 s)", "Taste halten (bis 1,2 s)"], ["Hold button", "Knopf halten"]],
+  [["Dash forward", "Dash nach vorne"], ["Q (costs chakra)", "Q (kostet Chakra)"], ["Dash button", "Knopf Dash"]],
+  [["Fly", "Fliegen"], ["F (10 chakra/s)", "F (10 Chakra/s)"], ["F button", "Knopf F"]],
+  [["Block", "Blocken"], ["Hold R", "R halten"], ["Hold Block button", "Knopf Block halten"]],
+  [["Talk to NPC", "Mit NPC reden"], "E", ["Interact button", "Knopf Interact"]],
+  [["Switch hotbar", "Leiste wechseln"], ["1 to 4", "1 bis 4"], ["Tap", "Antippen"]],
+  [["Camera lock", "Kamera-Schloss"], "L", ["Lock button, bottom right", "Schloss-Knopf unten rechts"]],
+  [["Steer boat", "Boot steuern"], "W", "W"]
 ];
-function renderControls(dev) {
+let device = matchMedia("(pointer: coarse)").matches ? "mobile" : "pc";
+try { device = localStorage.getItem("sf-device") || device; } catch (e) {}
+function renderControls() {
   document.getElementById("controls").innerHTML = CONTROLS.map(([a, pc, mob]) =>
-    `<div class="ctrl"><span>${a}</span><kbd>${dev === "pc" ? pc : mob}</kbd></div>`).join("");
-  document.querySelectorAll(".toggle button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.dev === dev)));
-  try { localStorage.setItem("sf-device", dev); } catch (e) {}
+    `<div class="ctrl"><span>${pick(a)}</span><kbd>${pick(device === "pc" ? pc : mob)}</kbd></div>`).join("");
+  document.querySelectorAll(".toggle button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.dev === device)));
 }
-document.querySelectorAll(".toggle button").forEach(b => b.addEventListener("click", () => renderControls(b.dataset.dev)));
-let startDev = matchMedia("(pointer: coarse)").matches ? "mobile" : "pc";
-try { startDev = localStorage.getItem("sf-device") || startDev; } catch (e) {}
-renderControls(startDev);
+document.querySelectorAll(".toggle button").forEach(b => b.addEventListener("click", () => {
+  device = b.dataset.dev;
+  try { localStorage.setItem("sf-device", device); } catch (e) {}
+  renderControls();
+}));
+
+// Boote
+const BOATS = [["Holzboot", 0], ["Fischerboot", 2500], ["Segelschiff", 9000], ["Brigantine", 25000], ["Galeone", 60000]];
+function renderBoats() {
+  const loc = lang === "en" ? "en-US" : "de-DE";
+  document.getElementById("boats").innerHTML = BOATS.map(([n, p]) =>
+    `<tr><td>${n}</td><td class="price">${p ? p.toLocaleString(loc) + " Coins" : t("free")}</td></tr>`).join("");
+}
+
+// Gespeicherte Daten
+const SAVES = [["Side", "Seite"], ["Level", "Level"], ["XP", "Erfahrung"], ["Stats", "Stats"], ["Coins", "Coins"], ["Splitz", "Splitz"], ["Inventory", "Inventar"],
+  ["Eaten fruit", "Gegessene Frucht"], ["Mastery", "Mastery"], ["Home island", "Home-Insel"], ["Bounty", "Kopfgeld"], ["Boats", "Boote"], ["Volume", "Lautstärke"], ["HUD layout", "Anordnung der Anzeigen"]];
+function renderSaves() {
+  document.getElementById("saves").innerHTML = SAVES.map(s => `<span>${pick(s)}</span>`).join("");
+}
 
 // Mondphasen
-const PHASES = ["Neumond", "Zunehmende Sichel", "Erstes Viertel", "Zunehmender Mond", "Vollmond", "Abnehmender Mond", "Letztes Viertel", "Abnehmende Sichel"];
+const PHASES = [["New Moon", "Neumond"], ["Waxing Crescent", "Zunehmende Sichel"], ["First Quarter", "Erstes Viertel"], ["Waxing Gibbous", "Zunehmender Mond"],
+  ["Full Moon", "Vollmond"], ["Waning Gibbous", "Abnehmender Mond"], ["Last Quarter", "Letztes Viertel"], ["Waning Crescent", "Abnehmende Sichel"]];
 const phaseBox = document.getElementById("phases");
-PHASES.forEach((name, i) => {
+const phaseLabels = PHASES.map((_, i) => {
   const wrap = document.createElement("div");
   wrap.className = "phase" + (i === 4 ? " full" : "");
   const cv = document.createElement("canvas");
@@ -737,22 +871,44 @@ PHASES.forEach((name, i) => {
   const x = cv.getContext("2d"), r = 40, cx = 48, cy = 48;
   x.fillStyle = "#1a2a40"; x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill();
   // beleuchteter Anteil
-  const t = i / 8, lit = (1 - Math.cos(t * 2 * Math.PI)) / 2;
+  const tt = i / 8, lit = (1 - Math.cos(tt * 2 * Math.PI)) / 2;
   if (lit > 0.001) {
     x.save(); x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.clip();
     x.fillStyle = "#f3d98c";
-    const right = t <= 0.5; // zunehmend: rechte Seite hell
-    const k = Math.cos(t * 2 * Math.PI); // Breite des Terminators
+    const right = tt <= 0.5; // zunehmend: rechte Seite hell
+    const k = Math.cos(tt * 2 * Math.PI); // Breite des Terminators
     x.beginPath();
     x.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2, !right);
     x.ellipse(cx, cy, Math.abs(k) * r, r, 0, Math.PI / 2, -Math.PI / 2, (k > 0) === right);
     x.fill(); x.restore();
   }
   const label = document.createElement("span");
-  label.textContent = name;
   wrap.append(cv, label);
   phaseBox.append(wrap);
+  return label;
 });
+
+// Sprache umschalten
+function setLang(l) {
+  lang = l;
+  document.documentElement.lang = l;
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    const k = el.dataset.i18n;
+    el.innerHTML = l === "de" && DE[k] !== undefined ? DE[k] : EN[k];
+  });
+  document.querySelectorAll("[data-i18n-label]").forEach(el => {
+    const k = el.dataset.i18nLabel;
+    el.setAttribute("aria-label", l === "de" && DE[k] ? DE[k] : EN[k]);
+  });
+  document.querySelectorAll(".lang button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === l)));
+  phaseLabels.forEach((label, i) => { label.textContent = pick(PHASES[i]); });
+  renderIslands(); renderFruits(); renderSim(); renderControls(); renderBoats(); renderSaves();
+  try { localStorage.setItem("sf-lang", l); } catch (e) {}
+}
+document.querySelectorAll(".lang button").forEach(b => b.addEventListener("click", () => setLang(b.dataset.lang)));
+let startLang = "en";
+try { startLang = localStorage.getItem("sf-lang") || "en"; } catch (e) {}
+setLang(startLang);
 
 // Sternenhimmel
 const stars = document.getElementById("stars");
