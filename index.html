@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Seelenfrüchte</title>
+<meta name="description" content="Seelenfrüchte (Soul Fruits): Roblox-Abenteuer auf einer Inselwelt. Wähle Gut oder Böse, finde Früchte mit besonderen Kräften, besiege Bosse und sammle Kopfgeld.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pirata+One&family=Rubik:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: Nachtmeer. Ein Hero unter dem Mond, danach eine Seereise von Abschnitt zu Abschnitt, jede Frucht leuchtet in ihrer Seltenheitsfarbe. Bewusst nur ein dunkles Design. */
+:root {
+  color-scheme: dark;
+  --abyss: #060e19;
+  --sea: #0c1a2b;
+  --sea-2: #132840;
+  --line: #22405f;
+  --foam: #e9eff6;
+  --mist: #9db0c6;
+  --moon: #f3d98c;
+  --moon-ink: #2a1f05;
+  --good: #5fd6c6;
+  --evil: #ef5468;
+  --r-normal: #b7b39b;
+  --r-selten: #5eaaff;
+  --r-legendaer: #f5b847;
+  --r-mythisch: #c483ff;
+  --f-display: "Pirata One", "Luminari", Georgia, serif;
+  --f-body: "Rubik", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --s-1: .8125rem; --s0: 1rem; --s1: 1.25rem; --s2: 1.6rem; --s3: 2.4rem; --s4: clamp(3.2rem, 11vw, 6.5rem);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--abyss); color: var(--foam);
+  font-family: var(--f-body); font-size: var(--s0); line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+img { max-width: 100%; }
+a { color: var(--moon); }
+:focus-visible { outline: 2px solid var(--moon); outline-offset: 3px; border-radius: 4px; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.1; margin: 0; }
+h2 { font-family: var(--f-display); font-weight: 400; font-size: var(--s3); letter-spacing: .01em; }
+h3 { font-size: var(--s1); font-weight: 700; }
+p { margin: 0; }
+.wrap { width: 100%; max-width: 72rem; margin-inline: auto; padding-inline: 16px; }
+@media (min-width: 640px) { .wrap { padding-inline: 28px; } }
+.eyebrow { font-family: var(--f-mono); font-size: var(--s-1); letter-spacing: .14em; text-transform: uppercase; color: var(--moon); }
+.lead { color: var(--mist); max-width: 62ch; font-size: 1.0625rem; }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* Navigation */
+.nav {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  background: color-mix(in srgb, var(--abyss) 82%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.nav .wrap { display: flex; align-items: center; gap: 16px; padding-block: 10px; }
+.brand { font-family: var(--f-display); font-size: 1.6rem; color: var(--foam); text-decoration: none; white-space: nowrap; }
+.nav-links { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; }
+.nav-links::-webkit-scrollbar { display: none; }
+.nav-links a { color: var(--mist); text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: .9375rem; white-space: nowrap; }
+.nav-links a:hover { color: var(--foam); background: var(--sea-2); }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; justify-content: center;
+  font: 700 1rem/1 var(--f-body); text-decoration: none; cursor: pointer;
+  padding: 14px 22px; border-radius: 10px; border: 2px solid transparent;
+  transition: transform .15s ease, background-color .15s ease;
+}
+.btn:hover { transform: translateY(-2px); }
+.btn-play { background: var(--moon); color: var(--moon-ink); box-shadow: 0 6px 24px color-mix(in srgb, var(--moon) 35%, transparent); }
+.btn-ghost { background: transparent; color: var(--foam); border-color: var(--line); }
+.btn-ghost:hover { background: var(--sea-2); }
+.btn-sm { padding: 9px 14px; font-size: .875rem; }
+.nav .btn-sm { flex: none; }
+
+/* Hero */
+.hero { position: relative; overflow: hidden; background: linear-gradient(180deg, #050b15 0%, #0a1930 60%, var(--abyss) 100%); }
+#stars { position: absolute; inset: 0; width: 100%; height: 100%; }
+.moon {
+  position: absolute; right: clamp(-60px, 6vw, 120px); top: clamp(30px, 6vw, 70px);
+  width: clamp(130px, 22vw, 240px); aspect-ratio: 1; max-width: 100%; border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #fff6d6 0%, var(--moon) 55%, #c9a24a 100%);
+  box-shadow: 0 0 80px 10px color-mix(in srgb, var(--moon) 40%, transparent);
+  opacity: .92;
+}
+.moon::before, .moon::after { content: ""; position: absolute; border-radius: 50%; background: rgba(150, 110, 30, .22); }
+.moon::before { width: 22%; height: 22%; left: 52%; top: 22%; }
+.moon::after { width: 14%; height: 14%; left: 30%; top: 60%; }
+.hero-inner { position: relative; padding-block: clamp(64px, 12vw, 130px) 120px; display: grid; gap: 22px; }
+.hero h1 { font-family: var(--f-display); font-weight: 400; font-size: var(--s4); line-height: .95; text-shadow: 0 4px 30px rgba(0,0,0,.6); }
+.hero h1 small { display: block; font-family: var(--f-mono); font-size: var(--s-1); letter-spacing: .3em; color: var(--mist); text-transform: uppercase; margin-top: 10px; text-shadow: none; }
+.hero .lead { color: #c5d3e3; font-size: 1.15rem; }
+.hero-cta { display: flex; flex-wrap: wrap; gap: 12px; }
+.facts { display: flex; flex-wrap: wrap; gap: 10px 26px; margin-top: 8px; }
+.fact { display: grid; }
+.fact b { font-family: var(--f-mono); font-size: 1.5rem; color: var(--foam); font-variant-numeric: tabular-nums; }
+.fact span { font-size: var(--s-1); color: var(--mist); }
+.waves { position: absolute; left: 0; right: 0; bottom: -1px; height: 90px; }
+.waves svg { position: absolute; bottom: 0; width: 200%; height: 100%; animation: drift 24s linear infinite; }
+.waves svg:nth-child(2) { animation-duration: 38s; animation-direction: reverse; opacity: .6; }
+@keyframes drift { to { transform: translateX(-50%); } }
+
+/* Abschnitte */
+section { padding-block: clamp(56px, 9vw, 96px); }
+.sec-head { display: grid; gap: 10px; margin-bottom: 32px; }
+.alt { background: var(--sea); border-block: 1px solid var(--line); }
+
+/* Gut oder Böse */
+.sides { display: grid; grid-template-columns: 1fr; gap: 16px; }
+@media (min-width: 760px) { .sides { grid-template-columns: 1fr 1fr; } }
+.side { padding: 26px; border-radius: 14px; border: 1px solid var(--line); background: var(--sea-2); display: grid; gap: 10px; align-content: start; }
+.side h3 { font-family: var(--f-display); font-weight: 400; font-size: 2rem; }
+.side.good { border-top: 4px solid var(--good); }
+.side.good h3 { color: var(--good); }
+.side.evil { border-top: 4px solid var(--evil); }
+.side.evil h3 { color: var(--evil); }
+.side p { color: var(--mist); }
+.rules { list-style: none; margin: 26px 0 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+.rules li { padding: 16px 18px; border-radius: 10px; background: var(--sea); border: 1px solid var(--line); color: var(--mist); }
+.rules li b { color: var(--foam); display: block; }
+
+/* Inseln */
+.voyage { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: isle; }
+.isle { position: relative; display: grid; grid-template-columns: 56px 1fr; gap: 16px; padding-bottom: 22px; }
+.isle::before { content: ""; position: absolute; left: 27px; top: 46px; bottom: 0; border-left: 2px dashed var(--line); }
+.isle:last-child::before { display: none; }
+.isle-no { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--sea-2); border: 2px solid var(--line); font-family: var(--f-mono); font-weight: 700; color: var(--mist); }
+.isle-body { min-width: 0; padding: 12px 18px; border-radius: 12px; background: var(--sea); border: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; justify-content: space-between; }
+.isle-body h3 { font-size: 1.15rem; }
+.isle-type { color: var(--mist); font-size: .9rem; }
+.boss { font-family: var(--f-mono); font-size: .875rem; color: var(--evil); }
+.boss.none { color: var(--mist); }
+.boss.mystery { color: var(--moon); }
+
+/* Früchte */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
+.chip { font: 500 .875rem/1 var(--f-body); padding: 9px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--sea-2); color: var(--mist); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--foam); color: var(--abyss); border-color: var(--foam); }
+.fruits { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr)); }
+.fruit { --c: var(--r-normal); --glow: #888; position: relative; padding: 20px; border-radius: 14px; background: var(--sea-2); border: 1px solid color-mix(in srgb, var(--c) 45%, var(--line)); display: grid; gap: 14px; align-content: start; min-width: 0; }
+.fruit-top { display: flex; gap: 14px; align-items: center; }
+.orb { flex: none; width: 52px; height: 52px; border-radius: 50%; position: relative; background: radial-gradient(circle at 35% 30%, #fff8 0%, var(--glow) 40%, color-mix(in srgb, var(--glow) 50%, #000) 100%); box-shadow: 0 0 22px color-mix(in srgb, var(--glow) 60%, transparent); }
+.orb::after { content: ""; position: absolute; width: 16px; height: 9px; top: -4px; left: 26px; background: #3d8a4a; border-radius: 0 100% 0 100%; transform: rotate(-20deg); }
+.fruit h3 { font-family: var(--f-display); font-weight: 400; font-size: 1.75rem; }
+.rarity { font-family: var(--f-mono); font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; color: var(--c); }
+.chance { margin-left: auto; text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-size: 1.1rem; color: var(--foam); }
+.chance small { display: block; font-size: .7rem; color: var(--mist); letter-spacing: .06em; }
+.moves { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.moves li { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center; font-size: .9375rem; }
+.key { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; background: var(--abyss); border: 1px solid var(--line); border-bottom-width: 3px; font-family: var(--f-mono); font-weight: 700; font-size: .8rem; color: var(--foam); }
+.mas { font-family: var(--f-mono); font-size: .75rem; color: var(--mist); white-space: nowrap; }
+.fruit-note { font-size: .875rem; color: var(--mist); border-top: 1px solid var(--line); padding-top: 12px; }
+.r-normal { --c: var(--r-normal); }
+.r-selten { --c: var(--r-selten); }
+.r-legendaer { --c: var(--r-legendaer); }
+.r-mythisch { --c: var(--r-mythisch); }
+.bonus { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 22px; color: var(--mist); font-size: .9375rem; }
+.bonus b { color: var(--foam); }
+
+/* Fruchthändler */
+.dealer { display: grid; gap: 24px; grid-template-columns: 1fr; align-items: stretch; }
+@media (min-width: 860px) { .dealer { grid-template-columns: 1.1fr 1fr; } }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; counter-reset: st; }
+.steps li { counter-increment: st; display: grid; grid-template-columns: 34px 1fr; gap: 12px; color: var(--mist); }
+.steps li::before { content: counter(st); width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--moon); color: var(--moon-ink); font-family: var(--f-mono); font-weight: 700; }
+.steps b { color: var(--foam); }
+.sim { border-radius: 16px; background: radial-gradient(ellipse at 50% 0%, #1b3556 0%, var(--sea-2) 70%); border: 1px solid var(--line); padding: 24px; display: grid; gap: 16px; text-align: center; min-width: 0; }
+.sim-stage { min-height: 170px; display: grid; place-items: center; gap: 8px; align-content: center; }
+.sim-orb { width: 86px; height: 86px; border-radius: 50%; margin-inline: auto; background: radial-gradient(circle at 35% 30%, #fff6 0%, #2a3d55 50%, #0b1626 100%); box-shadow: 0 0 0 transparent; transition: box-shadow .4s ease, background .4s ease; }
+.sim-orb.shake { animation: shake .5s ease; }
+@keyframes shake { 20%,60% { transform: translateX(-6px) rotate(-6deg); } 40%,80% { transform: translateX(6px) rotate(6deg); } }
+.sim-result { font-family: var(--f-display); font-size: 2rem; line-height: 1.1; }
+.sim-sub { color: var(--mist); font-size: .9375rem; }
+.sim-stats { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 18px; font-family: var(--f-mono); font-size: .8125rem; color: var(--mist); font-variant-numeric: tabular-nums; }
+.sim-note { font-size: .8125rem; color: var(--mist); }
+
+/* Verwandlungen */
+.forms { display: grid; gap: 16px; grid-template-columns: 1fr; }
+@media (min-width: 760px) { .forms { grid-template-columns: 1fr 1fr; } }
+.form { padding: 24px; border-radius: 14px; background: var(--sea-2); border: 1px solid var(--line); display: grid; gap: 10px; align-content: start; }
+.form h3 { font-family: var(--f-display); font-weight: 400; font-size: 2rem; }
+.form .tag { font-family: var(--f-mono); font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; }
+.form p { color: var(--mist); }
+.jaguar h3, .jaguar .tag { color: #57b6ff; }
+.blood h3, .blood .tag { color: var(--evil); }
+.meter { margin-top: 26px; padding: 22px; border-radius: 14px; border: 1px solid var(--line); display: grid; gap: 14px; }
+.meter-bar { height: 14px; border-radius: 999px; background: var(--abyss); border: 1px solid var(--line); overflow: hidden; }
+.meter-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #57b6ff, var(--r-mythisch), var(--evil)); transform-origin: left; animation: fill 6s ease-in-out infinite; }
+@keyframes fill { 0% { transform: scaleX(.05); } 55%,70% { transform: scaleX(1); } 100% { transform: scaleX(.05); } }
+.meter ol { margin: 0; padding-left: 1.2rem; display: grid; gap: 6px; color: var(--mist); }
+.meter ol b { color: var(--foam); }
+
+/* Kampf */
+.cols { display: grid; gap: 24px; grid-template-columns: 1fr; }
+@media (min-width: 860px) { .cols { grid-template-columns: 1fr 1fr; } }
+.tips { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.tips li { color: var(--mist); }
+.tips b { color: var(--foam); }
+.table-box { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--sea); }
+table { width: 100%; border-collapse: collapse; font-size: .9375rem; }
+th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font-family: var(--f-mono); font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; color: var(--mist); font-weight: 500; background: var(--sea-2); }
+td:first-child { color: var(--foam); font-weight: 500; white-space: nowrap; }
+td { color: var(--mist); }
+td.price { font-family: var(--f-mono); font-variant-numeric: tabular-nums; text-align: right; color: var(--moon); white-space: nowrap; }
+th.price { text-align: right; }
+
+/* Stats */
+.stats { display: grid; gap: 10px; }
+.stat { display: grid; grid-template-columns: 6.5rem 1fr; gap: 14px; align-items: center; }
+.stat b { font-weight: 500; }
+.stat span { color: var(--mist); font-size: .9375rem; }
+
+/* Steuerung */
+.toggle { display: inline-flex; padding: 4px; border-radius: 10px; background: var(--sea-2); border: 1px solid var(--line); margin-bottom: 18px; }
+.toggle button { font: 500 .9375rem/1 var(--f-body); padding: 10px 18px; border-radius: 7px; border: 0; background: transparent; color: var(--mist); cursor: pointer; }
+.toggle button[aria-pressed="true"] { background: var(--foam); color: var(--abyss); }
+.controls { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); }
+.ctrl { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-radius: 10px; background: var(--sea-2); border: 1px solid var(--line); min-width: 0; }
+.ctrl span { color: var(--mist); }
+.ctrl kbd { font-family: var(--f-mono); font-size: .8125rem; font-weight: 700; color: var(--foam); background: var(--abyss); border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 6px; padding: 5px 9px; text-align: right; }
+
+/* Ausrüstung */
+.gear { display: grid; gap: 22px; grid-template-columns: 1fr; }
+@media (min-width: 960px) { .gear { grid-template-columns: 1fr 1fr 1.15fr; } }
+.gear-col { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.gear-col p { color: var(--mist); font-size: .9375rem; }
+.swords { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.swords li { padding: 12px 16px; border-radius: 10px; background: var(--sea); border: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.swords li span { color: var(--mist); font-size: .8125rem; }
+.coins { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 28px; }
+.coin { flex: 1 1 16rem; display: flex; gap: 14px; align-items: center; padding: 16px 18px; border-radius: 12px; border: 1px solid var(--line); background: var(--sea-2); }
+.coin i { flex: none; width: 38px; height: 38px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff4c0, var(--moon) 50%, #b68a2a); }
+.coin.splitz i { background: radial-gradient(circle at 35% 30%, #f2e2ff, var(--r-mythisch) 50%, #6a2fa8); border-radius: 30% 70% 50% 50%; }
+.coin p { color: var(--mist); font-size: .9375rem; }
+.coin b { color: var(--foam); display: block; }
+
+/* Welt */
+.cycle { display: grid; gap: 10px; margin-bottom: 28px; }
+.cycle-bar { display: grid; grid-template-columns: 12fr 8fr; height: 44px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
+.cycle-bar div { display: flex; align-items: center; padding-inline: 14px; font-family: var(--f-mono); font-size: .8125rem; font-weight: 700; }
+.day { background: linear-gradient(90deg, #f7c46a, #8fc9f0); color: #1b2633; }
+.night { background: linear-gradient(90deg, #1f2f63, #0b1330); color: var(--foam); }
+.phases { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+@media (max-width: 640px) { .phases { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 16px; } }
+.phase { display: grid; gap: 6px; justify-items: center; text-align: center; font-size: .6875rem; color: var(--mist); min-width: 0; hyphens: auto; overflow-wrap: anywhere; }
+.phase canvas { width: 100%; max-width: 48px; aspect-ratio: 1; }
+.phase.full { color: var(--moon); font-weight: 700; }
+.saves { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.saves span { font-size: .8125rem; padding: 6px 11px; border-radius: 999px; background: var(--sea-2); border: 1px solid var(--line); color: var(--mist); }
+
+/* Abschluss */
+.final { text-align: center; padding-block: clamp(64px, 10vw, 110px); background: radial-gradient(ellipse at 50% 120%, #1b3a63 0%, var(--abyss) 65%); }
+.final .wrap { display: grid; gap: 18px; justify-items: center; }
+.final h2 { font-size: clamp(2.4rem, 7vw, 4rem); }
+footer { border-top: 1px solid var(--line); padding-block: 26px; color: var(--mist); font-size: .8125rem; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  html { scroll-behavior: auto; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav" aria-label="Hauptmenü">
+  <div class="wrap">
+    <a class="brand" href="#top">Seelenfrüchte</a>
+    <div class="nav-links">
+      <a href="#seiten">Gut &amp; Böse</a>
+      <a href="#inseln">Inseln</a>
+      <a href="#fruechte">Früchte</a>
+      <a href="#haendler">Fruchthändler</a>
+      <a href="#kampf">Kampf</a>
+      <a href="#steuerung">Steuerung</a>
+      <a href="#ausruestung">Ausrüstung</a>
+      <a href="#welt">Welt</a>
+    </div>
+    <a class="btn btn-play btn-sm js-play" href="#" target="_blank" rel="noopener">Spielen</a>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <canvas id="stars" aria-hidden="true"></canvas>
+  <div class="moon" aria-hidden="true"></div>
+  <div class="wrap hero-inner">
+    <span class="eyebrow">Ein Roblox-Abenteuer</span>
+    <h1>Seelenfrüchte<small>Soul Fruits</small></h1>
+    <p class="lead">Kämpf dich von Insel zu Insel, finde Früchte mit besonderen Kräften und tritt gegen Bosse und andere Spieler an. Du startest am Steg der Muschelbucht, nur mit deinen Fäusten.</p>
+    <div class="hero-cta">
+      <a class="btn btn-play js-play" href="#" target="_blank" rel="noopener">▶ Jetzt auf Roblox spielen</a>
+      <a class="btn btn-ghost js-discord" href="#" target="_blank" rel="noopener">Discord beitreten</a>
+    </div>
+    <div class="facts">
+      <div class="fact"><b>700</b><span>Max-Level</span></div>
+      <div class="fact"><b>10</b><span>Früchte</span></div>
+      <div class="fact"><b>8</b><span>Inseln</span></div>
+      <div class="fact"><b>6+</b><span>Bosse</span></div>
+      <div class="fact"><b>2</b><span>Seiten</span></div>
+    </div>
+  </div>
+  <div class="waves" aria-hidden="true">
+    <svg viewBox="0 0 1440 90" preserveAspectRatio="none"><path fill="#0c1a2b" d="M0 40 Q90 10 180 40 T360 40 T540 40 T720 40 T900 40 T1080 40 T1260 40 T1440 40 V90 H0Z"/></svg>
+    <svg viewBox="0 0 1440 90" preserveAspectRatio="none"><path fill="#060e19" d="M0 60 Q90 35 180 60 T360 60 T540 60 T720 60 T900 60 T1080 60 T1260 60 T1440 60 V90 H0Z"/></svg>
+  </div>
+</header>
+
+<main>
+
+<section id="seiten">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Deine erste Entscheidung</span>
+      <h2>Gut oder Böse?</h2>
+      <p class="lead">Beim ersten Start wählst du eine Seite. Die Wahl gilt für immer, also überleg gut.</p>
+    </div>
+    <div class="sides">
+      <div class="side good">
+        <span class="eyebrow">Seite</span>
+        <h3>Gut</h3>
+        <p>Du kannst nur Spielern der bösen Seite Schaden machen. Jeder besiegte Böse lässt dein Kopfgeld steigen.</p>
+      </div>
+      <div class="side evil">
+        <span class="eyebrow">Seite</span>
+        <h3>Böse</h3>
+        <p>Du kannst nur Spielern der guten Seite Schaden machen. Böse Spieler können sich verbünden, damit sie sich nicht gegenseitig angreifen.</p>
+      </div>
+    </div>
+    <ul class="rules">
+      <li><b>Leveln bis 700</b>Über Quests auf jeder Insel. Pro Level gibt es 3 Punkte zum Verteilen.</li>
+      <li><b>Früchte meistern</b>Mit jeder Frucht schaltest du durch Kämpfen neue Attacken frei.</li>
+      <li><b>Bosse besiegen</b>Jede Insel nach der Startinsel hat ihren eigenen Boss.</li>
+      <li><b>Kopfgeld jagen</b>Im PvP gegen die andere Seite steigt dein Kopfgeld.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="inseln" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Die Reiseroute</span>
+      <h2>Inseln und Bosse</h2>
+      <p class="lead">Auf jeder Insel steht ein Quest-NPC. Ab der zweiten Insel gibt es zwei Gegnergruppen: Die zweite gibt mehr Erfahrung und öffnet sich erst ab einem bestimmten Level. Danach wartet die Boss-Quest.</p>
+    </div>
+    <ol class="voyage" id="voyage"></ol>
+  </div>
+</section>
+
+<section id="fruechte">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Die Kräfte</span>
+      <h2>Alle Früchte</h2>
+      <p class="lead">Jede Frucht hat vier Attacken auf Z, X, C und V. Neue Attacken schaltest du über Mastery frei, also durch Kämpfen mit der Frucht. Mastery wird pro Frucht getrennt gespeichert.</p>
+    </div>
+    <div class="filters" role="group" aria-label="Nach Seltenheit filtern">
+      <button class="chip" id="f-alle" data-r="alle" aria-pressed="true">Alle</button>
+      <button class="chip" id="f-mythisch" data-r="mythisch" aria-pressed="false">Mythisch</button>
+      <button class="chip" id="f-legendaer" data-r="legendaer" aria-pressed="false">Legendär</button>
+      <button class="chip" id="f-selten" data-r="selten" aria-pressed="false">Selten</button>
+      <button class="chip" id="f-normal" data-r="normal" aria-pressed="false">Normal</button>
+    </div>
+    <div class="fruits" id="fruits"></div>
+    <div class="bonus">
+      <span><b>Legendär:</b> +15 % Schaden</span>
+      <span><b>Mythisch:</b> +35 % Schaden</span>
+      <span><b>Frucht-Stat:</b> +1 % Frucht-Schaden pro Punkt</span>
+    </div>
+  </div>
+</section>
+
+<section id="haendler" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Fruchthändler Fio</span>
+      <h2>Versuch dein Glück</h2>
+      <p class="lead">Früchte ziehst du beim Fruchthändler Fio mit Splitz, einmal alle 2 Stunden. Meistens kommt nichts, manchmal eine Frucht. Hier kannst du mit den echten Chancen so oft ziehen, wie du willst.</p>
+    </div>
+    <div class="dealer">
+      <ol class="steps">
+        <li><span><b>Ziehen.</b> Eine gezogene Frucht landet in deiner Hand bzw. im Inventar.</span></li>
+        <li><span><b>Ausrüsten.</b> Antippen, dann hältst du sie in der Hand.</span></li>
+        <li><span><b>Essen.</b> Die Kräfte sind sofort da. Eine gegessene Frucht kommt nicht zurück.</span></li>
+        <li><span><b>Mastery sammeln.</b> Kämpfe mit der Frucht, um X, C und V freizuschalten.</span></li>
+      </ol>
+      <div class="sim" aria-live="polite">
+        <div class="sim-stage">
+          <div class="sim-orb" id="simOrb"></div>
+          <div class="sim-result" id="simResult">Bereit?</div>
+          <div class="sim-sub" id="simSub">Fio wartet auf deinen Zug.</div>
+        </div>
+        <button class="btn btn-play" id="simBtn" type="button">Frucht ziehen</button>
+        <div class="sim-stats">
+          <span>Züge: <b id="simPulls">0</b></span>
+          <span>Früchte: <b id="simHits">0</b></span>
+          <span>Bester Fund: <b id="simBest">–</b></span>
+        </div>
+        <p class="sim-note">Nur zum Spaß. Im Spiel kostet jeder Zug Splitz und geht nur alle 2 Stunden.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="verwandlungen">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Mythische Formen</span>
+      <h2>Verwandlungen</h2>
+      <p class="lead">Jaguar und Scharingan haben eine Verwandlung, die du über eine eigene Leiste auflädst.</p>
+    </div>
+    <div class="forms">
+      <div class="form jaguar">
+        <span class="tag">Jaguar-Frucht</span>
+        <h3>Jaguar-Form</h3>
+        <p>Du wirst ein leuchtender blauer Jaguar: schneller, kannst auf Wasser laufen und kämpfst mit Biss (Hochreißen und Schmettern), Pranken-Wirbel und Jaguar-Sprung. Deine Treffer vergiften.</p>
+      </div>
+      <div class="form blood">
+        <span class="tag">Scharingan-Frucht</span>
+        <h3>Blutwächter</h3>
+        <p>Ein 110 Studs großer roter Riese mit Armschlägen, Blutscheibe und Stampfer. Mit T erschafft er ein Riesenschwert, packt Gegner und schmettert sie in den Boden.</p>
+      </div>
+    </div>
+    <div class="meter">
+      <div class="meter-bar" aria-hidden="true"><div class="meter-fill"></div></div>
+      <ol>
+        <li>Mach mit der Frucht Schaden. <b>Je mehr Schaden, desto schneller füllt sich die Leiste.</b></li>
+        <li>Ist sie voll, erscheint <b>„METER VOLL“</b>.</li>
+        <li>Drück <b>V</b> zum Verwandeln. Die Leiste sinkt langsam, jede Attacke zieht etwas ab.</li>
+        <li>Bei <b>Vollmond</b> hält die Verwandlung 30 Sekunden länger.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section id="kampf" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Kampf und PvP</span>
+      <h2>So gewinnst du Kämpfe</h2>
+    </div>
+    <div class="cols">
+      <ul class="tips">
+        <li><b>Automatisches Zielen.</b> Attacken rasten auf das nächste Ziel ein. Wer knapp danebenzielt, trifft trotzdem.</li>
+        <li><b>Combos bauen.</b> Viele Attacken ziehen Gegner heran (Dreck Z, Frost Z, Schatten Z, Flamme C) oder schleudern sie weg (Jaguar-Biss, Erdhügel, Stoß-Kugel).</li>
+        <li><b>Luft-Combo.</b> Gegner in der Luft oder im Griff nehmen 20 % mehr Schaden.</li>
+        <li><b>Blocken.</b> R halten verringert den Schaden.</li>
+        <li><b>Gegner-KI.</b> Gegner greifen erst an, wenn du direkt vor ihnen stehst. Ziehst du ihnen mehr als 25 % Leben ab, werden sie wütend und verfolgen dich, bis du ihr Gebiet verlässt.</li>
+      </ul>
+      <div class="table-box">
+        <table>
+          <thead><tr><th>Effekt</th><th>Wirkung</th></tr></thead>
+          <tbody>
+            <tr><td>Brennen</td><td>Schaden über Zeit (Flamme)</td></tr>
+            <tr><td>Gift</td><td>Schaden über Zeit (Jaguar)</td></tr>
+            <tr><td>Einfrieren</td><td>Im Eisblock gefangen (Frost)</td></tr>
+            <tr><td>Verlangsamen</td><td>Läuft langsamer (Frost, Dreck)</td></tr>
+            <tr><td>Betäubung</td><td>Kann sich kurz nicht bewegen</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="sec-head" style="margin-top:56px">
+      <span class="eyebrow">Level und Stats</span>
+      <h3>3 Punkte pro Level</h3>
+      <p class="lead">Ungenutzte Punkte bleiben liegen und können später verteilt werden.</p>
+    </div>
+    <div class="table-box">
+      <table>
+        <thead><tr><th>Stat</th><th>Wirkung</th></tr></thead>
+        <tbody>
+          <tr><td>Melee</td><td>Stärkere Faustschläge</td></tr>
+          <tr><td>Leben</td><td>Mehr Lebenspunkte</td></tr>
+          <tr><td>Chakra</td><td>Mehr Energie für Dash und Fliegen</td></tr>
+          <tr><td>Schwert</td><td>Stärkere Schwertangriffe</td></tr>
+          <tr><td>Frucht</td><td>+1 % Frucht-Schaden pro Punkt</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="steuerung">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Steuerung</span>
+      <h2>PC und Handy</h2>
+      <p class="lead">Am PC spielst du mit Maus und Tasten, am Handy mit runden Knöpfen rechts. Unter Einstellungen → „Anzeigen verschieben“ kannst du Anzeigen und Knöpfe verschieben, vergrößern und festmachen.</p>
+    </div>
+    <div class="toggle" role="group" aria-label="Gerät wählen">
+      <button id="dev-pc" data-dev="pc" aria-pressed="true" type="button">PC</button>
+      <button id="dev-mobile" data-dev="mobile" aria-pressed="false" type="button">Handy</button>
+    </div>
+    <div class="controls" id="controls"></div>
+  </div>
+</section>
+
+<section id="ausruestung" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Ausrüstung, Boote, Währungen</span>
+      <h2>Rüste dich aus</h2>
+    </div>
+    <div class="coins">
+      <div class="coin"><i aria-hidden="true"></i><p><b>Coins</b>Für fast alles. Gibt es für Quests und besiegte Gegner.</p></div>
+      <div class="coin splitz"><i aria-hidden="true"></i><p><b>Splitz</b>Nur für den Fruchthändler, zum Ziehen von Früchten.</p></div>
+    </div>
+    <div class="gear">
+      <div class="gear-col">
+        <h3>Schwerter</h3>
+        <p>Beim Schmied gegen Coins. M1 ist ein Hieb, länger halten gibt einen Halten-Schlag, dazu kommen eigene Attacken. Du hältst immer nur eine Waffe oder eine Frucht.</p>
+        <ul class="swords">
+          <li>Treibholz</li>
+          <li>Koralle</li>
+          <li>Sturm</li>
+          <li>Glutkatana <span>Attacken folgen</span></li>
+          <li>Mondsichel <span>Attacken folgen</span></li>
+        </ul>
+      </div>
+      <div class="gear-col">
+        <h3>Tränke</h3>
+        <div class="table-box">
+          <table>
+            <thead><tr><th>Trank</th><th>Wirkung</th></tr></thead>
+            <tbody>
+              <tr><td>Krafttrank</td><td>+25 % Schaden für 60 s</td></tr>
+              <tr><td>Tempotrank</td><td>Schneller laufen für 60 s</td></tr>
+              <tr><td>Chakratrank</td><td>Füllt 60 % Chakra auf</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 style="margin-top:12px">Home und Kopfgeld</h3>
+        <p>Beim Home-NPC setzt du deinen Rückkehrpunkt, der Haus-Knopf bringt dich hin (nicht im Kampf). Dein Kopfgeld steigt nur, wenn du einen Spieler der anderen Seite besiegst.</p>
+      </div>
+      <div class="gear-col">
+        <h3>Boote</h3>
+        <p>Bei Bootsbauer Kalle. Gekaufte Boote gehören dir für immer und lassen sich an jedem Steg rufen. Gesteuert wird mit W.</p>
+        <div class="table-box">
+          <table>
+            <thead><tr><th>Boot</th><th class="price">Preis</th></tr></thead>
+            <tbody>
+              <tr><td>Holzboot</td><td class="price">kostenlos</td></tr>
+              <tr><td>Fischerboot</td><td class="price">2.500 Coins</td></tr>
+              <tr><td>Segelschiff</td><td class="price">9.000 Coins</td></tr>
+              <tr><td>Brigantine</td><td class="price">25.000 Coins</td></tr>
+              <tr><td>Galeone</td><td class="price">60.000 Coins</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="welt">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Die Welt</span>
+      <h2>Tag, Nacht und Mond</h2>
+      <p class="lead">Zwischen den Inseln liegt offenes Meer. Du schwimmst an der Oberfläche oder fährst mit dem Boot. Nachts gehen die Laternen an.</p>
+    </div>
+    <div class="cycle">
+      <div class="cycle-bar"><div class="day">☀ Tag · ca. 12 min</div><div class="night">☾ Nacht · ca. 8 min</div></div>
+    </div>
+    <h3>8 Mondphasen</h3>
+    <p class="lead" style="margin-top:6px">Jede Nacht eine Phase weiter. Die aktuelle Phase steht unter der Uhr. Bei Vollmond halten Verwandlungen länger.</p>
+    <div class="phases" id="phases"></div>
+    <h3 style="margin-top:36px">Alles wird automatisch gespeichert</h3>
+    <div class="saves">
+      <span>Seite</span><span>Level</span><span>Erfahrung</span><span>Stats</span><span>Coins</span><span>Splitz</span><span>Inventar</span><span>Gegessene Frucht</span><span>Mastery</span><span>Home-Insel</span><span>Kopfgeld</span><span>Boote</span><span>Lautstärke</span><span>Anordnung der Anzeigen</span>
+    </div>
+  </div>
+</section>
+
+<section class="final">
+  <div class="wrap">
+    <span class="eyebrow">Der Steg in der Muschelbucht wartet</span>
+    <h2>Welche Frucht wird deine?</h2>
+    <p class="lead">Das Spiel ist komplett auf Deutsch. Wähl deine Seite und leg los.</p>
+    <div class="hero-cta" style="justify-content:center">
+      <a class="btn btn-play js-play" href="#" target="_blank" rel="noopener">▶ Jetzt auf Roblox spielen</a>
+      <a class="btn btn-ghost js-discord" href="#" target="_blank" rel="noopener">Discord beitreten</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Seelenfrüchte · ein Roblox-Spiel von @Leeam</span>
+    <span>Roblox ist eine Marke der Roblox Corporation. Diese Seite ist nicht mit Roblox verbunden.</span>
+  </div>
+</footer>
+
+<script>
+// ===== Hier deine Links eintragen =====
+const ROBLOX_LINK = "";   // z. B. "https://www.roblox.com/games/1234567890/Seelenfruechte"
+const DISCORD_LINK = "";  // z. B. "https://discord.gg/deinCode" (leer lassen = Button wird versteckt)
+// =====================================
+
+document.querySelectorAll(".js-play").forEach(a => {
+  if (ROBLOX_LINK) a.href = ROBLOX_LINK; else a.removeAttribute("target");
+});
+document.querySelectorAll(".js-discord").forEach(a => {
+  if (DISCORD_LINK) a.href = DISCORD_LINK; else a.hidden = true;
+});
+
+// Inseln
+const ISLANDS = [
+  ["Muschelbucht", "Startinsel", null],
+  ["Rankenhain", "Dschungel", "Dschungelkönig Brakka"],
+  ["Sonnendüne", "Wüste", "Pharao Sethor"],
+  ["Frostzinne", "Eis", "Yeti-Häuptling Brumm"],
+  ["Glutkessel", "Magma", "Feuerfaust Magnus"],
+  ["Hafenstadt Lumen", "Stadt", "Admiral Kragen"],
+  ["Wolkenthron", "Himmelsinsel", "Sturmkönig Aeris"],
+  ["Windfels", "Insel", "?"]
+];
+document.getElementById("voyage").innerHTML = ISLANDS.map(([name, type, boss], i) => `
+  <li class="isle">
+    <div class="isle-no">${i + 1}</div>
+    <div class="isle-body">
+      <div><h3>${name}</h3><div class="isle-type">${type}</div></div>
+      <div class="boss ${boss === null ? "none" : boss === "?" ? "mystery" : ""}">${
+        boss === null ? "Kein Boss" : boss === "?" ? "Boss: ???" : "Boss: " + boss}</div>
+    </div>
+  </li>`).join("");
+
+// Früchte
+const RARITY = { mythisch: "Mythisch", legendaer: "Legendär", selten: "Selten", normal: "Normal" };
+const FRUITS = [
+  { n: "Leere", r: "mythisch", c: 0.15, g: "#8b5cf6", m: [["Sog-Kugel"], ["Stoß-Kugel", 100], ["Violette Vernichtung", 300], ["Sternenleere", 500]], note: "Passiv „Unendlichkeit“: 25 % weniger Schaden, solange du nicht betäubt bist." },
+  { n: "Schatten", r: "mythisch", c: 0.3, g: "#5b3f8a", m: [["Schattenklinge"], ["Schattenschritt", 150], ["Schattengrube", 300], ["Ewige Finsternis", 500]], note: "Zieht Gegner heran und lähmt sie." },
+  { n: "Jaguar", r: "mythisch", c: 0.4, g: "#3fa9ff", m: [["Höllen-Klaue"], ["Höllen-Wirbel", 150], ["Höllen-Explosion", 300], ["Jaguar-Verwandlung", 500]], note: "Vergiftet Gegner. V verwandelt dich in die Jaguar-Form." },
+  { n: "Scharingan", r: "mythisch", c: null, g: "#e0303f", m: [["Blickschlag"], ["Blutsprint", 150], ["Bannzug", 300], ["Blutwächter", 500]], note: "Nicht ziehbar, nur über Admins. Wer sie isst, bekommt einen weißen Kopf mit roten Augen." },
+  { n: "Mond", r: "legendaer", c: 1, g: "#ece5c4", m: [["Sichelhieb"], ["Mondsog"], ["Mondstrahl"], ["Mondfall"]] },
+  { n: "Frost", r: "legendaer", c: 1, g: "#9be3ff", m: [["Eisspeer"], ["Frostpfad"], ["Eisgefängnis"], ["Gletschersturz"]], note: "Friert ein und verlangsamt." },
+  { n: "Flamme", r: "selten", c: 4, g: "#ff7a2f", m: [["Feuerfaust"], ["Flammensäule", 50], ["Feuerring", 100], ["Phönix-Sturz", 150]], note: "Setzt Gegner in Brand." },
+  { n: "Böe", r: "selten", c: 4, g: "#9fe8b0", m: [["Windklinge"], ["Wirbelböe"], ["Sturmstoß"], ["Orkanschritt"]] },
+  { n: "Funke", r: "selten", c: 4, g: "#ffe14d", m: [["Funkenpfeil"], ["Funkenkette"], ["Donnerkreis"], ["Blitzsprung"]] },
+  { n: "Dreck", r: "normal", c: 20, g: "#8a6a44", m: [["Erdbrocken"], ["Schlammwelle", 25], ["Erdhügel", 60], ["Schlamm-Sprung", 100]], note: "Verlangsamt. Erdbrocken zieht heran, Erdhügel schleudert weg." }
+];
+const fmtPct = v => v.toLocaleString("de-DE", { maximumFractionDigits: 2 }) + " %";
+const KEYS = ["Z", "X", "C", "V"];
+document.getElementById("fruits").innerHTML = FRUITS.map(f => `
+  <article class="fruit r-${f.r}" data-r="${f.r}">
+    <div class="fruit-top">
+      <div class="orb" style="--glow:${f.g}" aria-hidden="true"></div>
+      <div><h3>${f.n}</h3><div class="rarity">${RARITY[f.r]}</div></div>
+      <div class="chance">${f.c === null ? "–" : fmtPct(f.c)}<small>${f.c === null ? "nicht ziehbar" : "pro Zug"}</small></div>
+    </div>
+    <ul class="moves">${f.m.map(([name, mas], i) => `
+      <li><span class="key">${KEYS[i]}</span><span>${name}</span><span class="mas">${mas ? "Mastery " + mas : ""}</span></li>`).join("")}
+    </ul>
+    ${f.note ? `<p class="fruit-note">${f.note}</p>` : ""}
+  </article>`).join("");
+
+document.querySelectorAll(".filters .chip").forEach(btn => btn.addEventListener("click", () => {
+  const r = btn.dataset.r;
+  document.querySelectorAll(".filters .chip").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+  document.querySelectorAll(".fruit").forEach(card => { card.hidden = r !== "alle" && card.dataset.r !== r; });
+}));
+
+// Fruchthändler-Simulator mit den echten Chancen
+const POOL = FRUITS.filter(f => f.c !== null);
+const ORDER = ["normal", "selten", "legendaer", "mythisch"];
+let pulls = 0, hits = 0, best = null;
+const orb = document.getElementById("simOrb");
+document.getElementById("simBtn").addEventListener("click", () => {
+  pulls++;
+  let roll = Math.random() * 100, got = null;
+  for (const f of POOL) { if (roll < f.c) { got = f; break; } roll -= f.c; }
+  orb.classList.remove("shake"); void orb.offsetWidth; orb.classList.add("shake");
+  const res = document.getElementById("simResult"), sub = document.getElementById("simSub");
+  if (got) {
+    hits++;
+    if (!best || ORDER.indexOf(got.r) > ORDER.indexOf(best.r) || (got.r === best.r && got.c < best.c)) best = got;
+    orb.style.background = `radial-gradient(circle at 35% 30%, #fff8 0%, ${got.g} 45%, #000 120%)`;
+    orb.style.boxShadow = `0 0 40px ${got.g}`;
+    res.textContent = got.n + "-Frucht!";
+    res.style.color = `var(--r-${got.r})`;
+    sub.textContent = `${RARITY[got.r]} · Chance ${fmtPct(got.c)}`;
+  } else {
+    orb.style.background = "";
+    orb.style.boxShadow = "";
+    res.textContent = "Nichts …";
+    res.style.color = "";
+    sub.textContent = "Fio zuckt mit den Schultern. Versuch es nochmal.";
+  }
+  document.getElementById("simPulls").textContent = pulls;
+  document.getElementById("simHits").textContent = hits;
+  const b = document.getElementById("simBest");
+  b.textContent = best ? best.n : "–";
+  b.style.color = best ? `var(--r-${best.r})` : "";
+});
+
+// Steuerung
+const CONTROLS = [
+  ["Schlagen / Hieb", "Linksklick (M1)", "Knopf M1 oder Tippen"],
+  ["Attacken", "Z · X · C · V", "Knöpfe Z · X · C · V"],
+  ["Blutwächter-Schwert", "T", "Knopf T"],
+  ["Attacke aufladen", "Taste halten (bis 1,2 s)", "Knopf halten"],
+  ["Dash nach vorne", "Q (kostet Chakra)", "Knopf Dash"],
+  ["Fliegen", "F (10 Chakra/s)", "Knopf F"],
+  ["Blocken", "R halten", "Knopf Block halten"],
+  ["Mit NPC reden", "E", "Knopf Interact"],
+  ["Leiste wechseln", "1 bis 4", "Antippen"],
+  ["Kamera-Schloss", "L", "Schloss-Knopf unten rechts"],
+  ["Boot steuern", "W", "W"]
+];
+function renderControls(dev) {
+  document.getElementById("controls").innerHTML = CONTROLS.map(([a, pc, mob]) =>
+    `<div class="ctrl"><span>${a}</span><kbd>${dev === "pc" ? pc : mob}</kbd></div>`).join("");
+  document.querySelectorAll(".toggle button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.dev === dev)));
+  try { localStorage.setItem("sf-device", dev); } catch (e) {}
+}
+document.querySelectorAll(".toggle button").forEach(b => b.addEventListener("click", () => renderControls(b.dataset.dev)));
+let startDev = matchMedia("(pointer: coarse)").matches ? "mobile" : "pc";
+try { startDev = localStorage.getItem("sf-device") || startDev; } catch (e) {}
+renderControls(startDev);
+
+// Mondphasen
+const PHASES = ["Neumond", "Zunehmende Sichel", "Erstes Viertel", "Zunehmender Mond", "Vollmond", "Abnehmender Mond", "Letztes Viertel", "Abnehmende Sichel"];
+const phaseBox = document.getElementById("phases");
+PHASES.forEach((name, i) => {
+  const wrap = document.createElement("div");
+  wrap.className = "phase" + (i === 4 ? " full" : "");
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = 96;
+  const x = cv.getContext("2d"), r = 40, cx = 48, cy = 48;
+  x.fillStyle = "#1a2a40"; x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill();
+  // beleuchteter Anteil
+  const t = i / 8, lit = (1 - Math.cos(t * 2 * Math.PI)) / 2;
+  if (lit > 0.001) {
+    x.save(); x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.clip();
+    x.fillStyle = "#f3d98c";
+    const right = t <= 0.5; // zunehmend: rechte Seite hell
+    const k = Math.cos(t * 2 * Math.PI); // Breite des Terminators
+    x.beginPath();
+    x.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2, !right);
+    x.ellipse(cx, cy, Math.abs(k) * r, r, 0, Math.PI / 2, -Math.PI / 2, (k > 0) === right);
+    x.fill(); x.restore();
+  }
+  const label = document.createElement("span");
+  label.textContent = name;
+  wrap.append(cv, label);
+  phaseBox.append(wrap);
+});
+
+// Sternenhimmel
+const stars = document.getElementById("stars");
+const sx = stars.getContext("2d");
+let starList = [];
+function sizeStars() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  stars.width = stars.offsetWidth * dpr; stars.height = stars.offsetHeight * dpr;
+  sx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const n = Math.round(stars.offsetWidth * stars.offsetHeight / 4500);
+  starList = Array.from({ length: n }, () => ({ x: Math.random() * stars.offsetWidth, y: Math.random() * stars.offsetHeight * .75, r: Math.random() * 1.3 + .3, p: Math.random() * 6.28 }));
+}
+function drawStars(time) {
+  sx.clearRect(0, 0, stars.offsetWidth, stars.offsetHeight);
+  for (const s of starList) {
+    sx.globalAlpha = .35 + .5 * (0.5 + 0.5 * Math.sin(time / 900 + s.p));
+    sx.fillStyle = "#e9eff6"; sx.beginPath(); sx.arc(s.x, s.y, s.r, 0, 6.29); sx.fill();
+  }
+}
+sizeStars(); drawStars(0);
+addEventListener("resize", () => { sizeStars(); drawStars(performance.now()); });
+if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  (function loop(t) { drawStars(t); requestAnimationFrame(loop); })(0);
+}
+</script>
+</body>
+</html>
