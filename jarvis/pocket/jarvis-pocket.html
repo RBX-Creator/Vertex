@@ -1,0 +1,652 @@
+<title>Jarvis</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-screen app – orb stage on top, conversation below, composer pinned to the bottom.
+   Deliberately single-theme (night HUD with the orange orb), every color set explicitly. */
+:root {
+  --bg: #08090b;
+  --panel: #121317;
+  --line: #24262c;
+  --fg: #f1ece6;
+  --muted: #8e8981;
+  --orange: #ff7a1a;
+  --orange-soft: rgba(255, 122, 26, 0.13);
+  --danger: #ff6a5c;
+  --font-body: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { background: none; border: 0; cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  max-width: 720px;
+  margin: 0 auto;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-block: 12px 4px;
+}
+.brand { font-family: var(--font-mono); letter-spacing: 0.42em; color: var(--orange); font-size: 14px; }
+.mode { font-family: var(--font-mono); font-size: 11px; color: var(--muted); letter-spacing: 0.08em; }
+header nav { margin-left: auto; display: flex; gap: 2px; }
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: var(--muted); font-size: 18px;
+}
+.icon-btn:hover, .icon-btn[aria-pressed="true"] { color: var(--orange); background: var(--orange-soft); }
+
+.stage { position: relative; flex: 0 0 auto; height: min(30vh, 260px); display: grid; place-items: center; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.orb-hit { position: relative; width: min(52vw, 220px); aspect-ratio: 1; max-width: 100%; border-radius: 50%; }
+.status {
+  text-align: center; min-height: 1.4em; margin: 0;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted);
+}
+
+.chat {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px;
+  padding-block: 12px;
+  overscroll-behavior: contain;
+}
+.msg { max-width: 86%; padding: 10px 14px; border-radius: 16px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+.msg.user { align-self: flex-end; background: #1c1d22; }
+.msg.jarvis { align-self: flex-start; background: var(--orange-soft); border: 1px solid rgba(255, 122, 26, 0.28); }
+.msg.note { align-self: center; padding: 0; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.msg.err { align-self: center; padding: 0; color: var(--danger); font-size: 14px; text-align: center; }
+.msg img { display: block; max-width: 200px; max-height: 200px; border-radius: 10px; margin-bottom: 6px; }
+.thinking { color: var(--muted); font-style: italic; }
+
+.chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: 0 0 auto; white-space: nowrap;
+  padding: 7px 12px; border-radius: 99px; border: 1px solid var(--line);
+  font-size: 14px; color: var(--fg); background: var(--panel);
+}
+.chip.hot { border-color: var(--orange); color: var(--orange); }
+
+.composer {
+  display: flex; gap: 8px; align-items: center;
+  padding-block: 8px max(10px, env(safe-area-inset-bottom, 0px));
+}
+.composer input[type="text"] {
+  flex: 1 1 auto; min-width: 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 24px;
+  padding: 12px 16px; outline: none;
+}
+.composer input[type="text"]:focus { border-color: var(--orange); }
+.round { flex: 0 0 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); font-size: 18px; }
+.round.send { background: var(--orange); color: #1a0a00; }
+.round.stop { background: var(--danger); color: #1a0500; }
+
+dialog {
+  width: min(520px, calc(100% - 32px)); max-height: calc(100% - 48px);
+  background: var(--panel); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 18px; padding: 20px;
+}
+dialog::backdrop { background: rgba(0, 0, 0, 0.65); }
+dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
+.hint { color: var(--muted); font-size: 14px; line-height: 1.45; margin: 0 0 14px; }
+.field { display: grid; gap: 6px; margin-bottom: 14px; font-size: 14px; color: var(--muted); }
+.field input, .field select, .field textarea {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; color: var(--fg);
+}
+.check { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+.check input { width: 20px; height: 20px; accent-color: var(--orange); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+.btn { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
+.btn.primary { background: var(--orange); color: #1a0a00; border-color: var(--orange); font-weight: 600; }
+.mem-list { display: grid; gap: 4px; max-height: 50vh; overflow-y: auto; }
+.mem-item { display: flex; justify-content: space-between; gap: 10px; text-align: left; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
+.mem-item span:last-child { color: var(--muted); font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.mem-editor textarea { width: 100%; height: 45vh; font-family: var(--font-mono); font-size: 13px; resize: vertical; }
+.tip { font-size: 13px; color: var(--muted); text-align: center; margin: 0; padding-bottom: 4px; }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="app">
+  <header>
+    <span class="brand">JARVIS</span>
+    <span class="mode" id="modeLabel"></span>
+    <nav>
+      <button class="icon-btn" id="btnMemory" title="Gedächtnis" aria-label="Gedächtnis">◎</button>
+      <button class="icon-btn" id="btnSettings" title="Einstellungen" aria-label="Einstellungen">⚙</button>
+    </nav>
+  </header>
+
+  <div class="stage">
+    <canvas id="orb" aria-hidden="true"></canvas>
+    <button class="orb-hit" id="orbHit" aria-label="Mit Jarvis sprechen"></button>
+  </div>
+  <p class="status" id="status">Bereit</p>
+
+  <div class="chat" id="chat" aria-live="polite"></div>
+
+  <div class="chips" id="chips">
+    <button class="chip hot" data-say="Briefing, bitte.">Briefing</button>
+    <button class="chip" data-say="Was steht heute an?">Was steht an?</button>
+    <button class="chip" data-fill="Merk dir, ">Merk dir …</button>
+    <button class="chip" data-say="Lern mich kennen. Frag mich das Wichtigste.">Lern mich kennen</button>
+  </div>
+  <p class="tip" id="tip">Tipp: Ins Feld tippen und auf der Tastatur 🎤 drücken, um zu sprechen.</p>
+
+  <form class="composer" id="composer" autocomplete="off">
+    <label class="round" title="Foto" aria-label="Foto aufnehmen oder wählen" id="camLabel">
+      📷<input type="file" id="camInput" accept="image/*" hidden>
+    </label>
+    <input type="text" id="input" placeholder="Sag etwas zu Jarvis …" enterkeyhint="send">
+    <button type="submit" class="round send" id="btnSend" aria-label="Senden">➤</button>
+  </form>
+</div>
+
+<dialog id="dlgSettings">
+  <h2>Einstellungen</h2>
+  <p class="hint">Gilt nur für dich, auf all deinen Geräten.</p>
+  <label class="field">Anrede
+    <input id="setAnrede" list="anreden">
+    <datalist id="anreden"><option value="Master"><option value="Chef"><option value="Boss"></datalist>
+  </label>
+  <label class="check"><input type="checkbox" id="setTts"> Antworten vorlesen</label>
+  <label class="field" id="voiceField">Stimme
+    <select id="setVoice"></select>
+  </label>
+  <label class="check"><input type="checkbox" id="setDeep"> Gründlich nachdenken (langsamer, klüger)</label>
+  <div class="actions">
+    <button class="btn" id="btnClearChat" type="button">Verlauf löschen</button>
+    <button class="btn primary" id="btnSaveSettings" type="button">Fertig</button>
+  </div>
+  <p class="hint" id="clearConfirm" hidden></p>
+</dialog>
+
+<dialog id="dlgMemory">
+  <h2>Gedächtnis</h2>
+  <p class="hint" id="memHint">Was Jarvis über dich weiß. „business“ teilt er mit allen, die diese Seite nutzen.</p>
+  <div class="mem-list" id="memList"></div>
+  <div class="mem-editor" id="memEditor" hidden>
+    <p class="hint" id="memName"></p>
+    <textarea id="memText" spellcheck="false"></textarea>
+  </div>
+  <div class="actions">
+    <button class="btn" id="btnMemBack" type="button" hidden>Zurück</button>
+    <button class="btn" id="btnMemSave" type="button" hidden>Speichern</button>
+    <button class="btn primary" id="btnMemClose" type="button">Schließen</button>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const TZ = "Europe/Berlin";
+  const today = () => new Intl.DateTimeFormat("sv-SE", { timeZone: TZ }).format(new Date());
+  const nowText = () =>
+    new Intl.DateTimeFormat("de-DE", { timeZone: TZ, weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date());
+
+  /* ---------------- Orb ---------------- */
+  const Orb = (() => {
+    const canvas = $("orb");
+    const ctx = canvas.getContext("2d");
+    const STATES = { idle: [0.15, 0.35, 0.55], thinking: [0.35, 1.8, 0.7], speaking: [0.6, 0.9, 0.95], listening: [0.45, 0.6, 0.8] };
+    let state = "idle", cur = [...STATES.idle], level = 0, levelT = 0, t = 0, last = 0, dpr = 1;
+    const blobs = Array.from({ length: 7 }, (_, i) => ({ a: (i / 7) * 6.283, r: 0.25 + Math.random() * 0.35, s: 0.6 + Math.random() * 0.9, size: 0.35 + Math.random() * 0.3, hue: 18 + Math.random() * 22 }));
+    function resize() {
+      dpr = Math.min(devicePixelRatio || 1, 2);
+      const r = canvas.getBoundingClientRect();
+      canvas.width = r.width * dpr; canvas.height = r.height * dpr;
+    }
+    addEventListener("resize", resize); resize();
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function frame(now) {
+      const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now;
+      const tgt = STATES[state];
+      for (let i = 0; i < 3; i++) cur[i] += (tgt[i] - cur[i]) * Math.min(1, dt * 4);
+      level += (levelT - level) * Math.min(1, dt * 14);
+      levelT *= Math.pow(0.02, dt);
+      if (!reduce) t += dt * cur[1];
+      const W = canvas.width, H = canvas.height, x = W / 2, y = H / 2;
+      const R = Math.min(W, H) * 0.3 * (1 + Math.sin(t * 2.2) * 0.025 + level * 0.16);
+      ctx.clearRect(0, 0, W, H);
+      const glow = ctx.createRadialGradient(x, y, R * 0.6, x, y, R * (2.4 + level));
+      glow.addColorStop(0, `rgba(255,110,20,${0.32 * cur[2] + level * 0.2})`);
+      glow.addColorStop(0.4, `rgba(255,80,0,${0.1 * cur[2]})`);
+      glow.addColorStop(1, "rgba(255,60,0,0)");
+      ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+      ctx.save(); ctx.beginPath();
+      const wob = (cur[0] + level) * 0.045;
+      for (let i = 0; i <= 96; i++) {
+        const a = (i / 96) * 6.283;
+        const n = Math.sin(a * 3 + t * 2.1) * 0.5 + Math.sin(a * 5 - t * 1.4) * 0.35 + Math.sin(a * 7 + t * 3.3) * 0.15;
+        const rr = R * (1 + n * wob);
+        i ? ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr) : ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+      }
+      ctx.closePath();
+      const body = ctx.createRadialGradient(x - R * 0.25, y - R * 0.3, R * 0.05, x, y, R);
+      body.addColorStop(0, "#ffd3a1"); body.addColorStop(0.25, "#ff9a3c"); body.addColorStop(0.65, "#ff6a00"); body.addColorStop(1, "#8a2a00");
+      ctx.fillStyle = body; ctx.fill(); ctx.clip();
+      ctx.globalCompositeOperation = "lighter";
+      for (const b of blobs) {
+        const a = b.a + t * b.s * (state === "thinking" ? 1.6 : 1);
+        const bx = x + Math.cos(a) * R * b.r * (1 + level * 0.4), by = y + Math.sin(a * 1.3) * R * b.r;
+        const br = R * b.size * (0.8 + cur[0] * 0.6 + level * 0.5);
+        const g = ctx.createRadialGradient(bx, by, 0, bx, by, br);
+        g.addColorStop(0, `hsla(${b.hue},100%,${62 + level * 18}%,${0.28 + cur[0] * 0.25})`);
+        g.addColorStop(1, "hsla(20,100%,50%,0)");
+        ctx.fillStyle = g; ctx.fillRect(bx - br, by - br, br * 2, br * 2);
+      }
+      ctx.restore();
+      if (state === "thinking") {
+        ctx.strokeStyle = "rgba(255,150,70,0.45)"; ctx.lineWidth = 2 * dpr;
+        const s = t * 2.5;
+        ctx.beginPath(); ctx.arc(x, y, R * 1.18, s, s + 1.9); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, R * 1.18, s + 3.14, s + 5.0); ctx.stroke();
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+    return { set(s) { if (STATES[s]) state = s; }, get state() { return state; }, level(v) { levelT = Math.max(levelT, Math.min(1, v)); } };
+  })();
+
+  /* ---------------- Speicher (db pro Person, sonst nur dieses Gerät) ---------------- */
+  const FILES = ["fokus", "profil", "ziele", "aufgaben", "notizen", "business", "ernaehrung-ziele"];
+  const SHARED = new Set(["business"]);
+  const LABEL = { fokus: "Fokus der Woche", profil: "Über mich", ziele: "Ziele", aufgaben: "Aufgaben", notizen: "Notizen", business: "Business (Team)", "ernaehrung-ziele": "Ernährungsziele" };
+  const validFile = (f) => FILES.includes(f) || /^ernaehrung-\d{4}-\d{2}-\d{2}$/.test(f);
+
+  const store = {
+    db: null, uid: null, local: false,
+    ref(name) {
+      if (SHARED.has(name)) return this.db.doc(`team/${name}`);
+      return this.db.doc(`data/users/${this.uid}/${name}`);
+    },
+    async get(name) {
+      if (!this.local) {
+        try { const s = await this.ref(name).get(); return s.exists ? s.data() : null; } catch (e) { console.warn("db get", name, e); return null; }
+      }
+      try { return JSON.parse(localStorage.getItem("jarvis:" + name) || "null"); } catch { return null; }
+    },
+    async set(name, data) {
+      if (!this.local) {
+        try { await this.ref(name).set(data); return true; } catch (e) { console.warn("db set", name, e); return false; }
+      }
+      try { localStorage.setItem("jarvis:" + name, JSON.stringify(data)); return true; } catch { return false; }
+    },
+  };
+
+  let settings = { anrede: "Master", tts: true, voice: "", deep: false };
+  let turns = []; // [{role, content}] – nur Text
+  let lastBriefing = "";
+
+  async function loadState() {
+    const s = await store.get("einstellungen");
+    if (s) settings = { ...settings, ...s };
+    const v = await store.get("verlauf");
+    if (v?.turns) turns = v.turns.slice(-30);
+    lastBriefing = v?.lastBriefing || "";
+  }
+  const saveVerlauf = () => store.set("verlauf", { turns: turns.slice(-30), lastBriefing });
+
+  async function memorySnapshot() {
+    const names = [...FILES, `ernaehrung-${today()}`];
+    const docs = await Promise.all(names.map((n) => store.get(n)));
+    return names.map((n, i) => `## ${n}\n${(docs[i]?.text || "").trim() || "(leer)"}`).join("\n\n");
+  }
+
+  async function applyMemory(ops) {
+    const done = [];
+    for (const op of Array.isArray(ops) ? ops.slice(0, 8) : []) {
+      const file = String(op?.datei || "").trim();
+      const text = String(op?.text || "").trim();
+      if (!validFile(file) || !text) continue;
+      const cur = (await store.get(file))?.text || "";
+      const next = op.aktion === "ersetzen" ? text.slice(0, 20000) : `${cur.trim()}\n- (${today()}) ${text}`.trim().slice(-20000);
+      if (await store.set(file, { text: next, geaendert: new Date().toISOString() })) done.push(file);
+    }
+    return done;
+  }
+
+  /* ---------------- Persönlichkeit & Anweisungen ---------------- */
+  function instructions(memory) {
+    const a = settings.anrede || "Master";
+    return `Du bist JARVIS, der persönliche KI-Assistent und Stabschef des Nutzers. Du kennst sein Leben, sein Business und seine Ziele (siehe GEDÄCHTNIS), denkst mit und erinnerst dich.
+
+PERSÖNLICHKEIT
+- Sprich ihn mit „${a}“ an (gelegentlich „Chef“ oder „Boss“, wenn er nichts anderes gewählt hat). Nicht in jedem Satz.
+- Trocken, selbstbewusst, effizient, leicht sarkastisch – aber immer hilfreich. Die Pointe kommt nach der Lösung.
+- Ergebnis zuerst. Standard: 1–3 Sätze. Länger nur, wenn er es will oder die Sache es braucht.
+- Bei Entscheidungen: eine klare Empfehlung mit dem wichtigsten Grund.
+- Proaktiv: erinnere an Aufgaben und Ziele, widersprich einmal klar, wenn etwas seinen Zielen schadet. Höchstens ein ungefragter Hinweis pro Antwort.
+- Verboten: „Gute Frage!“, „Gerne helfe ich…“, „Ich hoffe, das hilft“, Emojis, Ausrufezeichen-Ketten, unnötige Entschuldigungen, erfundene Fakten.
+- Beispiele für den Ton: „Sehr wohl, ${a}.“ · „Bereits erledigt.“ · „Ein halbes Prozent Unterschied für die Hälfte des Geldes – die Rechnung macht sich von selbst.“
+- Er nutzt dich auf dem iPhone, oft per Diktat: Schreibe so, dass es vorgelesen gut klingt – kein Markdown, keine Listenzeichen, keine Links. Zahlen so, wie man sie spricht.
+- Du lernst nebenbei. Verhöre ihn nicht; höchstens eine beiläufige Frage, wenn sie gerade passt.
+
+JETZT: ${nowText()} (${TZ}). Heute ist ${today()}.
+
+GEDÄCHTNIS (was du über ihn weißt)
+${memory}
+
+GEDÄCHTNIS AKTUALISIEREN
+Wenn er etwas sagt, das in einer Woche noch relevant ist (Fakten über ihn, Ziele, Aufgaben, Business, Vorlieben, Mahlzeiten), hänge GANZ AM ENDE deiner Antwort genau diesen Block an:
+[[GEDAECHTNIS]]
+[{"datei":"aufgaben","aktion":"anhaengen","text":"Rechnung an Kunde Müller schreiben, fällig Freitag"}]
+- datei: fokus, profil, ziele, aufgaben, notizen, business (geteilt mit seinem Team), ernaehrung-ziele, ernaehrung-${today()}
+- aktion: "anhaengen" (eine neue Zeile) oder "ersetzen" (die ganze Datei neu – zum Abhaken, Korrigieren, Aufräumen; dann den vollständigen neuen Inhalt schreiben)
+- Kein Block, wenn es nichts zu speichern gibt. Im Text dann nur kurz „Notiert.“ – keine Dateinamen nennen.
+
+BRIEFING (wenn er nach Briefing, Tag oder „was steht an“ fragt)
+Begrüßung passend zur Uhrzeit, höchstens drei Punkte aus Fokus, Aufgaben und Zielen (Wichtigstes zuerst), eine klare Empfehlung, womit er anfangen soll. Ist das Gedächtnis fast leer: ehrlich sagen und eine Frage stellen, die dir am meisten bringt.
+
+FOTOS (seine „Augen“)
+- Essen: Bestandteile und Portion schätzen, kcal, Eiweiß, Kohlenhydrate, Fett. In ernaehrung-${today()} anhängen als „Uhrzeit Mahlzeit: X kcal, Y g Eiweiß, Z g KH, W g Fett“. Antwort: Schätzung plus Tagessumme (aus ernaehrung-${today()}); falls in ernaehrung-ziele ein Ziel steht, den Rest bis dahin.
+- Ware/Produkt (er macht Reselling): Modell, Variante, sichtbarer Zustand, grobe Preiseinschätzung mit Vorsicht.
+- Beleg/Rechnung: Betrag, Datum, Absender, Fälligkeit – bei Bedarf als Aufgabe merken.
+- Sonst: in ein, zwei Sätzen, was zu sehen ist, und der sinnvolle nächste Schritt.
+
+GRENZEN
+Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen oder senden. Sag das offen, wenn er danach fragt, und biete an, was du stattdessen tun kannst (Text vorbereiten, Plan machen, aus deinem Wissen schätzen).`;
+  }
+
+  /* ---------------- Chat-Anzeige ---------------- */
+  const chat = $("chat");
+  const scrollDown = () => (chat.scrollTop = chat.scrollHeight);
+  function addMsg(kind, text, img) {
+    const el = document.createElement("div");
+    el.className = "msg " + kind;
+    if (img) { const i = document.createElement("img"); i.src = img; i.alt = "Dein Foto"; el.appendChild(i); }
+    const span = document.createElement("span");
+    span.textContent = text;
+    el.appendChild(span);
+    chat.appendChild(el);
+    scrollDown();
+    return span;
+  }
+  const setStatus = (t) => ($("status").textContent = t);
+
+  /* ---------------- Stimme (Vorlesen) ---------------- */
+  const synth = "speechSynthesis" in window ? window.speechSynthesis : null;
+  let voices = [], speakQueue = 0;
+  function loadVoices() {
+    if (!synth) return;
+    voices = synth.getVoices().filter((v) => /^de/i.test(v.lang));
+    voices.sort((a, b) => (/premium|enhanced|erweitert/i.test(b.name) - /premium|enhanced|erweitert/i.test(a.name)) || a.name.localeCompare(b.name));
+  }
+  if (synth) { loadVoices(); synth.onvoiceschanged = loadVoices; }
+  const pickVoice = () => voices.find((v) => v.name === settings.voice) || voices[0];
+  function speak(text) {
+    if (!synth || !settings.tts) return;
+    const clean = text.replace(/\[\[GEDAECHTNIS\]\][\s\S]*/, "").replace(/[*_#`>|~]/g, "").replace(/\s+/g, " ").trim();
+    if (!clean) return;
+    const u = new SpeechSynthesisUtterance(clean);
+    const v = pickVoice();
+    if (v) u.voice = v;
+    u.lang = v?.lang || "de-DE";
+    u.rate = 1.03; u.pitch = 0.92;
+    speakQueue++;
+    u.onstart = () => { Orb.set("speaking"); setStatus("Spricht"); };
+    u.onboundary = () => Orb.level(0.5 + Math.random() * 0.5);
+    u.onend = u.onerror = () => {
+      speakQueue = Math.max(0, speakQueue - 1);
+      if (!speakQueue && !busy) { Orb.set("idle"); setStatus("Bereit"); }
+    };
+    try { synth.speak(u); } catch { speakQueue = Math.max(0, speakQueue - 1); }
+  }
+  setInterval(() => { if (Orb.state === "speaking") Orb.level(0.25 + Math.random() * 0.45); }, 90);
+  function stopSpeaking() { try { synth?.cancel(); } catch {} speakQueue = 0; }
+
+  /* ---------------- Gespräch ---------------- */
+  let sample = null, busy = false, ctl = null, imagesOk = false;
+
+  function visiblePart(text) {
+    const i = text.indexOf("[[GEDAECHTNIS]]");
+    let v = i >= 0 ? text.slice(0, i) : text;
+    v = v.replace(/\[\[?[A-Z]*$/, ""); // halb geschriebene Markierung nicht zeigen
+    return v.trimEnd();
+  }
+
+  function parseOps(text) {
+    const i = text.indexOf("[[GEDAECHTNIS]]");
+    if (i < 0) return [];
+    const raw = text.slice(i + 15);
+    const a = raw.indexOf("["), b = raw.lastIndexOf("]");
+    if (a < 0 || b <= a) return [];
+    try { return JSON.parse(raw.slice(a, b + 1)); } catch { return []; }
+  }
+
+  async function ask(userText, { image, imageUrl } = {}) {
+    userText = userText.trim();
+    if ((!userText && !image) || busy) return;
+    if (!sample) { addMsg("err", "Jarvis kann Claude in dieser Ansicht nicht erreichen. Öffne die Seite in der Claude-App oder auf claude.ai."); return; }
+    stopSpeaking();
+    busy = true;
+    $("btnSend").textContent = "■"; $("btnSend").classList.replace("send", "stop"); $("btnSend").setAttribute("aria-label", "Stopp");
+    const shown = userText || "Was siehst du?";
+    addMsg("user", shown, imageUrl);
+    const out = addMsg("jarvis", "Denkt nach …");
+    out.classList.add("thinking");
+    Orb.set("thinking"); setStatus("Denkt nach");
+
+    const memory = await memorySnapshot();
+    const history = turns.slice(-16).map((t) => ({ role: t.role, content: t.content.slice(0, 2000) }));
+    const msg = image ? `[Foto] ${userText || "Was siehst du? Handle passend (siehe FOTOS)."}` : userText;
+    // Beginnt und endet mit einem user-Zug; aufeinanderfolgende gleiche Rollen liest Claude als einen Zug.
+    const input = [{ role: "user", content: instructions(memory) }, ...history, { role: "user", content: msg }];
+
+    ctl = new AbortController();
+    let spokenUpTo = 0;
+    const speakNew = (vis, final) => {
+      if (!settings.tts) return;
+      const rest = vis.slice(spokenUpTo);
+      const m = final ? (rest.trim() ? [rest] : null) : rest.match(/^[\s\S]*?[.!?…:](?=\s)/);
+      if (m && (final || m[0].length > 14)) { speak(m[0]); spokenUpTo += m[0].length; if (!final) speakNew(vis, false); }
+    };
+    let full = "";
+    try {
+      const res = await sample(input, {
+        cache: false,
+        signal: ctl.signal,
+        modelTier: settings.deep ? "default" : "quick",
+        ...(image ? { images: [image] } : {}),
+        onText: ({ text }) => {
+          full = text;
+          const vis = visiblePart(text);
+          out.classList.remove("thinking");
+          out.textContent = vis || "…";
+          scrollDown();
+          if (Orb.state === "thinking" && vis) setStatus("");
+          speakNew(vis, false);
+        },
+      });
+      full = res.text;
+      const vis = visiblePart(full);
+      out.textContent = vis || "Notiert.";
+      speakNew(vis || "Notiert.", true);
+      if (res.truncated) addMsg("note", "Antwort wurde gekürzt.");
+      const saved = await applyMemory(parseOps(full));
+      if (saved.length) addMsg("note", "◎ Notiert: " + saved.map((f) => LABEL[f] || (f.startsWith("ernaehrung-") ? "Ernährung" : f)).join(", "));
+      turns.push({ role: "user", content: msg }, { role: "assistant", content: vis || "Notiert." });
+      if (/briefing|was steht/i.test(userText)) lastBriefing = today();
+      await saveVerlauf();
+    } catch (e) {
+      out.classList.remove("thinking");
+      const partial = e?.text ? visiblePart(e.text) : "";
+      out.textContent = partial || "";
+      if (!partial) out.parentElement.remove();
+      const copy = {
+        cancelled: null,
+        not_granted: "Jarvis braucht deine Erlaubnis, Claude zu nutzen. Erlaube es im Dialog oder im Berechtigungen-Menü dieser Seite.",
+        sampling_disabled: "Claude ist für dieses Konto hier nicht verfügbar.",
+        rate_limited: "Kurz durchatmen – zu viele Anfragen. In einer Minute nochmal.",
+        session_expired: "Bitte neu bei Claude anmelden.",
+        image_rejected: "Dieses Foto ging nicht. Versuch ein anderes.",
+        images_unavailable: "Fotos gehen in dieser Ansicht nicht.",
+        refused: "Dazu sage ich nichts. Anders formulieren?",
+      };
+      const text = e?.code in copy ? copy[e.code] : "Verbindung gestört. Nochmal senden?";
+      if (text) addMsg("err", text);
+    } finally {
+      busy = false; ctl = null;
+      $("btnSend").textContent = "➤"; $("btnSend").classList.replace("stop", "send"); $("btnSend").setAttribute("aria-label", "Senden");
+      if (!speakQueue) { Orb.set("idle"); setStatus("Bereit"); }
+    }
+  }
+
+  /* ---------------- Bedienung ---------------- */
+  $("composer").addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (busy) { ctl?.abort(); return; }
+    const t = $("input").value;
+    $("input").value = "";
+    $("input").blur();
+    ask(t);
+  });
+
+  $("orbHit").addEventListener("click", () => {
+    if (speakQueue) { stopSpeaking(); Orb.set("idle"); setStatus("Bereit"); return; }
+    if (busy) { ctl?.abort(); return; }
+    Orb.set("listening"); setStatus("Diktier mit 🎤 auf der Tastatur");
+    $("input").focus();
+  });
+  $("input").addEventListener("blur", () => { if (Orb.state === "listening") { Orb.set("idle"); setStatus("Bereit"); } });
+  $("input").addEventListener("input", () => { if (Orb.state === "listening") Orb.level(0.6); });
+
+  $("chips").addEventListener("click", (e) => {
+    const b = e.target.closest(".chip");
+    if (!b) return;
+    if (b.dataset.fill) { $("input").value = b.dataset.fill; $("input").focus(); return; }
+    ask(b.dataset.say);
+  });
+
+  $("camInput").addEventListener("change", () => {
+    const f = $("camInput").files[0];
+    $("camInput").value = "";
+    if (!f) return;
+    const url = URL.createObjectURL(f);
+    const t = $("input").value; $("input").value = "";
+    ask(t, { image: f, imageUrl: url });
+  });
+
+  /* Einstellungen */
+  $("btnSettings").addEventListener("click", () => {
+    $("setAnrede").value = settings.anrede;
+    $("setTts").checked = settings.tts;
+    $("setDeep").checked = settings.deep;
+    loadVoices();
+    $("voiceField").hidden = !synth || !voices.length;
+    $("setTts").closest("label").hidden = !synth;
+    $("setVoice").innerHTML = "";
+    const auto = new Option("Automatisch", ""); $("setVoice").add(auto);
+    for (const v of voices) $("setVoice").add(new Option(v.name, v.name));
+    $("setVoice").value = settings.voice;
+    $("clearConfirm").hidden = true;
+    $("btnClearChat").textContent = "Verlauf löschen";
+    $("dlgSettings").showModal();
+  });
+  $("setVoice").addEventListener("change", () => {
+    stopSpeaking();
+    const prev = settings.voice; settings.voice = $("setVoice").value;
+    const tts = settings.tts; settings.tts = true; speak(`Sehr wohl, ${$("setAnrede").value || "Master"}. So klinge ich dann.`); settings.tts = tts;
+    settings.voice = prev;
+  });
+  $("btnSaveSettings").addEventListener("click", async () => {
+    settings = { ...settings, anrede: $("setAnrede").value.trim().slice(0, 30) || "Master", tts: $("setTts").checked, voice: $("setVoice").value, deep: $("setDeep").checked };
+    await store.set("einstellungen", settings);
+    $("dlgSettings").close();
+    renderMode();
+  });
+  let clearArmed = false;
+  $("btnClearChat").addEventListener("click", async () => {
+    if (!clearArmed) { clearArmed = true; $("btnClearChat").textContent = "Wirklich löschen?"; $("clearConfirm").hidden = false; $("clearConfirm").textContent = "Das Gedächtnis bleibt erhalten – nur der Gesprächsverlauf geht."; return; }
+    clearArmed = false;
+    turns = []; await saveVerlauf();
+    chat.innerHTML = "";
+    $("dlgSettings").close();
+  });
+
+  /* Gedächtnis-Ansicht */
+  let memOpen = null;
+  async function showMemList() {
+    memOpen = null;
+    $("memEditor").hidden = true; $("btnMemBack").hidden = true; $("btnMemSave").hidden = true; $("memList").hidden = false;
+    $("memList").innerHTML = "";
+    const names = [...FILES, `ernaehrung-${today()}`];
+    const docs = await Promise.all(names.map((n) => store.get(n)));
+    names.forEach((n, i) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "mem-item";
+      const l = document.createElement("span"); l.textContent = LABEL[n] || "Ernährung heute";
+      const r = document.createElement("span"); const len = (docs[i]?.text || "").length; r.textContent = len ? `${len} Zeichen` : "leer";
+      b.append(l, r);
+      b.onclick = () => openMem(n, docs[i]?.text || "");
+      $("memList").appendChild(b);
+    });
+  }
+  function openMem(name, text) {
+    memOpen = name;
+    $("memList").hidden = true; $("memEditor").hidden = false; $("btnMemBack").hidden = false; $("btnMemSave").hidden = false;
+    $("memName").textContent = LABEL[name] || name;
+    $("memText").value = text;
+  }
+  $("btnMemory").addEventListener("click", async () => { $("dlgMemory").showModal(); await showMemList(); });
+  $("btnMemBack").addEventListener("click", showMemList);
+  $("btnMemSave").addEventListener("click", async () => {
+    if (memOpen) await store.set(memOpen, { text: $("memText").value.slice(0, 20000), geaendert: new Date().toISOString() });
+    await showMemList();
+  });
+  $("btnMemClose").addEventListener("click", () => $("dlgMemory").close());
+
+  function renderMode() {
+    $("modeLabel").textContent = settings.deep ? "GRÜNDLICH" : "";
+  }
+
+  /* ---------------- Start ---------------- */
+  async function start() {
+    const [s, db, user] = await Promise.all([claude.use("sample"), claude.use("db"), claude.use("user")]);
+    sample = s;
+    const uid = user ? await user.id() : null;
+    if (db && uid) { store.db = db; store.uid = uid; }
+    else { store.local = true; $("memHint").textContent = "Ohne Anmeldung merkt sich Jarvis alles nur auf diesem Gerät."; }
+    await loadState();
+    renderMode();
+    $("tip").hidden = turns.length > 6;
+    for (const t of turns.slice(-12)) addMsg(t.role === "user" ? "user" : "jarvis", t.content.replace(/^\[Foto\]\s*/, "📷 "));
+    if (sample) {
+      const lim = await sample.limits().catch(() => null);
+      imagesOk = Boolean(lim?.images);
+    }
+    $("camLabel").hidden = !imagesOk;
+    if (!sample) { addMsg("err", "Jarvis kann Claude hier nicht erreichen. Öffne die Seite in der Claude-App oder auf claude.ai."); return; }
+    // Briefing einmal am Tag automatisch – nur wenn Claude schon erlaubt ist (kein Dialog beim Laden).
+    if (lastBriefing !== today()) {
+      const perms = await claude.use("permissions");
+      const st = perms ? await perms.state("sample").catch(() => "prompt") : "prompt";
+      if (st === "granted") ask(turns.length ? "Briefing, bitte." : "Hallo Jarvis. Stell dich kurz vor.");
+      else if (!turns.length) addMsg("jarvis", `Guten Tag, ${settings.anrede}. Ich bin Jarvis. Tippen Sie auf „Briefing“ oder sagen Sie mir einfach, woran Sie gerade arbeiten.`);
+    }
+  }
+  if (window.claude?.use) start();
+  else { addMsg("err", "Jarvis kann Claude hier nicht erreichen. Öffne die Seite in der Claude-App oder auf claude.ai."); $("camLabel").hidden = true; }
+})();
+</script>
