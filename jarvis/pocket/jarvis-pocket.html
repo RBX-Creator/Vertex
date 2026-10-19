@@ -355,9 +355,11 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
       return this.db.doc(`data/users/${this.uid}/${name}`);
     },
     async get(name) {
-      if (!this.local) {
-        try { const s = await this.ref(name).get(); return s.exists ? s.data() : null; } catch (e) { console.warn("db get", name, e); return null; }
-      }
+      try { return await this.getStrict(name); } catch (e) { console.warn("db get", name, e); return null; }
+    },
+    // Wirft bei Lesefehlern – für alles, was danach schreibt (sonst überschreibt ein Funkloch das Gedächtnis).
+    async getStrict(name) {
+      if (!this.local) { const s = await this.ref(name).get(); return s.exists ? s.data() : null; }
       try { return JSON.parse(localStorage.getItem("jarvis:" + name) || "null"); } catch { return null; }
     },
     async set(name, data) {
@@ -394,8 +396,14 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
   /* ---------------- Geld und exaktes Rechnen ---------------- */
   // Beträge werden in Cent (ganze Zahlen) gespeichert und gerechnet – keine Rundungsfehler.
   function toCents(v, feld = "Betrag") {
-    if (v === undefined || v === null || v === "") return null;
-    let s = typeof v === "number" ? String(v) : String(v).replace(/[€\s]|eur(o)?/gi, "");
+    if (v === undefined || v === null) return null;
+    if (typeof v === "number") {
+      if (!Number.isFinite(v)) throw new Error(`${feld} ist keine Zahl: ${v}`);
+      return Math.round(v * 100); // 16.125 ist 16,13 € – nicht 16.125 €
+    }
+    let s = String(v).replace(/[€\s]|eur(o)?/gi, "");
+    if (!s) return null;
+    // Text: „1.199,50“ und „1.200“ sind deutsche Tausender (Geld hat höchstens 2 Nachkommastellen).
     if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, "");
     s = s.replace(",", ".");
     const n = Number(s);
@@ -421,7 +429,8 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
     const peek = () => tokens[i], take = () => tokens[i++];
     const num = (t) => {
       let s = t;
-      if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, "");
+      // Tausenderpunkte nur, wenn eindeutig: „1.199,50“, „1.000.000“. „16.125“ und „1.759“ sind Dezimalzahlen.
+      if (/^\d{1,3}((\.\d{3}){2,}|(\.\d{3})+,\d+)$/.test(s)) s = s.replace(/\./g, "");
       return Number(s.replace(",", "."));
     };
     function primary() {
@@ -488,7 +497,8 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
     const hits = items.filter((x) => [x.name, x.groesse, x.text, x.projekt].filter(Boolean).join(" ").toLowerCase().includes(q));
     if (hits.length === 1) return hits[0];
     if (!hits.length) throw new Error(`Kein Treffer für „${q}“.`);
-    throw new Error(`Mehrdeutig – ${hits.length} Treffer: ${hits.slice(0, 8).map((x) => `[${x.id}] ${x.name || x.text}${x.groesse ? " " + x.groesse : ""}`).join("; ")}. Nachfragen, welcher gemeint ist.`);
+    const info = (x) => [x.status, x.einkauf_datum && `gekauft ${x.einkauf_datum}`, x.verkauf_datum && x.status === "verkauft" && `verkauft ${x.verkauf_datum}`, x.faellig && `fällig ${x.faellig}`].filter(Boolean).join(", ");
+    throw new Error(`Mehrdeutig – ${hits.length} Treffer: ${hits.slice(0, 8).map((x) => `[${x.id}] ${x.name || x.text}${x.groesse ? " " + x.groesse : ""}${info(x) ? ` (${info(x)})` : ""}`).join("; ")}. Nachfragen, welcher gemeint ist.`);
   }
 
   async function lagerAuswertung(monat) {
@@ -527,6 +537,14 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
       eintraege: e.map((x) => `${x.zeit} ${x.mahlzeit}: ${x.kcal} kcal, ${x.eiweiss} g Eiweiß`),
     };
   }
+  function parseErnaehrungLines(text) {
+    const out = [];
+    for (const l of String(text || "").split("\n")) {
+      const m = /^•\s*(\d{1,2}:\d{2})\s+(.+?):\s*(\d+)\s*kcal(?:,\s*(\d+)\s*g\s*Eiwei(?:ß|ss))?(?:,\s*(\d+)\s*g\s*KH)?(?:,\s*(\d+)\s*g\s*Fett)?/i.exec(l.trim());
+      if (m) out.push({ zeit: m[1], mahlzeit: m[2].slice(0, 120), kcal: +m[3], eiweiss: +(m[4] || 0), kh: +(m[5] || 0), fett: +(m[6] || 0) });
+    }
+    return out;
+  }
   const renderErnaehrungText = (doc) => {
     const legacy = (doc.text || "").split("\n").filter((l) => !l.startsWith("• ")).join("\n").trim();
     const lines = (doc.eintraege || []).map((x) => `• ${x.zeit} ${x.mahlzeit}: ${x.kcal} kcal, ${x.eiweiss} g Eiweiß, ${x.kh} g KH, ${x.fett} g Fett (geschätzt)`);
@@ -541,7 +559,7 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
   const TOOLS = [
     {
       name: "rechnen",
-      description: "Rechnet einen Ausdruck EXAKT aus (+ - * / ^, Klammern, %, Dezimalkomma). Für jede Rechnung benutzen statt im Kopf zu rechnen. Gibt das Ergebnis zurück.",
+      description: "Rechnet einen Ausdruck EXAKT aus (+ - * / ^, Klammern, %). Dezimalzahlen mit Punkt oder Komma, Tausender OHNE Trennzeichen (1200, nicht 1.200). Für jede Rechnung benutzen statt im Kopf zu rechnen. Gibt das Ergebnis zurück.",
       inputSchema: { type: "object", properties: { ausdruck: { type: "string", description: "z. B. „(140 - 80) / 80 * 100“" } }, required: ["ausdruck"] },
       execute: ({ ausdruck }) => { const v = rechne(ausdruck); return { ausdruck: String(ausdruck), ergebnis: v, deutsch: v.toLocaleString("de-DE", { maximumFractionDigits: 6 }) }; },
     },
@@ -574,7 +592,13 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
       inputSchema: { type: "object", properties: { id: { type: "string" }, suche: { type: "string" }, status: { type: "string", enum: LAGER_STATUS }, verkauf: { type: "number" }, gebuehren: { type: "number", description: "Plattformgebühren in Euro" }, versand: { type: "number" }, plattform: { type: "string" }, verkauf_datum: { type: "string" }, name: { type: "string" }, groesse: { type: "string" }, zustand: { type: "string" }, einkauf: { type: "number" }, notiz: { type: "string" } } },
       async execute(a) {
         const items = await cols.list("lager");
-        const x = findOne(items, a, "Artikel");
+        // Beim Verkaufen zuerst unter noch nicht verkauften Artikeln suchen; Korrekturen finden auch verkaufte.
+        let x = null;
+        if (!a.id && (a.verkauf !== undefined || a.status === "verkauft")) {
+          try { x = findOne(items.filter((i) => i.status !== "verkauft"), a, "Artikel"); } catch (e) { if (!/^Kein Treffer/.test(e.message)) throw e; }
+        }
+        x = x || findOne(items, a, "Artikel");
+        const warVerkauft = x.status === "verkauft";
         if (a.status !== undefined) { if (!LAGER_STATUS.includes(a.status)) throw new Error(`status muss einer von ${LAGER_STATUS.join(", ")} sein`); x.status = a.status; }
         if (a.verkauf !== undefined) { x.verkauf_ct = toCents(a.verkauf, "Verkauf"); if (a.status === undefined) x.status = "verkauft"; }
         if (a.gebuehren !== undefined) x.gebuehren_ct = toCents(a.gebuehren, "Gebühren");
@@ -583,7 +607,8 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
         for (const k of ["plattform", "name", "groesse", "zustand", "notiz"]) if (a[k] !== undefined) x[k] = String(a[k]).slice(0, 300);
         if (x.status === "verkauft") {
           if (x.verkauf_ct == null) throw new Error("Für „verkauft“ fehlt der Verkaufspreis (verkauf).");
-          x.verkauf_datum = isDate(a.verkauf_datum) ? a.verkauf_datum : x.verkauf_datum || today();
+          // Wiederverkauf nach Retoure zählt im neuen Monat – nur eine Korrektur behält das alte Datum.
+          x.verkauf_datum = isDate(a.verkauf_datum) ? a.verkauf_datum : warVerkauft && x.verkauf_datum ? x.verkauf_datum : today();
         }
         x.geaendert = new Date().toISOString();
         await cols.put("lager", x);
@@ -683,12 +708,12 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
       inputSchema: { type: "object", properties: { mahlzeit: { type: "string" }, kcal: { type: "number" }, eiweiss: { type: "number" }, kh: { type: "number" }, fett: { type: "number" }, zeit: { type: "string", description: "HH:MM, Standard jetzt" } }, required: ["mahlzeit", "kcal"] },
       async execute(a) {
         const name = `ernaehrung-${today()}`;
-        const doc = (await store.get(name)) || {};
+        const doc = (await store.getStrict(name)) || {};
         const eintraege = Array.isArray(doc.eintraege) ? doc.eintraege : [];
         eintraege.push({ zeit: /^\d{1,2}:\d{2}$/.test(a.zeit || "") ? a.zeit : nowTime(), mahlzeit: String(a.mahlzeit).slice(0, 120), kcal: Math.round(num(a.kcal, "kcal")), eiweiss: Math.round(Number(a.eiweiss) || 0), kh: Math.round(Number(a.kh) || 0), fett: Math.round(Number(a.fett) || 0) });
         const next = { ...doc, eintraege, geaendert: new Date().toISOString() };
         next.text = renderErnaehrungText(next);
-        await store.set(name, next);
+        if (!(await store.set(name, next))) throw new Error("Speichern fehlgeschlagen – nicht eingetragen.");
         const tag = await ernaehrungTag();
         noteTool(`🍽 Ernährung: ${a.mahlzeit} – ${Math.round(a.kcal)} kcal (heute ${tag.kcal}${tag.ziel_kcal ? ` von ${tag.ziel_kcal}` : ""})`);
         return tag;
@@ -1533,11 +1558,14 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
       const file = String(op?.datei || "").trim();
       const text = String(op?.text || "").trim();
       if (!validFile(file) || !text) continue;
-      const cur = (await store.get(file))?.text ?? fallbackText(file);
+      let cur;
+      try { cur = (await store.getStrict(file))?.text ?? fallbackText(file); }
+      catch { done.push({ file, text, failed: true }); continue; } // lieber nicht speichern als überschreiben
       const replaced = op.aktion === "ersetzen";
       const next = replaced ? text.slice(0, 20000) : `${cur.trim()}\n- (${today()}) ${text}`.trim().slice(-20000);
       // Die vorherige Fassung bleibt erhalten – in der Gedächtnis-Ansicht lässt sie sich wiederherstellen.
-      if (await store.set(file, { text: next, vorher: cur, geaendert: new Date().toISOString() })) done.push({ file, text, replaced });
+      const ok = await store.set(file, { text: next, vorher: cur, geaendert: new Date().toISOString() });
+      done.push(ok ? { file, text, replaced } : { file, text, failed: true });
     }
     return done;
   }
@@ -1700,6 +1728,10 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
   /* ---------------- Gespräch ---------------- */
   let sample = null, busy = false, ctl = null, imagesOk = false, toolsOk = false, toolMax = 0;
   let lastWasVoice = false;
+  let answerMuted = false; // Orb angetippt: Rest dieser Antwort nicht mehr vorlesen
+  // Werkzeuge einer Runde laufen sonst gleichzeitig – zwei Mahlzeiten auf einmal würden sich überschreiben.
+  let toolChain = Promise.resolve();
+  const serial = (fn) => (toolChain = toolChain.catch(() => {}).then(fn));
 
   // Gründlich (langsamer, klüger) bei Fotos und echten Denkfragen – Zahlen rechnen die Werkzeuge exakt.
   const NEEDS_DEPTH = /warum|wieso|erklär|lohnt|soll ich|sollte ich|empfiehl|empfehl|strategie|vergleich|vertrag|recht|gesetz|steuer|planen|plan für|konzept|analys|angebot schreib|angebot für|bewert|entscheid/i;
@@ -1708,10 +1740,10 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
   function parseOps(text) {
     const i = text.indexOf("[[GEDAECHTNIS]]");
     if (i < 0) return [];
-    const raw = text.slice(i + 15);
-    const a = raw.indexOf("["), b = raw.lastIndexOf("]");
+    const raw = text.slice(i + 15).replace(/\[\[\/GEDAECHTNIS\]\][\s\S]*/, "");
+    const a = raw.search(/[[{]/), b = Math.max(raw.lastIndexOf("]"), raw.lastIndexOf("}"));
     if (a < 0 || b <= a) return [];
-    try { return JSON.parse(raw.slice(a, b + 1)); } catch { return []; }
+    try { const v = JSON.parse(raw.slice(a, b + 1)); return Array.isArray(v) ? v : [v]; } catch { return []; }
   }
 
   function setAction() {
@@ -1726,13 +1758,14 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
   async function ask(userText, { image, imageUrl, voice = false } = {}) {
     userText = String(userText || "").trim();
     if ((!userText && !image) || busy) return;
+    busy = true; setAction(); // sofort sperren – sonst startet ein Doppeltipp zwei Anfragen
     stopListening(false);
-    const korr = userText ? await korrigiere(userText) : { text: userText, changes: [] };
+    let korr = { text: userText, changes: [] };
+    if (userText) try { korr = await korrigiere(userText); } catch {}
     userText = korr.text;
-    if (!sample) { addMsg("err", "Jarvis kann Claude in dieser Ansicht nicht erreichen. Öffne die Seite in der Claude-App oder auf claude.ai."); return; }
+    if (!sample) { busy = false; setAction(); addMsg("err", "Jarvis kann Claude in dieser Ansicht nicht erreichen. Öffne die Seite in der Claude-App oder auf claude.ai."); return; }
     tts.stop();
-    busy = true; lastWasVoice = voice; toolNotes = [];
-    setAction();
+    lastWasVoice = voice; toolNotes = []; answerMuted = false;
     addMsg("user", userText || "📷", imageUrl);
     if (korr.changes.length) addMsg("note", "↺ verstanden als: " + korr.changes.join(", "));
     const out = addMsg("jarvis", "Denkt nach …");
@@ -1747,7 +1780,7 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
     ctl = new AbortController();
     let spokenUpTo = 0;
     const speakNew = (spoken, final) => {
-      if (!settings.tts) return;
+      if (!settings.tts || answerMuted) return;
       const rest = spoken.slice(spokenUpTo);
       if (final) { if (rest.trim()) tts.say(rest); spokenUpTo = spoken.length; return; }
       // Fertige Sätze sofort sprechen; sehr kurze („Sehr wohl.“) mit dem nächsten zusammen.
@@ -1759,7 +1792,7 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
       const input = [{ role: "user", content: instructions(memory, stand, withTools) }, ...history, { role: "user", content: msg }];
       const tools = withTools ? TOOLS.slice(0, toolMax || TOOLS.length).map(({ name, description, inputSchema, execute }) => ({
         name, description, inputSchema,
-        execute: async (args, ctx) => { setStatus(`Arbeitet: ${name.replace(/_/g, " ")}`, true); const r = await execute(args || {}, ctx); return r; },
+        execute: (args, ctx) => serial(() => { setStatus(`Arbeitet: ${name.replace(/_/g, " ")}`, true); return execute(args || {}, ctx); }),
       })) : undefined;
       return sample(input, {
         cache: false,
@@ -1794,6 +1827,7 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
       const saved = await applyMemory(parseOps(full));
       for (const s of saved) {
         const name = LABEL[s.file] || s.file;
+        if (s.failed) { addMsg("err", `◎ ${name}: gerade nicht gespeichert (Verbindung). Sag es mir gleich nochmal.`); continue; }
         addMsg("note", s.replaced ? `◎ ${name} neu gefasst – Rückgängig unter ◎` : `◎ ${name}: ${s.text.slice(0, 140)}`);
       }
       const shown = parts.map((p) => (p.type === "card" ? `[[TEXT]]${p.text}[[/TEXT]]` : p.text)).join("").trim();
@@ -1801,6 +1835,7 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
       if (/briefing|was steht/i.test(userText)) lastBriefing = today();
       await saveVerlauf();
     } catch (e) {
+      if (e?.code === "cancelled" || e?.code === "refused") tts.stop();
       out.classList.remove("thinking");
       const partial = e?.text ? parseAnswer(e.text).parts : [];
       if (partial.length) renderParts(out, partial); else out.parentElement.remove();
@@ -1872,7 +1907,7 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
 
   $("orbHit").addEventListener("click", () => {
     tts.unlock();
-    if (tts.active) { tts.stop(); Orb.set("idle"); setStatus("Bereit"); lastWasVoice = false; return; }
+    if (tts.active) { tts.stop(); if (busy) answerMuted = true; Orb.set("idle"); setStatus("Bereit"); lastWasVoice = false; return; }
     if (busy) { ctl?.abort(); return; }
     listening ? stopListening() : startListening();
   });
@@ -1920,7 +1955,10 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
     $("setVoice").add(new Option(`Automatisch${voices[0] ? ` (${voiceLabel(voices[0])})` : ""}`, ""));
     $("setVoice").add(new Option("iPhone-Systemstimme", SYSTEMSTIMME));
     for (const v of voices) $("setVoice").add(new Option(voiceLabel(v), v.voiceURI || v.name));
+    // Gespeicherte Stimme nicht still verlieren, wenn iOS die Liste noch nicht geliefert hat.
+    if (settings.voice && ![...$("setVoice").options].some((o) => o.value === settings.voice)) $("setVoice").add(new Option(`${settings.voice.split(".").pop()} (lädt …)`, settings.voice));
     $("setVoice").value = settings.voice;
+    clearArmed = false;
     $("clearConfirm").hidden = true;
     $("btnClearChat").textContent = "Verlauf löschen";
     $("dlgSettings").showModal();
@@ -1959,8 +1997,17 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
     $("memEditor").hidden = true; $("btnMemBack").hidden = true; $("btnMemSave").hidden = true; $("btnMemUndo").hidden = true; $("memList").hidden = false;
     $("memList").innerHTML = "";
     const names = [...FILES, "aufgaben", `ernaehrung-${today()}`];
-    const docs = await Promise.all(names.map((n) => store.get(n)));
+    const docs = await Promise.all(names.map((n) => store.getStrict(n).catch(() => ({ fehler: true }))));
     names.forEach((n, i) => {
+      if (docs[i]?.fehler) {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "mem-item"; b.disabled = true;
+        const l = document.createElement("span"); l.textContent = LABEL[n] || "Ernährung heute";
+        const r = document.createElement("span"); r.textContent = "nicht geladen";
+        b.append(l, r);
+        $("memList").appendChild(b);
+        return;
+      }
       const text = docs[i]?.text ?? fallbackText(n);
       if (n === "aufgaben" && !text) return;
       const b = document.createElement("button");
@@ -1984,8 +2031,15 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
   $("btnMemBack").addEventListener("click", showMemList);
   $("btnMemSave").addEventListener("click", async () => {
     if (memOpen) {
-      const before = await store.get(memOpen);
-      await store.set(memOpen, { ...(before || {}), text: $("memText").value.slice(0, 20000), vorher: before?.text || "", geaendert: new Date().toISOString() });
+      let before;
+      try { before = await store.getStrict(memOpen); } catch { alert("Konnte gerade nicht laden – bitte nochmal speichern."); return; }
+      const next = { ...(before || {}), text: $("memText").value.slice(0, 20000), vorher: before?.text || "", geaendert: new Date().toISOString() };
+      // Ernährung: Die „• “-Zeilen sind die Einträge – Änderungen daran zählen auch in den Summen.
+      if (memOpen.startsWith("ernaehrung-") && Array.isArray(before?.eintraege)) {
+        next.eintraege = parseErnaehrungLines(next.text);
+        next.text = renderErnaehrungText(next);
+      }
+      if (!(await store.set(memOpen, next))) { alert("Speichern fehlgeschlagen – bitte nochmal."); return; }
     }
     await showMemList();
   });
