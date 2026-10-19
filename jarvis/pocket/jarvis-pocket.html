@@ -8,11 +8,14 @@
 :root {
   --bg: #08090b;
   --panel: #121317;
+  --panel-2: #191a1f;
   --line: #24262c;
   --fg: #f1ece6;
   --muted: #8e8981;
   --orange: #ff7a1a;
   --orange-soft: rgba(255, 122, 26, 0.13);
+  --good: #7fd18b;
+  --warn: #f2c14e;
   --danger: #ff6a5c;
   --font-body: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
@@ -40,81 +43,65 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   max-width: 720px;
   margin: 0 auto;
 }
-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-block: 12px 4px;
-}
+header { display: flex; align-items: center; gap: 10px; padding-block: 12px 4px; }
 .brand { font-family: var(--font-mono); letter-spacing: 0.42em; color: var(--orange); font-size: 14px; }
 .mode { font-family: var(--font-mono); font-size: 11px; color: var(--muted); letter-spacing: 0.08em; }
 header nav { margin-left: auto; display: flex; gap: 2px; }
-.icon-btn {
-  width: 40px; height: 40px; border-radius: 50%;
-  display: grid; place-items: center;
-  color: var(--muted); font-size: 18px;
-}
+.icon-btn { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); font-size: 18px; }
 .icon-btn:hover, .icon-btn[aria-pressed="true"] { color: var(--orange); background: var(--orange-soft); }
 
-.stage { position: relative; flex: 0 0 auto; height: min(30vh, 260px); display: grid; place-items: center; }
+.stage { position: relative; flex: 0 0 auto; height: min(28vh, 240px); display: grid; place-items: center; }
 .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.orb-hit { position: relative; width: min(52vw, 220px); aspect-ratio: 1; max-width: 100%; border-radius: 50%; }
+.orb-hit { position: relative; width: min(50vw, 210px); aspect-ratio: 1; max-width: 100%; border-radius: 50%; }
 .status {
   text-align: center; min-height: 1.4em; margin: 0;
   font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted);
 }
+.status.live { color: var(--orange); }
 
-.chat {
-  flex: 1 1 auto; min-height: 0; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 10px;
-  padding-block: 12px;
-  overscroll-behavior: contain;
-}
-.msg { max-width: 86%; padding: 10px 14px; border-radius: 16px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+.chat { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-block: 12px; overscroll-behavior: contain; }
+.msg { max-width: 88%; padding: 10px 14px; border-radius: 16px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
 .msg.user { align-self: flex-end; background: #1c1d22; }
 .msg.jarvis { align-self: flex-start; background: var(--orange-soft); border: 1px solid rgba(255, 122, 26, 0.28); }
-.msg.note { align-self: center; padding: 0; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.msg.note { align-self: center; padding: 0; font-family: var(--font-mono); font-size: 11px; color: var(--muted); text-align: center; }
 .msg.err { align-self: center; padding: 0; color: var(--danger); font-size: 14px; text-align: center; }
 .msg img { display: block; max-width: 200px; max-height: 200px; border-radius: 10px; margin-bottom: 6px; }
 .thinking { color: var(--muted); font-style: italic; }
+.msg-actions { display: flex; gap: 4px; margin-top: 6px; }
+.msg-actions button { font-size: 12px; font-family: var(--font-mono); color: var(--muted); padding: 3px 8px; border-radius: 8px; border: 1px solid rgba(255, 122, 26, 0.25); }
+.msg-actions button:hover { color: var(--orange); }
+.card { margin: 8px 0 2px; padding: 10px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); white-space: pre-wrap; font-size: 15px; }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+.card-head button { color: var(--orange); font-size: 12px; letter-spacing: 0; text-transform: none; }
 
-.chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
+.chips { flex: 0 0 auto; display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; padding-bottom: 8px; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
-.chip {
-  flex: 0 0 auto; white-space: nowrap;
-  padding: 7px 12px; border-radius: 99px; border: 1px solid var(--line);
-  font-size: 14px; color: var(--fg); background: var(--panel);
-}
+.chip { flex: 0 0 auto; white-space: nowrap; padding: 7px 12px; border-radius: 99px; border: 1px solid var(--line); font-size: 14px; color: var(--fg); background: var(--panel); }
 .chip.hot { border-color: var(--orange); color: var(--orange); }
 
-.composer {
-  display: flex; gap: 8px; align-items: center;
-  padding-block: 8px max(10px, env(safe-area-inset-bottom, 0px));
-}
-.composer input[type="text"] {
-  flex: 1 1 auto; min-width: 0;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 24px;
-  padding: 12px 16px; outline: none;
-}
+.composer { flex: 0 0 auto; display: flex; gap: 8px; align-items: center; padding-block: 8px max(10px, env(safe-area-inset-bottom, 0px)); }
+.composer input[type="text"] { flex: 1 1 auto; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 24px; padding: 12px 16px; outline: none; }
 .composer input[type="text"]:focus { border-color: var(--orange); }
+.composer.listening input[type="text"] { border-color: var(--orange); box-shadow: 0 0 0 3px var(--orange-soft); }
 .round { flex: 0 0 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); font-size: 18px; }
-.round.send { background: var(--orange); color: #1a0a00; }
+.round.go { background: var(--orange); color: #1a0a00; }
 .round.stop { background: var(--danger); color: #1a0500; }
+.round.mic { background: var(--panel-2); color: var(--orange); border: 1px solid rgba(255, 122, 26, 0.45); }
+.tip { flex: 0 0 auto; font-size: 13px; color: var(--muted); text-align: center; margin: 0; padding-bottom: 4px; }
 
-dialog {
-  width: min(520px, calc(100% - 32px)); max-height: calc(100% - 48px);
-  background: var(--panel); color: var(--fg);
-  border: 1px solid var(--line); border-radius: 18px; padding: 20px;
-}
+dialog { width: min(560px, calc(100% - 32px)); max-height: calc(100% - 48px); background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 18px; padding: 20px; }
 dialog::backdrop { background: rgba(0, 0, 0, 0.65); }
 dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
+dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
 .hint { color: var(--muted); font-size: 14px; line-height: 1.45; margin: 0 0 14px; }
 .field { display: grid; gap: 6px; margin-bottom: 14px; font-size: 14px; color: var(--muted); }
-.field input, .field select, .field textarea {
-  background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; color: var(--fg);
-}
+.field input, .field select, .field textarea { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; color: var(--fg); }
+.field input[type="range"] { padding: 0; accent-color: var(--orange); }
+.field output { color: var(--fg); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .check { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
-.check input { width: 20px; height: 20px; accent-color: var(--orange); }
+.check input { width: 20px; height: 20px; accent-color: var(--orange); flex: 0 0 auto; }
+.row { display: flex; gap: 8px; align-items: end; }
+.row > * { flex: 1 1 0; min-width: 0; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 6px; }
 .btn { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
 .btn.primary { background: var(--orange); color: #1a0a00; border-color: var(--orange); font-weight: 600; }
@@ -122,7 +109,25 @@ dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
 .mem-item { display: flex; justify-content: space-between; gap: 10px; text-align: left; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
 .mem-item span:last-child { color: var(--muted); font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
 .mem-editor textarea { width: 100%; height: 45vh; font-family: var(--font-mono); font-size: 13px; resize: vertical; }
-.tip { font-size: 13px; color: var(--muted); text-align: center; margin: 0; padding-bottom: 4px; }
+
+/* Heute-Übersicht */
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 6px; }
+.tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.tile { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.tile .k { font-family: var(--font-mono); font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+.tile .v { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.tile .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 6px; }
+.bar > i { display: block; height: 100%; background: var(--orange); border-radius: 3px; }
+.list { display: grid; gap: 4px; }
+.li { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; background: var(--bg); font-size: 14px; }
+.li .t { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.li .m { flex: 0 0 auto; color: var(--muted); font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.li.due .m { color: var(--warn); }
+.li.over .m { color: var(--danger); }
+.li input { width: 20px; height: 20px; accent-color: var(--orange); flex: 0 0 auto; }
+.empty { color: var(--muted); font-size: 14px; padding: 6px 2px; }
+@media (max-width: 360px) { .tiles { grid-template-columns: 1fr; } }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
@@ -132,6 +137,7 @@ dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
     <span class="brand">JARVIS</span>
     <span class="mode" id="modeLabel"></span>
     <nav>
+      <button class="icon-btn" id="btnToday" title="Heute" aria-label="Heute-Übersicht">▦</button>
       <button class="icon-btn" id="btnMemory" title="Gedächtnis" aria-label="Gedächtnis">◎</button>
       <button class="icon-btn" id="btnSettings" title="Einstellungen" aria-label="Einstellungen">⚙</button>
     </nav>
@@ -147,18 +153,21 @@ dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
 
   <div class="chips" id="chips">
     <button class="chip hot" data-say="Briefing, bitte.">Briefing</button>
-    <button class="chip" data-say="Was steht heute an?">Was steht an?</button>
+    <button class="chip" data-action="heute">Heute</button>
+    <button class="chip" data-action="anzeige">📷 Anzeige aus Foto</button>
+    <button class="chip" data-say="Wie läuft das Lager? Gewinn diesen Monat?">Lager & Gewinn</button>
     <button class="chip" data-fill="Merk dir, ">Merk dir …</button>
+    <button class="chip" data-fill="Neue Aufgabe: ">Aufgabe …</button>
     <button class="chip" data-say="Lern mich kennen. Frag mich das Wichtigste.">Lern mich kennen</button>
   </div>
-  <p class="tip" id="tip">Tipp: Ins Feld tippen und auf der Tastatur 🎤 drücken, um zu sprechen.</p>
+  <p class="tip" id="tip">Tipp: 🎙 antippen, dann auf der Tastatur 🎤 – Jarvis sendet von selbst, wenn du eine Pause machst.</p>
 
   <form class="composer" id="composer" autocomplete="off">
     <label class="round" title="Foto" aria-label="Foto aufnehmen oder wählen" id="camLabel">
       📷<input type="file" id="camInput" accept="image/*" hidden>
     </label>
-    <input type="text" id="input" placeholder="Sag etwas zu Jarvis …" enterkeyhint="send">
-    <button type="submit" class="round send" id="btnSend" aria-label="Senden">➤</button>
+    <input type="text" id="input" placeholder="Sag etwas zu Jarvis …" enterkeyhint="send" autocapitalize="sentences">
+    <button type="submit" class="round mic" id="btnAction" aria-label="Sprechen">🎙</button>
   </form>
 </div>
 
@@ -169,12 +178,35 @@ dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
     <input id="setAnrede" list="anreden">
     <datalist id="anreden"><option value="Master"><option value="Chef"><option value="Boss"></datalist>
   </label>
+
+  <h3>Stimme</h3>
   <label class="check"><input type="checkbox" id="setTts"> Antworten vorlesen</label>
-  <label class="field" id="voiceField">Stimme
-    <select id="setVoice"></select>
+  <div id="voiceBox">
+    <label class="field">Stimme
+      <select id="setVoice"></select>
+    </label>
+    <div class="row">
+      <label class="field">Tempo <output id="outRate"></output>
+        <input type="range" id="setRate" min="0.8" max="1.3" step="0.05">
+      </label>
+      <label class="field">Tonhöhe <output id="outPitch"></output>
+        <input type="range" id="setPitch" min="0.7" max="1.2" step="0.05">
+      </label>
+    </div>
+    <div class="actions" style="justify-content:flex-start;margin:-6px 0 12px"><button class="btn" id="btnVoiceTest" type="button">Probehören</button></div>
+    <p class="hint" id="voiceHint">Am natürlichsten klingen „Erweitert“- oder „Premium“-Stimmen. Laden: iPhone-Einstellungen → Bedienungshilfen → Gesprochene Inhalte → Stimmen → Deutsch.</p>
+  </div>
+
+  <h3>Sprechen</h3>
+  <label class="check"><input type="checkbox" id="setAutoSend"> Nach einer Sprechpause automatisch senden</label>
+  <label class="field">Sprechpause bis zum Senden <output id="outPause"></output>
+    <input type="range" id="setPause" min="1.2" max="4" step="0.2">
   </label>
+  <label class="check"><input type="checkbox" id="setConvo"> Gesprächsmodus – nach der Antwort gleich wieder zuhören</label>
+
+  <h3>Denken</h3>
   <label class="check"><input type="checkbox" id="setDeep"> Immer gründlich nachdenken</label>
-  <p class="hint">Sonst automatisch bei Zahlen, Preisen, Fakten, Entscheidungen und Fotos – dort prüft Jarvis lieber, statt zu raten.</p>
+  <p class="hint">Sonst automatisch bei Fotos, Entscheidungen, Erklärungen und Plänen. Zahlen rechnet Jarvis immer exakt mit seinen Werkzeugen.</p>
   <div class="actions">
     <button class="btn" id="btnClearChat" type="button">Verlauf löschen</button>
     <button class="btn primary" id="btnSaveSettings" type="button">Fertig</button>
@@ -184,7 +216,7 @@ dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
 
 <dialog id="dlgMemory">
   <h2>Gedächtnis</h2>
-  <p class="hint" id="memHint">Was Jarvis über dich weiß. „business“ teilt er mit allen, die diese Seite nutzen.</p>
+  <p class="hint" id="memHint">Was Jarvis über dich weiß. „Team“-Einträge teilt er mit allen, die diese Seite nutzen.</p>
   <div class="mem-list" id="memList"></div>
   <div class="mem-editor" id="memEditor" hidden>
     <p class="hint" id="memName"></p>
@@ -198,14 +230,37 @@ dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
   </div>
 </dialog>
 
+<dialog id="dlgToday">
+  <h2>Heute</h2>
+  <p class="hint" id="todayDate"></p>
+  <div class="tiles" id="todayTiles"></div>
+  <h3>Aufgaben</h3>
+  <div class="list" id="todayTasks"></div>
+  <h3>Lager</h3>
+  <div class="list" id="todayStock"></div>
+  <h3>Kunden & Projekte</h3>
+  <div class="list" id="todayClients"></div>
+  <div class="actions">
+    <button class="btn" id="btnCsvStock" type="button" hidden>Lager als CSV</button>
+    <button class="btn" id="btnCsvClients" type="button" hidden>Kunden als CSV</button>
+    <button class="btn primary" id="btnTodayClose" type="button">Schließen</button>
+  </div>
+  <p class="hint" id="todayMsg" hidden></p>
+</dialog>
+
 <script>
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
   const TZ = "Europe/Berlin";
   const today = () => new Intl.DateTimeFormat("sv-SE", { timeZone: TZ }).format(new Date());
+  const thisMonth = () => today().slice(0, 7);
+  const nowTime = () => new Intl.DateTimeFormat("de-DE", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }).format(new Date());
   const nowText = () =>
     new Intl.DateTimeFormat("de-DE", { timeZone: TZ, weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date());
+  const isDate = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+  const daysBetween = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 86400000);
+  const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => (b % 36).toString(36)).join("");
 
   /* ---------------- Orb ---------------- */
   const Orb = (() => {
@@ -259,11 +314,16 @@ dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
         ctx.fillStyle = g; ctx.fillRect(bx - br, by - br, br * 2, br * 2);
       }
       ctx.restore();
-      if (state === "thinking") {
-        ctx.strokeStyle = "rgba(255,150,70,0.45)"; ctx.lineWidth = 2 * dpr;
-        const s = t * 2.5;
-        ctx.beginPath(); ctx.arc(x, y, R * 1.18, s, s + 1.9); ctx.stroke();
-        ctx.beginPath(); ctx.arc(x, y, R * 1.18, s + 3.14, s + 5.0); ctx.stroke();
+      if (state === "thinking" || state === "listening") {
+        ctx.strokeStyle = state === "listening" ? `rgba(255,150,70,${0.35 + level * 0.5})` : "rgba(255,150,70,0.45)";
+        ctx.lineWidth = 2 * dpr;
+        if (state === "thinking") {
+          const s = t * 2.5;
+          ctx.beginPath(); ctx.arc(x, y, R * 1.18, s, s + 1.9); ctx.stroke();
+          ctx.beginPath(); ctx.arc(x, y, R * 1.18, s + 3.14, s + 5.0); ctx.stroke();
+        } else {
+          ctx.beginPath(); ctx.arc(x, y, R * (1.15 + level * 0.12), 0, 6.283); ctx.stroke();
+        }
       }
       requestAnimationFrame(frame);
     }
@@ -271,13 +331,21 @@ dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
     return { set(s) { if (STATES[s]) state = s; }, get state() { return state; }, level(v) { levelT = Math.max(levelT, Math.min(1, v)); } };
   })();
 
-  /* ---------------- Speicher (db pro Person, sonst nur dieses Gerät) ---------------- */
-  const FILES = ["fokus", "profil", "ziele", "aufgaben", "notizen", "business", "ernaehrung-ziele", "woerterbuch", "woerterbuch-ich"];
-  const SHARED = new Set(["business", "woerterbuch"]);
-  const LABEL = { fokus: "Fokus der Woche", profil: "Über mich", ziele: "Ziele", aufgaben: "Aufgaben", notizen: "Notizen", business: "Business (Team)", "ernaehrung-ziele": "Ernährungsziele", woerterbuch: "Wörterbuch (Team)", "woerterbuch-ich": "Mein Wörterbuch" };
+  /* ---------------- Speicher: Texte (Gedächtnis) ---------------- */
+  // Privat: data/users/<id>/<name>. Team: team/<name>. Ohne Anmeldung: nur dieses Gerät.
+  const FILES = ["fokus", "profil", "ziele", "notizen", "business", "gebuehren", "ernaehrung-ziele", "woerterbuch", "woerterbuch-ich"];
+  const SHARED = new Set(["business", "gebuehren", "woerterbuch"]);
+  const LABEL = {
+    fokus: "Fokus der Woche", profil: "Über mich", ziele: "Ziele", aufgaben: "Aufgaben (alte Notizen)", notizen: "Notizen",
+    business: "Business (Team)", gebuehren: "Plattform-Gebühren (Team)", "ernaehrung-ziele": "Ernährungsziele",
+    woerterbuch: "Wörterbuch (Team)", "woerterbuch-ich": "Mein Wörterbuch",
+  };
   // Typische Hörfehler der deutschen Spracherkennung. Zeile: „Richtig: falsch, falsch, …“
   const DEFAULT_WB = "Jarvis: Javis, Jarwis, Jervis, Charvis, Tschawis, Dschawis, Tscharwis, Jahrwies, Jarviss\nReels: Wheels, Wiels, Riels, Rihls\nTikTok: Tick Tack, Tik Tok, Tiktok, Ticktock, Tick Tock\nVinted: Winted, Vintet, Wintet, Vintid, Wintid\nStockX: Stock X, Stocks X, Stockx, Stock Ex\nSneaker: Snieker, Sniker, Schnieker, Snicker\nSneakers: Sniekers, Snikers, Schniekers, Snickers\nReselling: Re-Selling, Ri-Selling, Riselling, Reseling, Ree Selling\nResell: Re-Sell, Ri-Sell, Risell\nShopify: Schopify, Shopifai, Schopifai, Shoppify\nBriefing: Brieving, Brifing, Briefink";
-  const fallbackText = (name) => (name === "woerterbuch" ? DEFAULT_WB : "");
+  /* GEBUEHREN-START */
+  const DEFAULT_FEES = "Plattform | Gebühr % | Fix € | Hinweis | Stand | Quelle\n(Nur mit Quelle eintragen – Jarvis rechnet sonst mit 0 und sagt das dazu.)";
+  /* GEBUEHREN-ENDE */
+  const fallbackText = (name) => (name === "woerterbuch" ? DEFAULT_WB : name === "gebuehren" ? DEFAULT_FEES : "");
   const validFile = (f) => FILES.includes(f) || /^ernaehrung-\d{4}-\d{2}-\d{2}$/.test(f);
 
   const store = {
@@ -300,39 +368,339 @@ dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
     },
   };
 
-  let settings = { anrede: "Master", tts: true, voice: "", deep: false };
-  let turns = []; // [{role, content}] – nur Text
-  let lastBriefing = "";
+  /* ---------------- Speicher: Listen (Lager, Kunden, Aufgaben) ---------------- */
+  // Lager und Kunden gehören dem Team (geteilt), Aufgaben sind privat.
+  const cols = {
+    ref(name) {
+      if (name === "aufgaben") return store.db.doc(`data/users/${store.uid}/listen`).collection("aufgaben");
+      return store.db.collection(name);
+    },
+    localKey: (name) => "jarvis:col:" + name,
+    async list(name) {
+      if (!store.local) {
+        try { const s = await this.ref(name).get(); return s.docs.map((d) => ({ ...d.data(), id: d.id })); } catch (e) { console.warn("db list", name, e); return []; }
+      }
+      try { return Object.entries(JSON.parse(localStorage.getItem(this.localKey(name)) || "{}")).map(([id, v]) => ({ ...v, id })); } catch { return []; }
+    },
+    async put(name, item) {
+      const { id, ...data } = item;
+      if (!store.local) { await this.ref(name).doc(id).set(data); return; }
+      const all = JSON.parse(localStorage.getItem(this.localKey(name)) || "{}");
+      all[id] = data;
+      localStorage.setItem(this.localKey(name), JSON.stringify(all));
+    },
+  };
 
-  async function loadState() {
-    const s = await store.get("einstellungen");
-    if (s) settings = { ...settings, ...s };
-    const v = await store.get("verlauf");
-    if (v?.turns) turns = v.turns.slice(-30);
-    lastBriefing = v?.lastBriefing || "";
+  /* ---------------- Geld und exaktes Rechnen ---------------- */
+  // Beträge werden in Cent (ganze Zahlen) gespeichert und gerechnet – keine Rundungsfehler.
+  function toCents(v, feld = "Betrag") {
+    if (v === undefined || v === null || v === "") return null;
+    let s = typeof v === "number" ? String(v) : String(v).replace(/[€\s]|eur(o)?/gi, "");
+    if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, "");
+    s = s.replace(",", ".");
+    const n = Number(s);
+    if (!Number.isFinite(n)) throw new Error(`${feld} ist keine Zahl: ${v}`);
+    return Math.round(n * 100);
   }
-  const saveVerlauf = () => store.set("verlauf", { turns: turns.slice(-30), lastBriefing });
+  const eur = (ct) => (ct == null ? null : (ct / 100).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €");
+  const pct = (x) => (Number.isFinite(x) ? (Math.round(x * 10) / 10).toLocaleString("de-DE") + " %" : null);
 
-  async function memorySnapshot() {
-    const names = [...FILES, `ernaehrung-${today()}`];
-    const docs = await Promise.all(names.map((n) => store.get(n)));
-    return names.map((n, i) => `## ${n}\n${(docs[i]?.text ?? fallbackText(n)).trim() || "(leer)"}`).join("\n\n");
-  }
-
-  async function applyMemory(ops) {
-    const done = []; // [{file, text, replaced}]
-    for (const op of Array.isArray(ops) ? ops.slice(0, 8) : []) {
-      const file = String(op?.datei || "").trim();
-      const text = String(op?.text || "").trim();
-      if (!validFile(file) || !text) continue;
-      const cur = (await store.get(file))?.text ?? fallbackText(file);
-      const replaced = op.aktion === "ersetzen";
-      const next = replaced ? text.slice(0, 20000) : `${cur.trim()}\n- (${today()}) ${text}`.trim().slice(-20000);
-      // Die vorherige Fassung bleibt erhalten – in der Gedächtnis-Ansicht lässt sie sich wiederherstellen.
-      if (await store.set(file, { text: next, vorher: cur, geaendert: new Date().toISOString() })) done.push({ file, text, replaced });
+  // Sicherer Rechner (+ − × ÷, Klammern, Prozent, Dezimalkomma) – kein eval.
+  function rechne(ausdruck) {
+    const src = String(ausdruck || "").replace(/×|x(?=\s*\d)/g, "*").replace(/÷|:/g, "/").replace(/−/g, "-").replace(/€/g, "");
+    const tokens = [];
+    const re = /\s*(\d+(?:[.,]\d+)*|[-+*/()%^])/y;
+    let m, pos = 0;
+    while (pos < src.length) {
+      re.lastIndex = pos;
+      m = re.exec(src);
+      if (!m) { if (/\s/.test(src[pos])) { pos++; continue; } throw new Error(`Unerwartetes Zeichen: „${src[pos]}“`); }
+      tokens.push(m[1]); pos = re.lastIndex;
     }
-    return done;
+    let i = 0;
+    const peek = () => tokens[i], take = () => tokens[i++];
+    const num = (t) => {
+      let s = t;
+      if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, "");
+      return Number(s.replace(",", "."));
+    };
+    function primary() {
+      const t = take();
+      if (t === undefined) throw new Error("Ausdruck endet zu früh");
+      if (t === "(") { const v = expr(); if (take() !== ")") throw new Error("Klammer fehlt"); return post(v); }
+      if (t === "-") return -primary();
+      if (t === "+") return primary();
+      const n = num(t);
+      if (!Number.isFinite(n)) throw new Error(`Keine Zahl: ${t}`);
+      return post(n);
+    }
+    function post(v) { while (peek() === "%") { take(); v /= 100; } return v; }
+    function power() { let v = primary(); while (peek() === "^") { take(); v = Math.pow(v, primary()); } return v; }
+    function term() {
+      let v = power();
+      while (peek() === "*" || peek() === "/") {
+        const op = take(), r = power();
+        if (op === "/" && r === 0) throw new Error("Division durch null");
+        v = op === "*" ? v * r : v / r;
+      }
+      return v;
+    }
+    function expr() { let v = term(); while (peek() === "+" || peek() === "-") { const op = take(), r = term(); v = op === "+" ? v + r : v - r; } return v; }
+    if (!tokens.length) throw new Error("Leerer Ausdruck");
+    const v = expr();
+    if (i < tokens.length) throw new Error(`Unerwartet: „${tokens[i]}“`);
+    return Math.round(v * 1e10) / 1e10;
   }
+
+  function gewinnRechnung({ einkauf, verkauf, gebuehr_prozent, gebuehr_fix, versand }) {
+    const ek = toCents(einkauf, "Einkauf") ?? 0;
+    const vk = toCents(verkauf, "Verkauf") ?? 0;
+    const pz = Number(String(gebuehr_prozent ?? 0).replace(",", ".")) || 0;
+    const fix = toCents(gebuehr_fix, "Fixgebühr") ?? 0;
+    const vs = toCents(versand, "Versand") ?? 0;
+    const gebuehr = Math.round((vk * pz) / 100) + fix;
+    const gewinn = vk - ek - gebuehr - vs;
+    // Mindestpreis: vk − vk·p − fix − versand − einkauf ≥ 0  ⇒  vk ≥ (einkauf + fix + versand) / (1 − p)
+    const breakEven = pz < 100 ? Math.ceil((ek + fix + vs) / (1 - pz / 100)) : null;
+    return {
+      verkauf: eur(vk), einkauf: eur(ek), gebuehren: eur(gebuehr), versand: eur(vs), gewinn: eur(gewinn),
+      marge: vk ? pct((gewinn / vk) * 100) : null, roi: ek ? pct((gewinn / ek) * 100) : null,
+      mindestpreis_ohne_verlust: breakEven == null ? null : eur(breakEven),
+      hinweis: !gebuehr_prozent && !gebuehr_fix ? "Ohne Plattformgebühr gerechnet – falls eine anfällt, ist der Gewinn kleiner." : undefined,
+    };
+  }
+
+  /* ---------------- Lager, Kunden, Aufgaben, Ernährung ---------------- */
+  const LAGER_STATUS = ["lager", "gelistet", "verkauft", "retoure"];
+  const KUNDEN_STATUS = ["anfrage", "angebot", "auftrag", "fertig", "bezahlt", "verloren"];
+  const itemProfit = (x) => (x.verkauf_ct ?? 0) - (x.einkauf_ct ?? 0) - (x.gebuehren_ct ?? 0) - (x.versand_ct ?? 0);
+  const lagerView = (x) => ({
+    id: x.id, name: x.name, groesse: x.groesse || undefined, zustand: x.zustand || undefined, status: x.status, plattform: x.plattform || undefined,
+    einkauf: eur(x.einkauf_ct), einkauf_datum: x.einkauf_datum,
+    ...(x.status === "verkauft" ? { verkauf: eur(x.verkauf_ct), gebuehren: eur(x.gebuehren_ct ?? 0), versand: eur(x.versand_ct ?? 0), gewinn: eur(itemProfit(x)), verkauf_datum: x.verkauf_datum } : {}),
+    notiz: x.notiz || undefined,
+  });
+
+  function findOne(items, { id, suche }, what) {
+    if (id) { const hit = items.find((x) => x.id === String(id)); if (hit) return hit; }
+    const q = String(suche || id || "").toLowerCase().trim();
+    if (!q) throw new Error(`Welche${what === "Aufgabe" ? "" : "n"} ${what}? id oder suche angeben.`);
+    const hits = items.filter((x) => [x.name, x.groesse, x.text, x.projekt].filter(Boolean).join(" ").toLowerCase().includes(q));
+    if (hits.length === 1) return hits[0];
+    if (!hits.length) throw new Error(`Kein Treffer für „${q}“.`);
+    throw new Error(`Mehrdeutig – ${hits.length} Treffer: ${hits.slice(0, 8).map((x) => `[${x.id}] ${x.name || x.text}${x.groesse ? " " + x.groesse : ""}`).join("; ")}. Nachfragen, welcher gemeint ist.`);
+  }
+
+  async function lagerAuswertung(monat) {
+    const m = /^\d{4}-\d{2}$/.test(monat || "") ? monat : thisMonth();
+    const items = await cols.list("lager");
+    const sold = items.filter((x) => x.status === "verkauft" && (x.verkauf_datum || "").startsWith(m));
+    const umsatz = sold.reduce((s, x) => s + (x.verkauf_ct ?? 0), 0);
+    const gewinn = sold.reduce((s, x) => s + itemProfit(x), 0);
+    const kosten = sold.reduce((s, x) => s + (x.einkauf_ct ?? 0), 0);
+    const bestand = items.filter((x) => x.status === "lager" || x.status === "gelistet");
+    const standzeiten = sold.filter((x) => isDate(x.einkauf_datum) && isDate(x.verkauf_datum)).map((x) => daysBetween(x.einkauf_datum, x.verkauf_datum));
+    return {
+      monat: m,
+      verkauft: sold.length, umsatz: eur(umsatz), gewinn: eur(gewinn), gewinn_ct: gewinn,
+      marge: umsatz ? pct((gewinn / umsatz) * 100) : null, roi: kosten ? pct((gewinn / kosten) * 100) : null,
+      im_bestand: bestand.length, lagerwert_einkauf: eur(bestand.reduce((s, x) => s + (x.einkauf_ct ?? 0), 0)),
+      durchschnittliche_standzeit_tage: standzeiten.length ? Math.round(standzeiten.reduce((a, b) => a + b, 0) / standzeiten.length) : null,
+      top: sold.sort((a, b) => itemProfit(b) - itemProfit(a)).slice(0, 3).map((x) => `${x.name}${x.groesse ? " " + x.groesse : ""}: ${eur(itemProfit(x))}`),
+      fehlende_gebuehren: sold.filter((x) => x.gebuehren_ct == null).length || undefined,
+    };
+  }
+
+  function zielAus(text, re) { const m = String(text || "").match(re); return m ? Number(m[1].replace(/\./g, "")) : null; }
+  async function ernaehrungTag(datum = today()) {
+    const doc = (await store.get(`ernaehrung-${datum}`)) || {};
+    const e = Array.isArray(doc.eintraege) ? doc.eintraege : [];
+    const sum = (k) => e.reduce((s, x) => s + (Number(x[k]) || 0), 0);
+    const zieleText = (await store.get("ernaehrung-ziele"))?.text || "";
+    const zielKcal = zielAus(zieleText, /kalorien[^\d\n]{0,40}(\d[\d.]{2,5})/i);
+    const zielEiweiss = zielAus(zieleText, /eiwei(?:ß|ss)[^\d\n]{0,40}(\d{2,4})/i);
+    const kcal = sum("kcal"), eiweiss = sum("eiweiss");
+    return {
+      datum, mahlzeiten: e.length, kcal, eiweiss_g: eiweiss, kh_g: sum("kh"), fett_g: sum("fett"),
+      ziel_kcal: zielKcal, rest_kcal: zielKcal ? zielKcal - kcal : null, ziel_eiweiss_g: zielEiweiss, rest_eiweiss_g: zielEiweiss ? zielEiweiss - eiweiss : null,
+      hinweis: zielKcal ? undefined : "Kein Kalorienziel gespeichert (ernaehrung-ziele).",
+      eintraege: e.map((x) => `${x.zeit} ${x.mahlzeit}: ${x.kcal} kcal, ${x.eiweiss} g Eiweiß`),
+    };
+  }
+  const renderErnaehrungText = (doc) => {
+    const legacy = (doc.text || "").split("\n").filter((l) => !l.startsWith("• ")).join("\n").trim();
+    const lines = (doc.eintraege || []).map((x) => `• ${x.zeit} ${x.mahlzeit}: ${x.kcal} kcal, ${x.eiweiss} g Eiweiß, ${x.kh} g KH, ${x.fett} g Fett (geschätzt)`);
+    return [legacy, ...lines].filter(Boolean).join("\n");
+  };
+
+  // Jede Werkzeug-Aktion, die etwas speichert, wird im Chat angezeigt – zur Kontrolle.
+  let toolNotes = [];
+  const noteTool = (t) => toolNotes.push(t);
+  const num = (v, feld) => { const n = Number(String(v ?? "").replace(",", ".")); if (!Number.isFinite(n)) throw new Error(`${feld} ist keine Zahl: ${v}`); return n; };
+
+  const TOOLS = [
+    {
+      name: "rechnen",
+      description: "Rechnet einen Ausdruck EXAKT aus (+ - * / ^, Klammern, %, Dezimalkomma). Für jede Rechnung benutzen statt im Kopf zu rechnen. Gibt das Ergebnis zurück.",
+      inputSchema: { type: "object", properties: { ausdruck: { type: "string", description: "z. B. „(140 - 80) / 80 * 100“" } }, required: ["ausdruck"] },
+      execute: ({ ausdruck }) => { const v = rechne(ausdruck); return { ausdruck: String(ausdruck), ergebnis: v, deutsch: v.toLocaleString("de-DE", { maximumFractionDigits: 6 }) }; },
+    },
+    {
+      name: "gewinn_berechnen",
+      description: "Reselling-Rechner: Gewinn, Marge, ROI und Mindestpreis ohne Verlust aus Einkauf, Verkauf, Plattformgebühr (% und fix) und Versand. Gebühren aus dem Gedächtnis „gebuehren“ nehmen, nie raten.",
+      inputSchema: { type: "object", properties: { einkauf: { type: "number" }, verkauf: { type: "number" }, gebuehr_prozent: { type: "number" }, gebuehr_fix: { type: "number" }, versand: { type: "number" } }, required: ["einkauf", "verkauf"] },
+      execute: (a) => gewinnRechnung(a),
+    },
+    {
+      name: "lager_hinzufuegen",
+      description: "Neuen Artikel ins Reselling-Lager eintragen (z. B. „Panda Dunks Größe 43 für 80 gekauft“). Gibt den gespeicherten Artikel mit id zurück.",
+      inputSchema: { type: "object", properties: { name: { type: "string" }, groesse: { type: "string" }, zustand: { type: "string" }, einkauf: { type: "number", description: "Einkaufspreis in Euro" }, einkauf_datum: { type: "string", description: "JJJJ-MM-TT, Standard heute" }, plattform: { type: "string" }, notiz: { type: "string" } }, required: ["name", "einkauf"] },
+      async execute(a) {
+        if (!String(a.name || "").trim()) throw new Error("name fehlt");
+        const item = {
+          id: newId(), name: String(a.name).trim().slice(0, 120), groesse: a.groesse ? String(a.groesse).slice(0, 20) : "", zustand: a.zustand ? String(a.zustand).slice(0, 60) : "",
+          einkauf_ct: toCents(a.einkauf, "Einkauf"), einkauf_datum: isDate(a.einkauf_datum) ? a.einkauf_datum : today(),
+          plattform: a.plattform ? String(a.plattform).slice(0, 40) : "", status: "lager", notiz: a.notiz ? String(a.notiz).slice(0, 300) : "", erstellt: new Date().toISOString(),
+        };
+        if (item.einkauf_ct == null) throw new Error("einkauf fehlt");
+        await cols.put("lager", item);
+        noteTool(`▤ Lager: ${item.name}${item.groesse ? " " + item.groesse : ""} für ${eur(item.einkauf_ct)} eingetragen`);
+        return lagerView(item);
+      },
+    },
+    {
+      name: "lager_aktualisieren",
+      description: "Lager-Artikel ändern, z. B. als verkauft markieren („für 140 auf Vinted verkauft“). Artikel per id oder suche finden. Bei mehreren Treffern kommt eine Liste zurück – dann nachfragen.",
+      inputSchema: { type: "object", properties: { id: { type: "string" }, suche: { type: "string" }, status: { type: "string", enum: LAGER_STATUS }, verkauf: { type: "number" }, gebuehren: { type: "number", description: "Plattformgebühren in Euro" }, versand: { type: "number" }, plattform: { type: "string" }, verkauf_datum: { type: "string" }, name: { type: "string" }, groesse: { type: "string" }, zustand: { type: "string" }, einkauf: { type: "number" }, notiz: { type: "string" } } },
+      async execute(a) {
+        const items = await cols.list("lager");
+        const x = findOne(items, a, "Artikel");
+        if (a.status !== undefined) { if (!LAGER_STATUS.includes(a.status)) throw new Error(`status muss einer von ${LAGER_STATUS.join(", ")} sein`); x.status = a.status; }
+        if (a.verkauf !== undefined) { x.verkauf_ct = toCents(a.verkauf, "Verkauf"); if (a.status === undefined) x.status = "verkauft"; }
+        if (a.gebuehren !== undefined) x.gebuehren_ct = toCents(a.gebuehren, "Gebühren");
+        if (a.versand !== undefined) x.versand_ct = toCents(a.versand, "Versand");
+        if (a.einkauf !== undefined) x.einkauf_ct = toCents(a.einkauf, "Einkauf");
+        for (const k of ["plattform", "name", "groesse", "zustand", "notiz"]) if (a[k] !== undefined) x[k] = String(a[k]).slice(0, 300);
+        if (x.status === "verkauft") {
+          if (x.verkauf_ct == null) throw new Error("Für „verkauft“ fehlt der Verkaufspreis (verkauf).");
+          x.verkauf_datum = isDate(a.verkauf_datum) ? a.verkauf_datum : x.verkauf_datum || today();
+        }
+        x.geaendert = new Date().toISOString();
+        await cols.put("lager", x);
+        noteTool(`▤ Lager: ${x.name}${x.groesse ? " " + x.groesse : ""} → ${x.status}${x.status === "verkauft" ? `, Gewinn ${eur(itemProfit(x))}` : ""}`);
+        return { ...lagerView(x), ...(x.status === "verkauft" && x.gebuehren_ct == null ? { hinweis: "Keine Gebühren angegeben – mit 0 gerechnet. Nachfragen, falls Gebühren anfielen." } : {}) };
+      },
+    },
+    {
+      name: "lager_liste",
+      description: "Listet Lager-Artikel (optional nach status oder Suchtext). Gibt höchstens 40 Artikel mit id, Preis, Status und ggf. Gewinn zurück.",
+      inputSchema: { type: "object", properties: { status: { type: "string", enum: LAGER_STATUS }, suche: { type: "string" } } },
+      async execute(a) {
+        const q = String(a.suche || "").toLowerCase();
+        const items = (await cols.list("lager"))
+          .filter((x) => (!a.status || x.status === a.status) && (!q || `${x.name} ${x.groesse}`.toLowerCase().includes(q)))
+          .sort((a2, b) => String(b.erstellt || "").localeCompare(String(a2.erstellt || "")));
+        return { anzahl: items.length, artikel: items.slice(0, 40).map(lagerView) };
+      },
+    },
+    {
+      name: "lager_auswertung",
+      description: "Exakte Auswertung des Resellings für einen Monat (JJJJ-MM, Standard aktueller Monat): Umsatz, Gewinn, Marge, ROI, Anzahl verkauft, Bestand und Lagerwert, Standzeit, Top-Artikel.",
+      inputSchema: { type: "object", properties: { monat: { type: "string", description: "JJJJ-MM" } } },
+      execute: async (a) => { const r = await lagerAuswertung(a.monat); delete r.gewinn_ct; return r; },
+    },
+    {
+      name: "aufgabe_hinzufuegen",
+      description: "Persönliche Aufgabe anlegen (optional mit Fälligkeit JJJJ-MM-TT und Priorität). Relative Angaben wie „Freitag“ vorher in ein Datum umrechnen.",
+      inputSchema: { type: "object", properties: { text: { type: "string" }, faellig: { type: "string", description: "JJJJ-MM-TT" }, prioritaet: { type: "string", enum: ["hoch", "normal", "niedrig"] } }, required: ["text"] },
+      async execute(a) {
+        if (!String(a.text || "").trim()) throw new Error("text fehlt");
+        const item = { id: newId(), text: String(a.text).trim().slice(0, 300), faellig: isDate(a.faellig) ? a.faellig : "", prioritaet: ["hoch", "niedrig"].includes(a.prioritaet) ? a.prioritaet : "normal", erledigt: false, erstellt: new Date().toISOString() };
+        await cols.put("aufgaben", item);
+        noteTool(`☐ Aufgabe: ${item.text}${item.faellig ? ` (fällig ${item.faellig})` : ""}`);
+        return item;
+      },
+    },
+    {
+      name: "aufgabe_erledigen",
+      description: "Aufgabe als erledigt abhaken (per id oder suche).",
+      inputSchema: { type: "object", properties: { id: { type: "string" }, suche: { type: "string" } } },
+      async execute(a) {
+        const x = findOne((await cols.list("aufgaben")).filter((t) => !t.erledigt), a, "Aufgabe");
+        x.erledigt = true; x.erledigt_am = new Date().toISOString();
+        await cols.put("aufgaben", x);
+        noteTool(`☑ Erledigt: ${x.text}`);
+        return { erledigt: x.text };
+      },
+    },
+    {
+      name: "aufgaben_liste",
+      description: "Offene Aufgaben (sortiert nach Fälligkeit), optional inklusive erledigter.",
+      inputSchema: { type: "object", properties: { alle: { type: "boolean" } } },
+      async execute(a) {
+        const t = today();
+        const items = (await cols.list("aufgaben")).filter((x) => a.alle || !x.erledigt)
+          .sort((x, y) => (x.faellig || "9999").localeCompare(y.faellig || "9999"));
+        return { heute: t, aufgaben: items.slice(0, 50).map((x) => ({ id: x.id, text: x.text, faellig: x.faellig || undefined, ueberfaellig: x.faellig && x.faellig < t && !x.erledigt ? true : undefined, prioritaet: x.prioritaet, erledigt: x.erledigt || undefined })) };
+      },
+    },
+    {
+      name: "kunde_speichern",
+      description: "Webdesign-Kunden/Projekt anlegen oder ändern (Anfrage → Angebot → Auftrag → fertig → bezahlt, oder verloren). Mit id oder exaktem Namen wird aktualisiert.",
+      inputSchema: { type: "object", properties: { id: { type: "string" }, name: { type: "string" }, projekt: { type: "string" }, status: { type: "string", enum: KUNDEN_STATUS }, betrag: { type: "number", description: "Euro" }, faellig: { type: "string", description: "JJJJ-MM-TT" }, notiz: { type: "string" } }, required: ["name"] },
+      async execute(a) {
+        const items = await cols.list("kunden");
+        const name = String(a.name || "").trim();
+        let x = (a.id && items.find((k) => k.id === a.id)) || items.find((k) => k.name.toLowerCase() === name.toLowerCase());
+        const neu = !x;
+        x = x || { id: newId(), name: name.slice(0, 120), status: "anfrage", erstellt: new Date().toISOString() };
+        if (a.status !== undefined) { if (!KUNDEN_STATUS.includes(a.status)) throw new Error(`status muss einer von ${KUNDEN_STATUS.join(", ")} sein`); x.status = a.status; }
+        if (a.betrag !== undefined) x.betrag_ct = toCents(a.betrag, "Betrag");
+        if (a.faellig !== undefined) x.faellig = isDate(a.faellig) ? a.faellig : "";
+        for (const k of ["projekt", "notiz"]) if (a[k] !== undefined) x[k] = String(a[k]).slice(0, 300);
+        x.geaendert = new Date().toISOString();
+        await cols.put("kunden", x);
+        noteTool(`◇ Kunde ${neu ? "neu" : "aktualisiert"}: ${x.name} – ${x.status}${x.betrag_ct != null ? `, ${eur(x.betrag_ct)}` : ""}`);
+        return { id: x.id, name: x.name, projekt: x.projekt, status: x.status, betrag: eur(x.betrag_ct), faellig: x.faellig || undefined };
+      },
+    },
+    {
+      name: "kunden_liste",
+      description: "Kunden/Projekte mit Status, Betrag und Fälligkeit, plus Summe offener Angebote und laufender Aufträge.",
+      inputSchema: { type: "object", properties: { status: { type: "string", enum: KUNDEN_STATUS } } },
+      async execute(a) {
+        const items = (await cols.list("kunden")).filter((x) => !a.status || x.status === a.status);
+        const sum = (st) => items.filter((x) => x.status === st).reduce((s, x) => s + (x.betrag_ct ?? 0), 0);
+        return {
+          kunden: items.slice(0, 40).map((x) => ({ id: x.id, name: x.name, projekt: x.projekt, status: x.status, betrag: eur(x.betrag_ct), faellig: x.faellig || undefined })),
+          summe_angebote: eur(sum("angebot")), summe_auftraege: eur(sum("auftrag")), summe_fertig_unbezahlt: eur(sum("fertig")),
+        };
+      },
+    },
+    {
+      name: "ernaehrung_eintragen",
+      description: "Eine Mahlzeit ins heutige Ernährungs-Tracking eintragen (geschätzte Werte). Gibt die exakte Tagessumme und den Rest bis zum Ziel zurück.",
+      inputSchema: { type: "object", properties: { mahlzeit: { type: "string" }, kcal: { type: "number" }, eiweiss: { type: "number" }, kh: { type: "number" }, fett: { type: "number" }, zeit: { type: "string", description: "HH:MM, Standard jetzt" } }, required: ["mahlzeit", "kcal"] },
+      async execute(a) {
+        const name = `ernaehrung-${today()}`;
+        const doc = (await store.get(name)) || {};
+        const eintraege = Array.isArray(doc.eintraege) ? doc.eintraege : [];
+        eintraege.push({ zeit: /^\d{1,2}:\d{2}$/.test(a.zeit || "") ? a.zeit : nowTime(), mahlzeit: String(a.mahlzeit).slice(0, 120), kcal: Math.round(num(a.kcal, "kcal")), eiweiss: Math.round(Number(a.eiweiss) || 0), kh: Math.round(Number(a.kh) || 0), fett: Math.round(Number(a.fett) || 0) });
+        const next = { ...doc, eintraege, geaendert: new Date().toISOString() };
+        next.text = renderErnaehrungText(next);
+        await store.set(name, next);
+        const tag = await ernaehrungTag();
+        noteTool(`🍽 Ernährung: ${a.mahlzeit} – ${Math.round(a.kcal)} kcal (heute ${tag.kcal}${tag.ziel_kcal ? ` von ${tag.ziel_kcal}` : ""})`);
+        return tag;
+      },
+    },
+    {
+      name: "ernaehrung_tag",
+      description: "Exakte Tagessumme der Ernährung (kcal, Eiweiß, KH, Fett) und Rest bis zum Ziel, für heute oder ein Datum JJJJ-MM-TT.",
+      inputSchema: { type: "object", properties: { datum: { type: "string" } } },
+      execute: (a) => ernaehrungTag(isDate(a.datum) ? a.datum : today()),
+    },
+  ];
 
   /* ---------------- Korrektur-Schicht für Hörfehler ---------------- */
   // Rückt typische Diktat-Fehler gerade, BEVOR Claude den Satz sieht („Wiels“ → „Reels“).
@@ -361,124 +729,353 @@ dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
     return { text: out, changes };
   }
 
+  /* ---------------- Sprechtext: Text so aufbereiten, dass er gesprochen natürlich klingt ---------------- */
+  /* SPRECHTEXT-START */
+  function sprechbar(text) {
+    return String(text ?? "")
+      .replace(/```[\s\S]*?```/g, " ").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/https?:\/\/\S+/g, "")
+      .replace(/[*_#`>|~]/g, "").replace(/^\s*[-•]\s+/gm, "").replace(/\s+/g, " ").trim();
+  }
+  /* SPRECHTEXT-ENDE */
+
+  /* ---------------- Stimme (Ausgabe) ---------------- */
+  const synth = "speechSynthesis" in window ? window.speechSynthesis : null;
+  let voices = [];
+  /* STIMMEN-START */
+  // Bekannte gute deutsche iOS/macOS-Stimmen – höhere Zahl = bevorzugt.
+  const VOICE_RANK = { anna: 3, helena: 3, markus: 3, martin: 2, petra: 2, yannick: 2 };
+  function voiceScore(v) {
+    const n = `${v.name} ${v.voiceURI || ""}`.toLowerCase();
+    let s = 0;
+    if (/premium/.test(n)) s += 30;
+    else if (/enhanced|erweitert/.test(n)) s += 20;
+    if (/de[-_]de/i.test(v.lang)) s += 5;
+    for (const [k, r] of Object.entries(VOICE_RANK)) if (n.includes(k)) s += r;
+    if (/compact|eloquence|grandma|grandpa|oma|opa|rocko|reed|sandy|shelley|flo|eddy/.test(n)) s -= 15;
+    return s;
+  }
+  /* STIMMEN-ENDE */
+  function loadVoices() {
+    if (!synth) return;
+    voices = synth.getVoices().filter((v) => /^de/i.test(v.lang)).sort((a, b) => voiceScore(b) - voiceScore(a) || a.name.localeCompare(b.name));
+  }
+  if (synth) { loadVoices(); synth.addEventListener?.("voiceschanged", loadVoices); }
+  const pickVoice = () => voices.find((v) => v.voiceURI === settings.voice || v.name === settings.voice) || voices[0];
+
+  // Satzende = . ! ? … gefolgt von Leerraum/Ende – aber nicht nach einer Ziffer („1.199“, „19. Oktober“, „3. Platz“).
+  function sentenceEnds(text) {
+    const ends = [];
+    for (let i = 0; i < text.length; i++) {
+      if (!/[.!?…]/.test(text[i])) continue;
+      let j = i;
+      while (j + 1 < text.length && /[.!?…"“”»«)]/.test(text[j + 1])) j++;
+      const after = text[j + 1];
+      if (after !== undefined && !/\s/.test(after)) { i = j; continue; }
+      if (text[i] === "." && /\d/.test(text[i - 1] || "")) { i = j; continue; }
+      ends.push(j + 1);
+      i = j;
+    }
+    return ends;
+  }
+  function splitSentences(text) {
+    const out = [];
+    let start = 0;
+    for (const e of sentenceEnds(text)) { out.push(text.slice(start, e)); start = e; }
+    if (start < text.length) out.push(text.slice(start));
+    return out.map((x) => x.trim()).filter(Boolean);
+  }
+  // Erster vollständiger Satz eines wachsenden Textes (für das Vorlesen während des Streamings).
+  function firstSentence(text) {
+    const e = sentenceEnds(text).find((x) => x < text.length); // nur wenn danach schon etwas kommt
+    return e ? text.slice(0, e) : null;
+  }
+
+  // Text in kurze, natürlich gegliederte Stücke teilen (lange Äußerungen brechen auf iOS gern ab).
+  function chunkText(text, max = 180) {
+    const sentences = splitSentences(text);
+    const out = [];
+    let buf = "";
+    for (let s of sentences) {
+      while (s.length > max) {
+        const cut = Math.max(s.lastIndexOf(", ", max), s.lastIndexOf("; ", max), s.lastIndexOf(" – ", max), s.lastIndexOf(" und ", max));
+        const at = cut > 40 ? cut + 1 : s.lastIndexOf(" ", max) > 40 ? s.lastIndexOf(" ", max) : max;
+        if (buf) { out.push(buf); buf = ""; }
+        out.push(s.slice(0, at).trim()); s = s.slice(at).trim();
+      }
+      if (buf && (buf + " " + s).length > max) { out.push(buf); buf = s; }
+      else buf = buf ? buf + " " + s : s;
+    }
+    if (buf) out.push(buf);
+    return out;
+  }
+
+  // Eigene Warteschlange: immer nur eine Äußerung im System, mit Wächter, falls „onend“ ausbleibt.
+  const tts = {
+    queue: [], current: null, watchdog: null, unlocked: false,
+    get active() { return Boolean(this.current) || this.queue.length > 0; },
+    say(text, { force = false } = {}) {
+      if (!synth || (!settings.tts && !force)) return;
+      for (const c of chunkText(sprechbar(text))) if (c.trim()) this.queue.push(c);
+      this.next();
+    },
+    next() {
+      if (this.current) return;
+      const text = this.queue.shift();
+      if (text === undefined) { this.idle(); return; }
+      const u = new SpeechSynthesisUtterance(text);
+      const v = pickVoice();
+      if (v) u.voice = v;
+      u.lang = v?.lang || "de-DE";
+      u.rate = settings.rate; u.pitch = settings.pitch; u.volume = 1;
+      this.current = u;
+      const done = () => {
+        if (this.current !== u) return;
+        clearTimeout(this.watchdog);
+        this.current = null;
+        this.next();
+      };
+      u.onstart = () => { Orb.set("speaking"); setStatus("Spricht – antippen zum Unterbrechen"); };
+      u.onboundary = () => Orb.level(0.5 + Math.random() * 0.5);
+      u.onend = done; u.onerror = done;
+      // Wächter: großzügige Schätzung der Sprechdauer, danach weiter (iOS verschluckt manchmal „onend“).
+      this.watchdog = setTimeout(done, 3000 + (text.length * 95) / Math.max(0.5, settings.rate));
+      try { synth.speak(u); } catch { done(); }
+    },
+    stop() {
+      this.queue = []; this.current = null; clearTimeout(this.watchdog);
+      try { synth?.cancel(); } catch {}
+    },
+    idle() {
+      if (busy) return;
+      Orb.set("idle"); setStatus("Bereit");
+      if (settings.convo && lastWasVoice) setTimeout(() => { if (!busy && !tts.active) startListening(); }, 350);
+    },
+    // iOS gibt Sprachausgabe erst nach einer Berührung frei – einmal leise „anstoßen“.
+    unlock() {
+      if (this.unlocked || !synth) return;
+      this.unlocked = true;
+      try { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; synth.speak(u); } catch {}
+    },
+  };
+  addEventListener("pointerdown", () => tts.unlock(), { once: true, capture: true });
+  setInterval(() => { if (Orb.state === "speaking") Orb.level(0.25 + Math.random() * 0.45); }, 90);
+
+  /* ---------------- Einstellungen und Zustand ---------------- */
+  let settings = { anrede: "Master", tts: true, voice: "", rate: 1.0, pitch: 0.95, deep: false, autoSend: true, pause: 2.2, convo: false };
+  let turns = []; // [{role, content}] – nur Text
+  let lastBriefing = "";
+
+  async function loadState() {
+    const s = await store.get("einstellungen");
+    if (s) settings = { ...settings, ...s };
+    const v = await store.get("verlauf");
+    if (v?.turns) turns = v.turns.slice(-30);
+    lastBriefing = v?.lastBriefing || "";
+  }
+  const saveVerlauf = () => store.set("verlauf", { turns: turns.slice(-30), lastBriefing });
+
+  async function memorySnapshot() {
+    const names = [...FILES, "aufgaben"];
+    const docs = await Promise.all(names.map((n) => store.get(n)));
+    return names
+      .map((n, i) => ({ n, t: (docs[i]?.text ?? fallbackText(n)).trim() }))
+      .filter(({ n, t }) => t || n !== "aufgaben")
+      .map(({ n, t }) => `## ${n}\n${t || "(leer)"}`)
+      .join("\n\n");
+  }
+
+  // Kurzer Lagebericht aus den Listen – damit Jarvis fürs Briefing keine Werkzeuge braucht.
+  async function standSnapshot() {
+    const t = today();
+    const [aufgaben, kunden, lager, ern] = await Promise.all([cols.list("aufgaben"), cols.list("kunden"), lagerAuswertung(), ernaehrungTag()]);
+    const offen = aufgaben.filter((x) => !x.erledigt).sort((a, b) => (a.faellig || "9999").localeCompare(b.faellig || "9999"));
+    const auf = offen.slice(0, 10).map((x) => `- ${x.text}${x.faellig ? ` (fällig ${x.faellig}${x.faellig < t ? ", ÜBERFÄLLIG" : x.faellig === t ? ", HEUTE" : ""})` : ""}${x.prioritaet === "hoch" ? " [hoch]" : ""}`);
+    const offeneKunden = kunden.filter((k) => ["anfrage", "angebot", "auftrag", "fertig"].includes(k.status));
+    return [
+      `Offene Aufgaben (${offen.length}):`, ...(auf.length ? auf : ["- keine"]),
+      `Lager: ${lager.im_bestand} Artikel im Bestand (Einkaufswert ${lager.lagerwert_einkauf}); diesen Monat ${lager.verkauft} verkauft, Gewinn ${lager.gewinn}.`,
+      `Kunden/Projekte offen: ${offeneKunden.length ? offeneKunden.slice(0, 8).map((k) => `${k.name} (${k.status}${k.betrag_ct != null ? ", " + eur(k.betrag_ct) : ""}${k.faellig ? ", fällig " + k.faellig : ""})`).join("; ") : "keine"}.`,
+      `Ernährung heute: ${ern.kcal} kcal, ${ern.eiweiss_g} g Eiweiß${ern.ziel_kcal ? ` (Ziel ${ern.ziel_kcal} kcal)` : ""}.`,
+    ].join("\n");
+  }
+
+  async function applyMemory(ops) {
+    const done = [];
+    for (const op of Array.isArray(ops) ? ops.slice(0, 8) : []) {
+      const file = String(op?.datei || "").trim();
+      const text = String(op?.text || "").trim();
+      if (!validFile(file) || !text) continue;
+      const cur = (await store.get(file))?.text ?? fallbackText(file);
+      const replaced = op.aktion === "ersetzen";
+      const next = replaced ? text.slice(0, 20000) : `${cur.trim()}\n- (${today()}) ${text}`.trim().slice(-20000);
+      // Die vorherige Fassung bleibt erhalten – in der Gedächtnis-Ansicht lässt sie sich wiederherstellen.
+      if (await store.set(file, { text: next, vorher: cur, geaendert: new Date().toISOString() })) done.push({ file, text, replaced });
+    }
+    return done;
+  }
+
   /* ---------------- Persönlichkeit & Anweisungen ---------------- */
-  function instructions(memory) {
+  function instructions(memory, stand, toolsOk) {
     const a = settings.anrede || "Master";
-    return `Du bist JARVIS, der persönliche KI-Assistent und Stabschef des Nutzers. Du kennst sein Leben, sein Business und seine Ziele (siehe GEDÄCHTNIS), denkst mit und erinnerst dich.
+    return `Du bist JARVIS, der persönliche KI-Assistent und Stabschef des Nutzers. Du kennst sein Leben, sein Business und seine Ziele (siehe GEDÄCHTNIS und STAND), denkst mit, erinnerst dich und erledigst Dinge mit deinen Werkzeugen.
 
 PERSÖNLICHKEIT
 - Sprich ihn mit „${a}“ an (gelegentlich „Chef“ oder „Boss“, wenn er nichts anderes gewählt hat). Nicht in jedem Satz.
 - Trocken, selbstbewusst, effizient, leicht sarkastisch – aber immer hilfreich. Die Pointe kommt nach der Lösung.
 - Ergebnis zuerst. Standard: 1–3 Sätze. Länger nur, wenn er es will oder die Sache es braucht.
 - Bei Entscheidungen: eine klare Empfehlung mit dem wichtigsten Grund.
-- Proaktiv: erinnere an Aufgaben und Ziele, widersprich einmal klar, wenn etwas seinen Zielen schadet. Höchstens ein ungefragter Hinweis pro Antwort.
+- Proaktiv: erinnere an fällige Aufgaben, offene Angebote und Ziele, widersprich einmal klar, wenn etwas seinen Zielen schadet. Höchstens ein ungefragter Hinweis pro Antwort.
 - Verboten: „Gute Frage!“, „Gerne helfe ich…“, „Ich hoffe, das hilft“, Emojis, Ausrufezeichen-Ketten, unnötige Entschuldigungen, erfundene Fakten, Raten, das wie Wissen klingt.
-- Beispiele für den Ton: „Sehr wohl, ${a}.“ · „Bereits erledigt.“ · „Ein halbes Prozent Unterschied für die Hälfte des Geldes – die Rechnung macht sich von selbst.“
-- Er nutzt dich auf dem iPhone, oft per Diktat: Schreibe so, dass es vorgelesen gut klingt – kein Markdown, keine Listenzeichen, keine Links. Zahlen so, wie man sie spricht.
+- Ton: „Sehr wohl, ${a}.“ · „Bereits erledigt.“ · „Ein halbes Prozent Unterschied für die Hälfte des Geldes – die Rechnung macht sich von selbst.“
+- Deine Antwort wird VORGELESEN: kein Markdown, keine Listenzeichen, keine Tabellen, keine Links, kurze Sätze. Beträge mit €-Zeichen, Daten als „19. Oktober“.
+- Beginnt seine Nachricht mit [Sprache], hat er gesprochen: dann besonders kurz (ein bis zwei Sätze), außer er will mehr.
 - Du lernst nebenbei. Verhöre ihn nicht; höchstens eine beiläufige Frage, wenn sie gerade passt.
 
 PRÜFEN STATT RATEN – wichtiger als Schnelligkeit
-- Drei Sorten Aussagen, immer erkennbar: WEISS ICH (steht im Gedächtnis oder hat er gesagt) · SCHÄTZE ICH (Allgemeinwissen, Hochrechnung – sag „geschätzt“ oder „vermutlich“) · WEISS ICH NICHT (dann sag das).
-- Fakten über ihn und sein Business NUR aus dem GEDÄCHTNIS. Steht es dort nicht: nicht erfinden, sondern sagen, dass du es noch nicht weißt.
-- Aktuelle Preise, Marktwerte, Kurse, Öffnungszeiten, Gesetze, Nachrichten kannst du hier nicht nachsehen. Nie als sicher ausgeben – höchstens als grobe Schätzung mit Hinweis, wo er es prüfen kann.
-- Rechnungen: Rechenweg im Kopf gegenprüfen (Summe, Einheit, Größenordnung), bei Geld zweimal.
+- Drei Sorten Aussagen, immer erkennbar: WEISS ICH (Gedächtnis, Stand, Werkzeug-Ergebnis) · SCHÄTZE ICH („geschätzt“, „vermutlich“) · WEISS ICH NICHT (dann sag das).
+- Fakten über ihn und sein Business NUR aus GEDÄCHTNIS, STAND oder Werkzeugen. Nicht erfinden.
+- Aktuelle Preise, Marktwerte, Öffnungszeiten, Gesetze, Nachrichten kannst du hier nicht nachsehen. Nie als sicher ausgeben – höchstens als grobe Schätzung mit Hinweis.
 - Unklar, was er meint, und eine falsche Annahme wäre teuer? Eine kurze Rückfrage statt raten.
-- Bevor du antwortest: kurz gegenlesen – stimmt jede Zahl, passt es zum Gedächtnis, widerspricht es nichts, was er früher gesagt hat?
 - Lieber „Weiß ich nicht sicher“ als eine selbstbewusste falsche Antwort.
 
+${toolsOk ? `WERKZEUGE – du kannst wirklich etwas tun
+- Rechne NIE im Kopf: jede Rechnung über „rechnen“, Reselling-Gewinne über „gewinn_berechnen“, Monatszahlen über „lager_auswertung“.
+- Reselling-Lager: Kauf → lager_hinzufuegen. Verkauf → lager_aktualisieren (verkauf, gebuehren, versand, plattform). Fragen zum Bestand → lager_liste. Gebühren aus dem Gedächtnis „gebuehren“ – steht dort nichts, frag nach oder rechne mit 0 und sag es.
+- Aufgaben: neue → aufgabe_hinzufuegen (relative Daten wie „Freitag“ vorher in JJJJ-MM-TT umrechnen; heute ist ${today()}), erledigt → aufgabe_erledigen, Überblick → aufgaben_liste.
+- Webdesign-Kunden und Projekte → kunde_speichern / kunden_liste.
+- Essen (auch Fotos) → ernaehrung_eintragen mit geschätzten Werten; die Tagessumme kommt exakt zurück.
+- Mehrdeutiger Treffer (das Werkzeug meldet „Mehrdeutig“)? Kurz nachfragen, welcher gemeint ist.
+- Nach dem Werkzeug: Ergebnis in einem Satz nennen. Was gespeichert wurde, sieht er im Chat – nicht vorlesen, nur „Eingetragen.“` : `WERKZEUGE sind in dieser Ansicht nicht verfügbar. Rechne sorgfältig, rechne jede Zahl zweimal nach und sag dazu, dass du nicht mit dem Rechner geprüft hast.`}
+
 JETZT: ${nowText()} (${TZ}). Heute ist ${today()}.
+
+STAND (exakt aus seinen Listen)
+${stand}
 
 GEDÄCHTNIS (was du über ihn weißt)
 ${memory}
 
-GEDÄCHTNIS AKTUALISIEREN
-Wenn er etwas sagt, das in einer Woche noch relevant ist (Fakten über ihn, Ziele, Aufgaben, Business, Vorlieben, Mahlzeiten), hänge GANZ AM ENDE deiner Antwort genau diesen Block an:
+GEDÄCHTNIS AKTUALISIEREN (für freie Fakten – Listen laufen über die Werkzeuge)
+Wenn er etwas sagt, das in einer Woche noch relevant ist (Fakten über ihn, Ziele, Business, Vorlieben), hänge GANZ AM ENDE deiner Antwort genau diesen Block an:
 [[GEDAECHTNIS]]
-[{"datei":"aufgaben","aktion":"anhaengen","text":"Rechnung an Kunde Müller schreiben, fällig Freitag"}]
-- datei: fokus, profil, ziele, aufgaben, notizen, business (geteilt mit seinem Team), ernaehrung-ziele, ernaehrung-${today()}, woerterbuch (Hörfehler, Team), woerterbuch-ich (Hörfehler bei persönlichen Namen)
-- aktion: "anhaengen" (eine neue Zeile) oder "ersetzen" (die ganze Datei neu – zum Abhaken, Korrigieren, Aufräumen; dann den vollständigen neuen Inhalt schreiben)
-- Kein Block, wenn es nichts zu speichern gibt. Im Text dann nur kurz „Notiert.“ – keine Dateinamen nennen.
-- Speichere nur, was er gesagt hat oder was sicher ist – keine eigenen Vermutungen als Fakten.
-- Widerspricht es einem vorhandenen Eintrag (anderer Preis, anderes Datum, anderer Name)? Nicht still überschreiben, sondern erst fragen: „Bisher stand hier X. Gilt jetzt Y?“
+[{"datei":"profil","aktion":"anhaengen","text":"Trainiert dienstags und donnerstags"}]
+- datei: fokus, profil, ziele, notizen, business (Team), gebuehren (Team, nur mit Quelle), ernaehrung-ziele, woerterbuch (Hörfehler, Team), woerterbuch-ich (Hörfehler bei persönlichen Namen)
+- aktion: "anhaengen" (eine neue Zeile) oder "ersetzen" (ganze Datei neu – vollständigen neuen Inhalt schreiben)
+- Kein Block, wenn es nichts zu speichern gibt. Speichere nur, was er gesagt hat oder was sicher ist.
+- Widerspricht es einem vorhandenen Eintrag? Erst fragen: „Bisher stand hier X. Gilt jetzt Y?“
+
+TEXTE ZUM KOPIEREN (Verkaufsanzeigen, Nachrichten, Angebote, Captions)
+Setze den fertigen Text zwischen [[TEXT]] und [[/TEXT]]. Davor ein kurzer Satz zum Vorlesen. Der Text in der Klammer wird nicht vorgelesen, sondern als Karte mit Kopier-Knopf gezeigt – dort sind Zeilenumbrüche erlaubt.
+
+VERKAUFSANZEIGE AUS FOTO (Vinted, eBay, Kleinanzeigen)
+In [[TEXT]]: Titel (Marke, Modell, Farbe, Größe – max. 60 Zeichen), Beschreibung (2–4 kurze Sätze, ehrlich zum Zustand), Zustand, Größe, 5–8 Hashtags. Nur nennen, was auf dem Foto wirklich zu sehen ist; Unklares (Größe, Echtheit, Mängel) als Frage markieren. Preisvorschlag nur als „geschätzt“ und mit Hinweis, die verkauften Angebote auf der Plattform zu prüfen. Auf Wunsch den Artikel gleich mit lager_hinzufuegen eintragen (Einkaufspreis erfragen, nicht raten).
 
 HÖRFEHLER (er diktiert – die Spracherkennung verhört sich zuverlässig)
-- Bekannte Hörfehler sind schon korrigiert, bevor du den Satz liest (siehe woerterbuch).
-- Ergibt ein Wort im Zusammenhang keinen Sinn, ist es wahrscheinlich ein Hörfehler. Überleg, was gemeint war. Sicher → so verstehen. Nicht sicher → kurz nachfragen („Meinen Sie Reels?“).
-- Korrigiert er dich („Ich meinte X, nicht Y“): ins Wörterbuch eintragen – {"datei":"woerterbuch","aktion":"anhaengen","text":"X: Y"} (Namen von Menschen in woerterbuch-ich). Steht X schon drin, die Zeile mit "ersetzen" um Y ergänzen. Nicht eintragen, wenn Y auch ein normales, gemeintes Wort sein kann (z. B. „Java“, „Schatz“).
+- Bekannte Hörfehler sind schon korrigiert (siehe woerterbuch). Ergibt ein Wort keinen Sinn: Hörfehler? Sicher → so verstehen. Nicht sicher → kurz nachfragen („Meinen Sie Reels?“).
+- Korrigiert er dich („Ich meinte X, nicht Y“): {"datei":"woerterbuch","aktion":"anhaengen","text":"X: Y"} (Namen von Menschen in woerterbuch-ich). Nicht eintragen, wenn Y auch ein normales, gemeintes Wort sein kann.
 
 BRIEFING (wenn er nach Briefing, Tag oder „was steht an“ fragt)
-Begrüßung passend zur Uhrzeit, höchstens drei Punkte aus Fokus, Aufgaben und Zielen (Wichtigstes zuerst), eine klare Empfehlung, womit er anfangen soll. Ist das Gedächtnis fast leer: ehrlich sagen und eine Frage stellen, die dir am meisten bringt.
+Begrüßung passend zur Uhrzeit, höchstens drei Punkte aus STAND und Fokus (Überfälliges und Heute zuerst, dann offene Angebote, dann Ziele), eine klare Empfehlung, womit er anfangen soll. Ist fast nichts bekannt: ehrlich sagen und eine Frage stellen.
 
 FOTOS (seine „Augen“)
-- Essen: Bestandteile und Portion schätzen, kcal, Eiweiß, Kohlenhydrate, Fett – und einmal kurz sagen, dass es eine Schätzung ist. Ist etwas Wichtiges nicht erkennbar (Soße, Füllung, Portionsgröße), lieber kurz fragen als eine Zahl erfinden. In ernaehrung-${today()} anhängen als „Uhrzeit Mahlzeit: X kcal, Y g Eiweiß, Z g KH, W g Fett“. Antwort: Schätzung plus Tagessumme (aus ernaehrung-${today()}); falls in ernaehrung-ziele ein Ziel steht, den Rest bis dahin.
-- Ware/Produkt (er macht Reselling): nur nennen, was wirklich zu sehen ist (Modell, Variante, Zustand). Unsicher bei Echtheit, Variante oder Größe? Das klar sagen. Preise nur als grobe Schätzung, nie als aktueller Marktwert.
-- Beleg/Rechnung: Betrag, Datum, Absender, Fälligkeit – bei Bedarf als Aufgabe merken.
-- Sonst: in ein, zwei Sätzen, was zu sehen ist, und der sinnvolle nächste Schritt.
+- Essen: Bestandteile und Portion schätzen, dann ernaehrung_eintragen. Antwort: Schätzung (als „geschätzt“) plus Tagesstand. Ist Wichtiges nicht erkennbar, lieber kurz fragen.
+- Ware (Reselling): Modell, Variante, Zustand – nur was zu sehen ist. Unsicher bei Echtheit/Größe? Sagen. Bietet sich an: Anzeige erstellen.
+- Beleg/Rechnung: Betrag, Datum, Absender, Fälligkeit – bei Bedarf als Aufgabe anlegen.
 
 GRENZEN
-Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen oder senden. Sag das offen, wenn er danach fragt, und biete an, was du stattdessen tun kannst (Text vorbereiten, Plan machen, aus deinem Wissen schätzen).`;
+Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen oder senden. Sag das offen und biete an, was du stattdessen tun kannst.`;
   }
 
   /* ---------------- Chat-Anzeige ---------------- */
   const chat = $("chat");
   const scrollDown = () => (chat.scrollTop = chat.scrollHeight);
+  const setStatus = (t, live = false) => { $("status").textContent = t; $("status").classList.toggle("live", live); };
+
+  // Antwort in Sprechtext, Karten ([[TEXT]]…[[/TEXT]]) und Gedächtnis-Block zerlegen.
+  function parseAnswer(raw) {
+    const memAt = raw.indexOf("[[GEDAECHTNIS]]");
+    let body = memAt >= 0 ? raw.slice(0, memAt) : raw;
+    body = body.replace(/\[\[?[A-Z/]*$/, ""); // halb geschriebene Markierung nicht zeigen
+    const parts = [];
+    let rest = body;
+    while (rest) {
+      const a = rest.indexOf("[[TEXT]]");
+      if (a < 0) { parts.push({ type: "text", text: rest }); break; }
+      if (a > 0) parts.push({ type: "text", text: rest.slice(0, a) });
+      const after = rest.slice(a + 8);
+      const b = after.indexOf("[[/TEXT]]");
+      if (b < 0) { parts.push({ type: "card", text: after, open: true }); break; }
+      parts.push({ type: "card", text: after.slice(0, b) });
+      rest = after.slice(b + 9);
+    }
+    const spoken = parts.filter((p) => p.type === "text").map((p) => p.text).join(" ").replace(/\s+/g, " ").trim();
+    return { parts, spoken };
+  }
+
+  async function copyText(text, btn) {
+    try { await navigator.clipboard.writeText(text); btn.textContent = "Kopiert"; }
+    catch { btn.textContent = "Markieren und kopieren"; }
+    setTimeout(() => (btn.textContent = "Kopieren"), 1600);
+  }
+
+  function renderParts(el, parts) {
+    el.textContent = "";
+    for (const p of parts) {
+      if (p.type === "text") { const s = document.createElement("span"); s.textContent = p.text.replace(/^\n+|\n+$/g, ""); el.appendChild(s); continue; }
+      const card = document.createElement("div");
+      card.className = "card";
+      const head = document.createElement("div");
+      head.className = "card-head";
+      const label = document.createElement("span"); label.textContent = p.open ? "Schreibt …" : "Zum Kopieren";
+      head.appendChild(label);
+      const body = document.createElement("div"); body.textContent = p.text.trim();
+      if (!p.open) {
+        const b = document.createElement("button"); b.type = "button"; b.textContent = "Kopieren";
+        b.onclick = () => copyText(p.text.trim(), b);
+        head.appendChild(b);
+      }
+      card.append(head, body);
+      el.appendChild(card);
+    }
+  }
+
   function addMsg(kind, text, img) {
     const el = document.createElement("div");
     el.className = "msg " + kind;
     if (img) { const i = document.createElement("img"); i.src = img; i.alt = "Dein Foto"; el.appendChild(i); }
-    const span = document.createElement("span");
+    const span = document.createElement("div");
     span.textContent = text;
     el.appendChild(span);
     chat.appendChild(el);
     scrollDown();
     return span;
   }
-  const setStatus = (t) => ($("status").textContent = t);
 
-  /* ---------------- Stimme (Vorlesen) ---------------- */
-  const synth = "speechSynthesis" in window ? window.speechSynthesis : null;
-  let voices = [], speakQueue = 0;
-  function loadVoices() {
-    if (!synth) return;
-    voices = synth.getVoices().filter((v) => /^de/i.test(v.lang));
-    voices.sort((a, b) => (/premium|enhanced|erweitert/i.test(b.name) - /premium|enhanced|erweitert/i.test(a.name)) || a.name.localeCompare(b.name));
+  function addActions(container, raw) {
+    const { parts, spoken } = parseAnswer(raw);
+    const row = document.createElement("div");
+    row.className = "msg-actions";
+    if (synth && spoken) {
+      const r = document.createElement("button"); r.type = "button"; r.textContent = "🔊 Vorlesen";
+      r.onclick = () => { tts.stop(); tts.say(spoken, { force: true }); };
+      row.appendChild(r);
+    }
+    const all = parts.map((p) => p.text.trim()).join("\n\n").trim();
+    if (all) {
+      const c = document.createElement("button"); c.type = "button"; c.textContent = "Kopieren";
+      c.onclick = () => copyText(all, c);
+      row.appendChild(c);
+    }
+    if (row.children.length) container.parentElement.appendChild(row);
   }
-  if (synth) { loadVoices(); synth.onvoiceschanged = loadVoices; }
-  const pickVoice = () => voices.find((v) => v.name === settings.voice) || voices[0];
-  function speak(text) {
-    if (!synth || !settings.tts) return;
-    const clean = text.replace(/\[\[GEDAECHTNIS\]\][\s\S]*/, "").replace(/[*_#`>|~]/g, "").replace(/\s+/g, " ").trim();
-    if (!clean) return;
-    const u = new SpeechSynthesisUtterance(clean);
-    const v = pickVoice();
-    if (v) u.voice = v;
-    u.lang = v?.lang || "de-DE";
-    u.rate = 1.03; u.pitch = 0.92;
-    speakQueue++;
-    u.onstart = () => { Orb.set("speaking"); setStatus("Spricht"); };
-    u.onboundary = () => Orb.level(0.5 + Math.random() * 0.5);
-    u.onend = u.onerror = () => {
-      speakQueue = Math.max(0, speakQueue - 1);
-      if (!speakQueue && !busy) { Orb.set("idle"); setStatus("Bereit"); }
-    };
-    try { synth.speak(u); } catch { speakQueue = Math.max(0, speakQueue - 1); }
-  }
-  setInterval(() => { if (Orb.state === "speaking") Orb.level(0.25 + Math.random() * 0.45); }, 90);
-  function stopSpeaking() { try { synth?.cancel(); } catch {} speakQueue = 0; }
 
   /* ---------------- Gespräch ---------------- */
-  let sample = null, busy = false, ctl = null, imagesOk = false;
+  let sample = null, busy = false, ctl = null, imagesOk = false, toolsOk = false, toolMax = 0;
+  let lastWasVoice = false;
 
-  // Wo Raten teuer wäre, denkt Jarvis gründlich nach (dauert länger): Fotos, Zahlen, Geld, Fakten, Entscheidungen.
-  const NEEDS_CARE = /\d|€|euro|preis|kost|wie ?viel|rechn|gewinn|marge|umsatz|steuer|gebühr|prozent|kalorien|eiweiß|datum|wann|frist|vertrag|recht|gesetz|vergleich|lohnt|soll ich|empfiehl|stimmt|warum|erklär|plan|strategie|angebot/i;
-  const needsCare = (text, image) => settings.deep || Boolean(image) || NEEDS_CARE.test(text);
-
-  function visiblePart(text) {
-    const i = text.indexOf("[[GEDAECHTNIS]]");
-    let v = i >= 0 ? text.slice(0, i) : text;
-    v = v.replace(/\[\[?[A-Z]*$/, ""); // halb geschriebene Markierung nicht zeigen
-    return v.trimEnd();
-  }
+  // Gründlich (langsamer, klüger) bei Fotos und echten Denkfragen – Zahlen rechnen die Werkzeuge exakt.
+  const NEEDS_DEPTH = /warum|wieso|erklär|lohnt|soll ich|sollte ich|empfiehl|empfehl|strategie|vergleich|vertrag|recht|gesetz|steuer|planen|plan für|konzept|analys|angebot schreib|angebot für|bewert|entscheid/i;
+  const needsCare = (text, image) => settings.deep || Boolean(image) || NEEDS_DEPTH.test(text);
 
   function parseOps(text) {
     const i = text.indexOf("[[GEDAECHTNIS]]");
@@ -489,72 +1086,95 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
     try { return JSON.parse(raw.slice(a, b + 1)); } catch { return []; }
   }
 
-  async function ask(userText, { image, imageUrl } = {}) {
-    userText = userText.trim();
+  function setAction() {
+    const btn = $("btnAction");
+    const hasText = $("input").value.trim().length > 0;
+    btn.classList.remove("go", "stop", "mic");
+    if (busy) { btn.textContent = "■"; btn.classList.add("stop"); btn.setAttribute("aria-label", "Stopp"); }
+    else if (hasText) { btn.textContent = "➤"; btn.classList.add("go"); btn.setAttribute("aria-label", "Senden"); }
+    else { btn.textContent = "🎙"; btn.classList.add("mic"); btn.setAttribute("aria-label", "Sprechen"); }
+  }
+
+  async function ask(userText, { image, imageUrl, voice = false } = {}) {
+    userText = String(userText || "").trim();
     if ((!userText && !image) || busy) return;
+    stopListening(false);
     const korr = userText ? await korrigiere(userText) : { text: userText, changes: [] };
     userText = korr.text;
     if (!sample) { addMsg("err", "Jarvis kann Claude in dieser Ansicht nicht erreichen. Öffne die Seite in der Claude-App oder auf claude.ai."); return; }
-    stopSpeaking();
-    busy = true;
-    $("btnSend").textContent = "■"; $("btnSend").classList.replace("send", "stop"); $("btnSend").setAttribute("aria-label", "Stopp");
-    const shown = userText || "Was siehst du?";
-    addMsg("user", shown, imageUrl);
+    tts.stop();
+    busy = true; lastWasVoice = voice; toolNotes = [];
+    setAction();
+    addMsg("user", userText || "📷", imageUrl);
     if (korr.changes.length) addMsg("note", "↺ verstanden als: " + korr.changes.join(", "));
     const out = addMsg("jarvis", "Denkt nach …");
     out.classList.add("thinking");
     const careful = needsCare(userText, image);
-    Orb.set("thinking"); setStatus(careful ? "Prüft gründlich" : "Denkt nach");
+    Orb.set("thinking"); setStatus(careful ? "Prüft gründlich" : "Denkt nach", true);
 
-    const memory = await memorySnapshot();
+    const [memory, stand] = await Promise.all([memorySnapshot(), standSnapshot()]);
     const history = turns.slice(-16).map((t) => ({ role: t.role, content: t.content.slice(0, 2000) }));
-    const msg = image ? `[Foto] ${userText || "Was siehst du? Handle passend (siehe FOTOS)."}` : userText;
-    // Beginnt und endet mit einem user-Zug; aufeinanderfolgende gleiche Rollen liest Claude als einen Zug.
-    const input = [{ role: "user", content: instructions(memory) }, ...history, { role: "user", content: msg }];
+    const msg = (voice ? "[Sprache] " : "") + (image ? `[Foto] ${userText || "Was siehst du? Handle passend (siehe FOTOS)."}` : userText);
 
     ctl = new AbortController();
     let spokenUpTo = 0;
-    const speakNew = (vis, final) => {
+    const speakNew = (spoken, final) => {
       if (!settings.tts) return;
-      const rest = vis.slice(spokenUpTo);
-      const m = final ? (rest.trim() ? [rest] : null) : rest.match(/^[\s\S]*?[.!?…:](?=\s)/);
-      if (m && (final || m[0].length > 14)) { speak(m[0]); spokenUpTo += m[0].length; if (!final) speakNew(vis, false); }
+      const rest = spoken.slice(spokenUpTo);
+      if (final) { if (rest.trim()) tts.say(rest); spokenUpTo = spoken.length; return; }
+      const first = firstSentence(rest);
+      if (first && first.trim().length > 14) { tts.say(first); spokenUpTo += first.length; speakNew(spoken, false); }
     };
-    let full = "";
-    try {
-      const res = await sample(input, {
+    const run = async (withTools) => {
+      const input = [{ role: "user", content: instructions(memory, stand, withTools) }, ...history, { role: "user", content: msg }];
+      const tools = withTools ? TOOLS.slice(0, toolMax || TOOLS.length).map(({ name, description, inputSchema, execute }) => ({
+        name, description, inputSchema,
+        execute: async (args, ctx) => { setStatus(`Arbeitet: ${name.replace(/_/g, " ")}`, true); const r = await execute(args || {}, ctx); return r; },
+      })) : undefined;
+      return sample(input, {
         cache: false,
         signal: ctl.signal,
         modelTier: careful ? "default" : "quick",
         ...(image ? { images: [image] } : {}),
+        ...(tools ? { tools } : {}),
         onText: ({ text }) => {
-          full = text;
-          const vis = visiblePart(text);
+          const { parts, spoken } = parseAnswer(text);
           out.classList.remove("thinking");
-          out.textContent = vis || "…";
+          renderParts(out, parts);
           scrollDown();
-          if (Orb.state === "thinking" && vis) setStatus("");
-          speakNew(vis, false);
+          if (Orb.state === "thinking") setStatus("");
+          speakNew(spoken, false);
         },
       });
-      full = res.text;
-      const vis = visiblePart(full);
-      out.textContent = vis || "Notiert.";
-      speakNew(vis || "Notiert.", true);
+    };
+    try {
+      let res;
+      try { res = await run(toolsOk); }
+      catch (e) {
+        if (e?.code !== "tools_unavailable") throw e;
+        toolsOk = false; res = await run(false);
+      }
+      const full = res.text;
+      const { parts, spoken } = parseAnswer(full);
+      renderParts(out, parts.length ? parts : [{ type: "text", text: "Notiert." }]);
+      speakNew(spoken || "Notiert.", true);
+      addActions(out, full);
       if (res.truncated) addMsg("note", "Antwort wurde gekürzt.");
+      for (const n of toolNotes) addMsg("note", n);
       const saved = await applyMemory(parseOps(full));
       for (const s of saved) {
-        const name = LABEL[s.file] || (s.file.startsWith("ernaehrung-") ? "Ernährung" : s.file);
+        const name = LABEL[s.file] || s.file;
         addMsg("note", s.replaced ? `◎ ${name} neu gefasst – Rückgängig unter ◎` : `◎ ${name}: ${s.text.slice(0, 140)}`);
       }
-      turns.push({ role: "user", content: msg }, { role: "assistant", content: vis || "Notiert." });
+      const shown = parts.map((p) => (p.type === "card" ? `[[TEXT]]${p.text}[[/TEXT]]` : p.text)).join("").trim();
+      turns.push({ role: "user", content: msg }, { role: "assistant", content: shown || "Notiert." });
       if (/briefing|was steht/i.test(userText)) lastBriefing = today();
       await saveVerlauf();
     } catch (e) {
       out.classList.remove("thinking");
-      const partial = e?.text ? visiblePart(e.text) : "";
-      out.textContent = partial || "";
-      if (!partial) out.parentElement.remove();
+      const partial = e?.text ? parseAnswer(e.text).parts : [];
+      if (partial.length) renderParts(out, partial); else out.parentElement.remove();
+      for (const n of toolNotes) addMsg("note", n);
       const copy = {
         cancelled: null,
         not_granted: "Jarvis braucht deine Erlaubnis, Claude zu nutzen. Erlaube es im Dialog oder im Berechtigungen-Menü dieser Seite.",
@@ -564,108 +1184,163 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
         image_rejected: "Dieses Foto ging nicht. Versuch ein anderes.",
         images_unavailable: "Fotos gehen in dieser Ansicht nicht.",
         refused: "Dazu sage ich nichts. Anders formulieren?",
+        prompt_too_large: "Das war zu viel auf einmal. Verlauf löschen (⚙) hilft.",
       };
       const text = e?.code in copy ? copy[e.code] : "Verbindung gestört. Nochmal senden?";
       if (text) addMsg("err", text);
     } finally {
       busy = false; ctl = null;
-      $("btnSend").textContent = "➤"; $("btnSend").classList.replace("stop", "send"); $("btnSend").setAttribute("aria-label", "Senden");
-      if (!speakQueue) { Orb.set("idle"); setStatus("Bereit"); }
+      setAction();
+      if (!tts.active) tts.idle();
     }
   }
+
+  /* ---------------- Sprechen (Eingabe per iPhone-Diktat) ---------------- */
+  // Mikrofon-Zugriff ist in dieser Ansicht gesperrt – das iPhone-Diktat (🎤 auf der Tastatur) ist der Weg.
+  // Im Sprechmodus sendet Jarvis von selbst, sobald der Text eine Weile nicht mehr wächst.
+  let listening = false, sendTimer = null;
+  function startListening() {
+    if (busy) return;
+    listening = true;
+    $("composer").classList.add("listening");
+    Orb.set("listening");
+    setStatus("Hört zu – 🎤 auf der Tastatur", true);
+    $("input").focus();
+  }
+  function stopListening(resetOrb = true) {
+    listening = false; clearTimeout(sendTimer);
+    $("composer").classList.remove("listening");
+    if (resetOrb && !busy && !tts.active) { Orb.set("idle"); setStatus("Bereit"); }
+  }
+  $("input").addEventListener("input", () => {
+    setAction();
+    if (!listening) return;
+    Orb.level(0.7);
+    clearTimeout(sendTimer);
+    if (!settings.autoSend || !$("input").value.trim()) return;
+    setStatus("Ich höre …", true);
+    sendTimer = setTimeout(() => {
+      const t = $("input").value;
+      if (!t.trim() || busy) return;
+      $("input").value = ""; setAction();
+      ask(t, { voice: true });
+    }, settings.pause * 1000);
+  });
+  $("input").addEventListener("blur", () => { if (listening && !$("input").value.trim()) stopListening(); });
 
   /* ---------------- Bedienung ---------------- */
   $("composer").addEventListener("submit", (e) => {
     e.preventDefault();
+    tts.unlock();
     if (busy) { ctl?.abort(); return; }
     const t = $("input").value;
-    $("input").value = "";
-    $("input").blur();
-    ask(t);
+    if (!t.trim()) { listening ? stopListening() : startListening(); return; }
+    $("input").value = ""; setAction();
+    if (!listening) $("input").blur();
+    ask(t, { voice: listening });
   });
 
   $("orbHit").addEventListener("click", () => {
-    if (speakQueue) { stopSpeaking(); Orb.set("idle"); setStatus("Bereit"); return; }
+    tts.unlock();
+    if (tts.active) { tts.stop(); Orb.set("idle"); setStatus("Bereit"); lastWasVoice = false; return; }
     if (busy) { ctl?.abort(); return; }
-    Orb.set("listening"); setStatus("Diktier mit 🎤 auf der Tastatur");
-    $("input").focus();
+    listening ? stopListening() : startListening();
   });
-  $("input").addEventListener("blur", () => { if (Orb.state === "listening") { Orb.set("idle"); setStatus("Bereit"); } });
-  $("input").addEventListener("input", () => { if (Orb.state === "listening") Orb.level(0.6); });
 
+  let pendingPhotoPrompt = "";
   $("chips").addEventListener("click", (e) => {
     const b = e.target.closest(".chip");
     if (!b) return;
-    if (b.dataset.fill) { $("input").value = b.dataset.fill; $("input").focus(); return; }
+    tts.unlock();
+    if (b.dataset.action === "heute") { openToday(); return; }
+    if (b.dataset.action === "anzeige") { pendingPhotoPrompt = "Erstelle aus diesem Foto eine Verkaufsanzeige (Vinted/eBay/Kleinanzeigen)."; $("camInput").click(); return; }
+    if (b.dataset.fill) { $("input").value = b.dataset.fill; setAction(); $("input").focus(); return; }
     ask(b.dataset.say);
   });
 
   $("camInput").addEventListener("change", () => {
     const f = $("camInput").files[0];
     $("camInput").value = "";
-    if (!f) return;
+    if (!f) { pendingPhotoPrompt = ""; return; }
     const url = URL.createObjectURL(f);
-    const t = $("input").value; $("input").value = "";
+    const t = [pendingPhotoPrompt, $("input").value].filter(Boolean).join(" ");
+    pendingPhotoPrompt = ""; $("input").value = ""; setAction();
     ask(t, { image: f, imageUrl: url });
   });
 
-  /* Einstellungen */
+  /* ---------------- Einstellungen ---------------- */
+  const showRange = () => {
+    $("outRate").textContent = Number($("setRate").value).toLocaleString("de-DE") + "×";
+    $("outPitch").textContent = Number($("setPitch").value).toLocaleString("de-DE");
+    $("outPause").textContent = Number($("setPause").value).toLocaleString("de-DE") + " s";
+  };
+  ["setRate", "setPitch", "setPause"].forEach((id) => $(id).addEventListener("input", showRange));
   $("btnSettings").addEventListener("click", () => {
     $("setAnrede").value = settings.anrede;
     $("setTts").checked = settings.tts;
     $("setDeep").checked = settings.deep;
+    $("setAutoSend").checked = settings.autoSend;
+    $("setConvo").checked = settings.convo;
+    $("setRate").value = settings.rate; $("setPitch").value = settings.pitch; $("setPause").value = settings.pause;
+    showRange();
     loadVoices();
-    $("voiceField").hidden = !synth || !voices.length;
+    $("voiceBox").hidden = !synth;
     $("setTts").closest("label").hidden = !synth;
     $("setVoice").innerHTML = "";
-    const auto = new Option("Automatisch", ""); $("setVoice").add(auto);
-    for (const v of voices) $("setVoice").add(new Option(v.name, v.name));
+    $("setVoice").add(new Option("Automatisch (beste verfügbare)", ""));
+    for (const v of voices) $("setVoice").add(new Option(`${v.name}${/premium/i.test(v.name + v.voiceURI) ? " · Premium" : /enhanced|erweitert/i.test(v.name + v.voiceURI) ? " · Erweitert" : ""}`, v.voiceURI || v.name));
     $("setVoice").value = settings.voice;
     $("clearConfirm").hidden = true;
     $("btnClearChat").textContent = "Verlauf löschen";
     $("dlgSettings").showModal();
   });
-  $("setVoice").addEventListener("change", () => {
-    stopSpeaking();
-    const prev = settings.voice; settings.voice = $("setVoice").value;
-    const tts = settings.tts; settings.tts = true; speak(`Sehr wohl, ${$("setAnrede").value || "Master"}. So klinge ich dann.`); settings.tts = tts;
-    settings.voice = prev;
+  $("btnVoiceTest").addEventListener("click", () => {
+    const keep = { ...settings };
+    settings = { ...settings, voice: $("setVoice").value, rate: Number($("setRate").value), pitch: Number($("setPitch").value) };
+    tts.stop(); tts.unlock();
+    tts.say(`Sehr wohl, ${$("setAnrede").value || "Master"}. Der Gewinn liegt bei 59,99 € – Stand 19.10., 13:00 Uhr.`, { force: true });
+    settings = keep;
   });
   $("btnSaveSettings").addEventListener("click", async () => {
-    settings = { ...settings, anrede: $("setAnrede").value.trim().slice(0, 30) || "Master", tts: $("setTts").checked, voice: $("setVoice").value, deep: $("setDeep").checked };
+    settings = {
+      ...settings,
+      anrede: $("setAnrede").value.trim().slice(0, 30) || "Master", tts: $("setTts").checked, voice: $("setVoice").value,
+      rate: Number($("setRate").value) || 1, pitch: Number($("setPitch").value) || 0.95, deep: $("setDeep").checked,
+      autoSend: $("setAutoSend").checked, pause: Number($("setPause").value) || 2.2, convo: $("setConvo").checked,
+    };
     await store.set("einstellungen", settings);
     $("dlgSettings").close();
     renderMode();
   });
   let clearArmed = false;
   $("btnClearChat").addEventListener("click", async () => {
-    if (!clearArmed) { clearArmed = true; $("btnClearChat").textContent = "Wirklich löschen?"; $("clearConfirm").hidden = false; $("clearConfirm").textContent = "Das Gedächtnis bleibt erhalten – nur der Gesprächsverlauf geht."; return; }
+    if (!clearArmed) { clearArmed = true; $("btnClearChat").textContent = "Wirklich löschen?"; $("clearConfirm").hidden = false; $("clearConfirm").textContent = "Gedächtnis, Lager, Kunden und Aufgaben bleiben erhalten – nur der Gesprächsverlauf geht."; return; }
     clearArmed = false;
     turns = []; await saveVerlauf();
     chat.innerHTML = "";
     $("dlgSettings").close();
   });
 
-  /* Gedächtnis-Ansicht */
-  let memOpen = null;
+  /* ---------------- Gedächtnis-Ansicht ---------------- */
+  let memOpen = null, memPrev = null;
   async function showMemList() {
     memOpen = null;
     $("memEditor").hidden = true; $("btnMemBack").hidden = true; $("btnMemSave").hidden = true; $("btnMemUndo").hidden = true; $("memList").hidden = false;
     $("memList").innerHTML = "";
-    const names = [...FILES, `ernaehrung-${today()}`];
+    const names = [...FILES, "aufgaben", `ernaehrung-${today()}`];
     const docs = await Promise.all(names.map((n) => store.get(n)));
     names.forEach((n, i) => {
+      const text = docs[i]?.text ?? fallbackText(n);
+      if (n === "aufgaben" && !text) return;
       const b = document.createElement("button");
       b.type = "button"; b.className = "mem-item";
       const l = document.createElement("span"); l.textContent = LABEL[n] || "Ernährung heute";
-      const text = docs[i]?.text ?? fallbackText(n);
       const r = document.createElement("span"); r.textContent = text.length ? `${text.length} Zeichen` : "leer";
       b.append(l, r);
       b.onclick = () => openMem(n, text, docs[i]?.vorher);
       $("memList").appendChild(b);
     });
   }
-  let memPrev = null;
   function openMem(name, text, vorher) {
     memOpen = name;
     memPrev = typeof vorher === "string" && vorher !== text ? vorher : null;
@@ -678,8 +1353,8 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
   $("btnMemBack").addEventListener("click", showMemList);
   $("btnMemSave").addEventListener("click", async () => {
     if (memOpen) {
-      const before = (await store.get(memOpen))?.text || "";
-      await store.set(memOpen, { text: $("memText").value.slice(0, 20000), vorher: before, geaendert: new Date().toISOString() });
+      const before = await store.get(memOpen);
+      await store.set(memOpen, { ...(before || {}), text: $("memText").value.slice(0, 20000), vorher: before?.text || "", geaendert: new Date().toISOString() });
     }
     await showMemList();
   });
@@ -690,35 +1365,131 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
   });
   $("btnMemClose").addEventListener("click", () => $("dlgMemory").close());
 
+  /* ---------------- Heute-Übersicht ---------------- */
+  function tile(k, v, s, frac) {
+    const d = document.createElement("div"); d.className = "tile";
+    const a = document.createElement("div"); a.className = "k"; a.textContent = k;
+    const b = document.createElement("div"); b.className = "v"; b.textContent = v;
+    d.append(a, b);
+    if (s) { const c = document.createElement("div"); c.className = "s"; c.textContent = s; d.appendChild(c); }
+    if (frac != null) { const bar = document.createElement("div"); bar.className = "bar"; const i = document.createElement("i"); i.style.width = Math.max(0, Math.min(100, frac * 100)) + "%"; bar.appendChild(i); d.appendChild(bar); }
+    return d;
+  }
+  function li(text, meta, cls) {
+    const d = document.createElement("div"); d.className = "li" + (cls ? " " + cls : "");
+    const t = document.createElement("span"); t.className = "t"; t.textContent = text;
+    const m = document.createElement("span"); m.className = "m"; m.textContent = meta || "";
+    d.append(t, m);
+    return d;
+  }
+  const empty = (text) => { const d = document.createElement("div"); d.className = "empty"; d.textContent = text; return d; };
+  const fmtDate = (d) => (isDate(d) ? new Intl.DateTimeFormat("de-DE", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(d + "T12:00:00Z")) : "");
+
+  async function openToday() {
+    $("dlgToday").showModal();
+    $("todayMsg").hidden = true;
+    $("todayDate").textContent = nowText();
+    const t = today();
+    const [aufgaben, kunden, lagerItems, lager, ern] = await Promise.all([cols.list("aufgaben"), cols.list("kunden"), cols.list("lager"), lagerAuswertung(), ernaehrungTag()]);
+    const offen = aufgaben.filter((x) => !x.erledigt).sort((a, b) => (a.faellig || "9999").localeCompare(b.faellig || "9999"));
+    const offeneKunden = kunden.filter((k) => ["anfrage", "angebot", "auftrag", "fertig"].includes(k.status));
+    const pipeline = offeneKunden.filter((k) => ["angebot", "auftrag", "fertig"].includes(k.status)).reduce((s, k) => s + (k.betrag_ct ?? 0), 0);
+
+    const tiles = $("todayTiles"); tiles.innerHTML = "";
+    tiles.append(
+      tile("Aufgaben offen", String(offen.length), `${offen.filter((x) => x.faellig && x.faellig <= t).length} heute fällig oder überfällig`),
+      tile("Gewinn " + new Intl.DateTimeFormat("de-DE", { month: "long" }).format(new Date()), lager.gewinn, `${lager.verkauft} verkauft · Marge ${lager.marge ?? "–"}`),
+      tile("Lager", String(lager.im_bestand), `Einkaufswert ${lager.lagerwert_einkauf}`),
+      tile("Kalorien heute", ern.kcal.toLocaleString("de-DE"), ern.ziel_kcal ? `von ${ern.ziel_kcal.toLocaleString("de-DE")} · ${ern.eiweiss_g} g Eiweiß` : `${ern.eiweiss_g} g Eiweiß · kein Ziel gespeichert`, ern.ziel_kcal ? ern.kcal / ern.ziel_kcal : null),
+      tile("Projekte offen", String(offeneKunden.length), `Volumen ${eur(pipeline)}`),
+    );
+
+    const tasks = $("todayTasks"); tasks.innerHTML = "";
+    if (!offen.length) tasks.appendChild(empty("Nichts offen. Sag z. B. „Neue Aufgabe: Rechnung an Kunde schreiben bis Freitag“."));
+    for (const x of offen.slice(0, 20)) {
+      const row = li(x.text, x.faellig ? (x.faellig < t ? "überfällig · " : x.faellig === t ? "heute · " : "") + fmtDate(x.faellig) : "", x.faellig && x.faellig < t ? "over" : x.faellig === t ? "due" : "");
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.setAttribute("aria-label", "Erledigt: " + x.text);
+      cb.onchange = async () => { x.erledigt = true; x.erledigt_am = new Date().toISOString(); await cols.put("aufgaben", x); row.style.opacity = "0.45"; cb.disabled = true; };
+      row.prepend(cb);
+      tasks.appendChild(row);
+    }
+
+    const stock = $("todayStock"); stock.innerHTML = "";
+    const bestand = lagerItems.filter((x) => x.status === "lager" || x.status === "gelistet").sort((a, b) => String(a.einkauf_datum).localeCompare(String(b.einkauf_datum)));
+    if (!bestand.length) stock.appendChild(empty("Lager leer. Sag z. B. „Hab Panda Dunks Größe 43 für 80 gekauft“."));
+    for (const x of bestand.slice(0, 20)) {
+      const tage = isDate(x.einkauf_datum) ? daysBetween(x.einkauf_datum, t) : null;
+      stock.appendChild(li(`${x.name}${x.groesse ? " · " + x.groesse : ""}${x.status === "gelistet" ? " · gelistet" : ""}`, `${eur(x.einkauf_ct)}${tage != null ? ` · ${tage} T` : ""}`, tage != null && tage > 45 ? "due" : ""));
+    }
+
+    const cl = $("todayClients"); cl.innerHTML = "";
+    if (!offeneKunden.length) cl.appendChild(empty("Keine offenen Projekte."));
+    for (const k of offeneKunden.slice(0, 20)) cl.appendChild(li(`${k.name}${k.projekt ? " · " + k.projekt : ""}`, `${k.status}${k.betrag_ct != null ? " · " + eur(k.betrag_ct) : ""}${k.faellig ? " · " + fmtDate(k.faellig) : ""}`, k.faellig && k.faellig < t ? "over" : ""));
+  }
+  $("btnTodayClose").addEventListener("click", () => $("dlgToday").close());
+  $("btnToday").addEventListener("click", () => { tts.unlock(); openToday(); });
+
+  // CSV-Export (z. B. für die Buchhaltung) – Semikolon und Dezimalkomma für deutsches Excel.
+  const csvCell = (v) => { const s = v == null ? "" : String(v); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const csvMoney = (ct) => (ct == null ? "" : (ct / 100).toFixed(2).replace(".", ","));
+  let downloads = null;
+  async function saveCsv(filename, header, rows) {
+    const text = "﻿" + [header, ...rows].map((r) => r.map(csvCell).join(";")).join("\r\n");
+    try {
+      await downloads.save({ filename, data: text });
+    } catch (e) {
+      if (e?.code === "declined") return;
+      $("todayMsg").hidden = false; $("todayMsg").textContent = "Export ging gerade nicht. Später nochmal versuchen.";
+    }
+  }
+  $("btnCsvStock").addEventListener("click", async () => {
+    const items = await cols.list("lager");
+    await saveCsv(`jarvis-lager-${today()}.csv`,
+      ["Name", "Größe", "Zustand", "Status", "Plattform", "Einkauf €", "Einkaufsdatum", "Verkauf €", "Gebühren €", "Versand €", "Gewinn €", "Verkaufsdatum", "Notiz"],
+      items.map((x) => [x.name, x.groesse, x.zustand, x.status, x.plattform, csvMoney(x.einkauf_ct), x.einkauf_datum, csvMoney(x.verkauf_ct), csvMoney(x.gebuehren_ct), csvMoney(x.versand_ct), x.status === "verkauft" ? csvMoney(itemProfit(x)) : "", x.verkauf_datum, x.notiz]));
+  });
+  $("btnCsvClients").addEventListener("click", async () => {
+    const items = await cols.list("kunden");
+    await saveCsv(`jarvis-kunden-${today()}.csv`, ["Name", "Projekt", "Status", "Betrag €", "Fällig", "Notiz"], items.map((x) => [x.name, x.projekt, x.status, csvMoney(x.betrag_ct), x.faellig, x.notiz]));
+  });
+
   function renderMode() {
     $("modeLabel").textContent = settings.deep ? "GRÜNDLICH" : "";
   }
 
   /* ---------------- Start ---------------- */
   async function start() {
-    const [s, db, user] = await Promise.all([claude.use("sample"), claude.use("db"), claude.use("user")]);
-    sample = s;
+    const [s, db, user, dl] = await Promise.all([claude.use("sample"), claude.use("db"), claude.use("user"), claude.use("downloads")]);
+    sample = s; downloads = dl;
+    $("btnCsvStock").hidden = $("btnCsvClients").hidden = !downloads;
     const uid = user ? await user.id() : null;
     if (db && uid) { store.db = db; store.uid = uid; }
     else { store.local = true; $("memHint").textContent = "Ohne Anmeldung merkt sich Jarvis alles nur auf diesem Gerät."; }
     await loadState();
     renderMode();
     $("tip").hidden = turns.length > 6;
-    for (const t of turns.slice(-12)) addMsg(t.role === "user" ? "user" : "jarvis", t.content.replace(/^\[Foto\]\s*/, "📷 "));
+    for (const t of turns.slice(-12)) {
+      if (t.role === "user") addMsg("user", t.content.replace(/^\[Sprache\]\s*/, "").replace(/^\[Foto\]\s*/, "📷 "));
+      else { const el = addMsg("jarvis", ""); renderParts(el, parseAnswer(t.content).parts); }
+    }
     if (sample) {
       const lim = await sample.limits().catch(() => null);
       imagesOk = Boolean(lim?.images);
+      toolsOk = Boolean(lim?.tools);
+      toolMax = lim?.tools?.maxCount || 0;
     }
     $("camLabel").hidden = !imagesOk;
+    document.querySelector('[data-action="anzeige"]').hidden = !imagesOk;
     if (!sample) { addMsg("err", "Jarvis kann Claude hier nicht erreichen. Öffne die Seite in der Claude-App oder auf claude.ai."); return; }
     // Briefing einmal am Tag automatisch – nur wenn Claude schon erlaubt ist (kein Dialog beim Laden).
     if (lastBriefing !== today()) {
       const perms = await claude.use("permissions");
       const st = perms ? await perms.state("sample").catch(() => "prompt") : "prompt";
       if (st === "granted") ask(turns.length ? "Briefing, bitte." : "Hallo Jarvis. Stell dich kurz vor.");
-      else if (!turns.length) addMsg("jarvis", `Guten Tag, ${settings.anrede}. Ich bin Jarvis. Tippen Sie auf „Briefing“ oder sagen Sie mir einfach, woran Sie gerade arbeiten.`);
+      else if (!turns.length) addMsg("jarvis", `Guten Tag, ${settings.anrede}. Ich bin Jarvis. Tippen Sie auf „Briefing“ oder auf 🎙 und sagen Sie mir, woran Sie gerade arbeiten.`);
     }
   }
+  setAction();
   if (window.claude?.use) start();
   else { addMsg("err", "Jarvis kann Claude hier nicht erreichen. Öffne die Seite in der Claude-App oder auf claude.ai."); $("camLabel").hidden = true; }
 })();
