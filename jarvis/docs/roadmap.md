@@ -9,6 +9,7 @@
 | 4a | **Hände (Server):** Browser auf dem Server (Seiten, Formulare, Warenkorb, Bildschirmfoto), Freigabe für 🔴-Aktionen, Mail-Entwürfe, Content-Plan | ✅ |
 | 4b | **Augen:** Foto aus der App → Gemini Vision → Ernährungs-Tracking, Ware, Belege | ✅ |
 | 4c | **Gedächtnis-Anbindungen:** Kalender (ICS) im Briefing, Postfach (IMAP lesen) | ✅ |
+| 4e | **Pocket v4 (ohne Server):** Sprechmodus mit Auto-Senden, Sprechtext, Werkzeuge für Reselling/Kunden/Aufgaben/Ernährung, Heute-Übersicht, CSV | ✅ |
 | 4d | **Hände (PC):** Agent auf dem eigenen Rechner (Apps, eingeloggte Konten), Computer Use | als Nächstes |
 | 5 | **Proaktivität:** Push-Nachrichten (Auftrag fertig, Briefing zur festen Uhrzeit), Tagesabschluss, Wochenrückblick, Wake-Word | |
 | 6 | **Integrationen:** Termine eintragen (CalDAV), Verkaufsplattformen (eBay, Vinted …), Website-Analytics, Buchhaltung | |

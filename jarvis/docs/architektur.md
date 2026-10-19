@@ -61,6 +61,12 @@ Orb ◄── echter Pegel (Mikrofon beim Zuhören, Stimme beim Sprechen)
   beim nächsten Öffnen ins Briefing.
 - **Austauschbar:** Modelle über `GEMINI_MODEL`, `CLAUDE_WORKER_MODEL`, `DEEPGRAM_MODEL`,
   `ELEVENLABS_MODEL`. Jeder Dienst ist optional (Ersatz: Browser-Sprache bzw. Claude allein).
+- **Sprechtext:** Bevor ein Satz zur Stimme geht, bereitet `server/src/sprechtext.js` ihn auf:
+  „119,99 €“ → „119 Euro 99“, „19.10.2026“ → „19. Oktober 2026“, „13:00“ → „13 Uhr“, „ca.“ → „circa“,
+  Einheiten, Prozent, Listen, Links. Satzgrenzen erkennt `satzEnde()` – kein Abbruch bei „z. B.“ oder „19.10.“.
+  Dieselbe Datei nutzen Web-App (Browser-Stimme) und Pocket (`node pocket/sync-sprechtext.mjs`).
+  Tests: `cd server && npm test`. ElevenLabs bekommt zusätzlich `language_code` (Deutsch) und den
+  vorigen Satz als Kontext, damit Tonfall und Tempo über Satzgrenzen gleich bleiben.
 - **Wake-Word (später):** „Jarvis“ via Picovoice Porcupine oder openWakeWord lokal im Client.
 
 ## Schicht 3 – Hände, Augen, Anbindungen
