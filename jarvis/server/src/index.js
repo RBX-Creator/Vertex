@@ -1,6 +1,4 @@
-import { ENV_FILE, UI_DIR, userDir } from "./paths.js";
-import fs from "node:fs/promises";
-import path from "node:path";
+import { ENV_FILE, UI_DIR } from "./paths.js";
 
 try {
   process.loadEnvFile(ENV_FILE);
@@ -12,9 +10,12 @@ const express = (await import("express")).default;
 const users = await import("./users.js");
 const brain = await import("./brain.js");
 const jarvis = await import("./jarvis.js");
+const voice = await import("./voice.js");
+const worker = await import("./worker.js");
 
 await users.initUsers();
 await brain.ensureTeamBrain();
+await worker.recoverJobs(users.allUserIds());
 
 const app = express();
 app.set("trust proxy", 1);
@@ -25,9 +26,10 @@ app.use(express.json({ limit: "300kb" }));
 const COOKIE = "jarvis_token";
 
 function readToken(req) {
-  const auth = req.get("authorization");
+  // req.headers statt req.get(): wird auch beim WebSocket-Upgrade (rohe Node-Anfrage) genutzt
+  const auth = req.headers.authorization;
   if (auth?.startsWith("Bearer ")) return auth.slice(7);
-  const cookie = req.get("cookie") || "";
+  const cookie = req.headers.cookie || "";
   const m = cookie.match(new RegExp(`(?:^|;\\s*)${COOKIE}=([^;]+)`));
   return m ? decodeURIComponent(m[1]) : null;
 }
@@ -63,7 +65,14 @@ const handle = (fn) => async (req, res) => {
 };
 
 app.get("/api/config", (req, res) =>
-  res.json({ teamCodeRequired: users.teamCodeRequired(), demo: jarvis.DEMO, anreden: users.ANREDEN }),
+  res.json({
+    teamCodeRequired: users.teamCodeRequired(),
+    demo: jarvis.DEMO,
+    gehirn: jarvis.brainMode(),
+    stt: voice.sttEnabled() ? "deepgram" : "browser",
+    tts: voice.ttsEnabled() ? "elevenlabs" : "browser",
+    anreden: users.ANREDEN,
+  }),
 );
 
 app.post(
@@ -124,7 +133,20 @@ app.put(
 app.get(
   "/api/verlauf",
   requireUser,
-  handle(async (req, res) => res.json({ verlauf: (await jarvis.loadHistory(req.user.id)).filter((m) => !m.hidden) })),
+  handle(async (req, res) => {
+    const verlauf = [];
+    for (const m of await jarvis.loadHistory(req.user.id)) {
+      if (m.job) verlauf.push({ role: "job", titel: m.job.titel, status: m.job.status, content: m.job.ergebnis });
+      else if (!m.hidden) verlauf.push({ role: m.role, content: m.content });
+    }
+    res.json({ verlauf });
+  }),
+);
+
+app.get(
+  "/api/auftraege",
+  requireUser,
+  handle(async (req, res) => res.json({ auftraege: await worker.listJobs(req.user.id) })),
 );
 
 app.delete(
@@ -169,30 +191,14 @@ app.post(
   }),
 );
 
-// Beim Öffnen der App: einmal pro Tag automatisch ein Briefing.
+// Beim Öffnen der App (ohne Sprach-Verbindung): Begrüßung bzw. einmal pro Tag Briefing.
 app.post(
   "/api/open",
   requireUser,
   handle(async (req, res) => {
-    const stateFile = path.join(userDir(req.user.id), "status.json");
-    let state = {};
-    try {
-      state = JSON.parse(await fs.readFile(stateFile, "utf8"));
-    } catch {}
-    const day = jarvis.today();
-    const firstToday = state.letzterBesuch !== day;
-    state.letzterBesuch = day;
-    await fs.writeFile(stateFile, JSON.stringify(state), "utf8");
-    if (!firstToday || !req.user.settings.autoBriefing) return res.status(204).end();
-    const neu = !state.ersterBesuch;
-    if (neu) {
-      state.ersterBesuch = day;
-      await fs.writeFile(stateFile, JSON.stringify(state), "utf8");
-    }
-    const hinweis = neu
-      ? "[System: Der Nutzer hat die App zum allerersten Mal geöffnet. Stell dich in zwei, drei Sätzen vor – im Jarvis-Stil – und stell genau eine Frage, mit der du ihn kennenlernst.]"
-      : "[System: Der Nutzer hat die App heute zum ersten Mal geöffnet. Gib das Briefing.]";
-    await streamTurn(req, res, hinweis, { voice: Boolean(req.body?.voice), hidden: true });
+    const hint = await jarvis.openHint(req.user);
+    if (!hint) return res.status(204).end();
+    await streamTurn(req, res, hint, { voice: Boolean(req.body?.voice), hidden: true });
   }),
 );
 
@@ -201,6 +207,13 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 app.use(express.static(UI_DIR, { extensions: ["html"] }));
 
 const port = Number(process.env.PORT || 3000);
-app.listen(port, () => {
-  console.log(`Jarvis läuft auf http://localhost:${port}${jarvis.DEMO ? "  (Demo-Modus – kein API-Schlüssel)" : ""}`);
+const server = app.listen(port, () => {
+  console.log(`Jarvis läuft auf http://localhost:${port}`);
+  console.log(
+    `  Gehirn: ${jarvis.brainMode()}${jarvis.brainMode() === "gemini" && !worker.workerEnabled() ? " (ohne Claude-Arbeitsmodus)" : ""}` +
+      ` · Hören: ${voice.sttEnabled() ? "Deepgram" : "Browser"} · Sprechen: ${voice.ttsEnabled() ? "ElevenLabs" : "Browser"}`,
+  );
 });
+
+// Sprach-Verbindung: Anmeldung über dasselbe Cookie (oder ?token= für eigene Apps)
+voice.attachVoice(server, (req, url) => users.verifyToken(url.searchParams.get("token") || readToken(req)));

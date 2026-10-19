@@ -96,6 +96,7 @@ export async function login({ name, password }) {
 }
 
 export const getUser = (id) => users.find((u) => u.id === id);
+export const allUserIds = () => users.map((u) => u.id);
 export const teamNames = () => users.map((u) => u.name);
 
 export async function updateSettings(id, patch) {

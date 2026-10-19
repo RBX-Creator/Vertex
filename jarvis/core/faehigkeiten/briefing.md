@@ -7,7 +7,7 @@ Ziel: In unter 60 Sekunden (gesprochen) weiß der Nutzer, was heute zählt.
 
 1. Nimm den Kurzüberblick aus dem Kontext. Lies bei Bedarf zusätzlich `/memories/ich/aufgaben.md`,
    aktive Projekte in `/memories/team/projekte/` und das Journal von gestern.
-2. Sammle: Termine und Deadlines (heute bis +3 Tage), Überfälliges, Stand der Top 3 der Woche,
+2. Sammle: fertige Aufträge, die noch nicht gemeldet wurden (stehen in der Systemnachricht), Termine und Deadlines (heute bis +3 Tage), Überfälliges, Stand der Top 3 der Woche,
    einen proaktiven Hinweis (Risiko, Chance, Widerspruch zu einem Ziel).
 3. Formuliere: Begrüßung passend zur Uhrzeit mit Anrede, maximal 3 Punkte (wichtigster zuerst),
    eine klare Empfehlung, womit er anfangen soll. Optional eine trockene Bemerkung – nicht erzwingen.

@@ -1,6 +1,8 @@
 // Jarvis-Oberfläche: Anmeldung, Sprach- und Chatmodus, Einstellungen, Gedächtnis.
-// Stimme vorerst über die Browser-Sprach-APIs (Web Speech). Später ersetzt durch
-// Deepgram (STT) + ElevenLabs (TTS) über den Server – siehe voice/README.md.
+//
+// Sprache läuft – wenn auf dem Server eingerichtet – über die Sprach-Verbindung (/api/voice):
+//   Mikrofon → Server → Deepgram (hört) … ElevenLabs (spricht) → Server → Lautsprecher
+// Sonst über die Sprach-APIs des Browsers (Web Speech) als Ersatz.
 (function () {
   const $ = (id) => document.getElementById(id);
   const state = { config: null, user: null, busy: false, voices: [] };
@@ -19,7 +21,7 @@
     return data;
   }
 
-  // Liest Server-Sent Events aus einer POST-Antwort.
+  // Liest Server-Sent Events aus einer POST-Antwort (Ersatzweg ohne Sprach-Verbindung).
   async function stream(path, body, onEvent) {
     const res = await fetch(path, {
       method: "POST",
@@ -91,20 +93,28 @@
     $("auth").classList.add("hidden");
     $("app").classList.remove("hidden");
     $("demoBadge").classList.toggle("hidden", !state.config.demo);
-    if (!recognition) {
+    if (!canListen()) {
       $("btnMic").classList.add("hidden");
       setStatus("Spracheingabe hier nicht verfügbar – bitte tippen");
       setChatMode(true);
     }
     await loadHistory();
-    try {
-      await stream("/api/open", { voice: false }, handleEvent(newTurn()));
-    } catch {}
-    finishTurn();
+    const connected = await connectVoice();
+    if (connected) {
+      sock.send(JSON.stringify({ type: "open" }));
+    } else {
+      // Ersatzweg ohne Sprach-Verbindung
+      const turn = newTurn();
+      try {
+        await stream("/api/open", {}, handleEvent(turn));
+      } catch {}
+      finishTurn();
+    }
   }
 
   // ---------- Darstellung ----------
   const setStatus = (t) => ($("status").textContent = t);
+  const idleStatus = () => setStatus(canListen() ? "Tippen zum Sprechen" : "");
   function setChatMode(on) {
     document.body.classList.toggle("chat-mode", on);
     $("chat").classList.toggle("hidden", !on);
@@ -122,11 +132,50 @@
     return el;
   }
 
+  function addJobResult(job) {
+    const el = addMsg("job", "");
+    const head = document.createElement("div");
+    head.className = "job-head";
+    head.textContent = `${job.status === "fertig" ? "✔" : "✖"} Auftrag: ${job.titel}`;
+    const body = document.createElement("div");
+    body.className = "md";
+    body.innerHTML = renderMarkdown(job.ergebnis || job.content || "");
+    el.append(head, body);
+    scrollChat();
+  }
+
+  // Kleines, sicheres Markdown (erst HTML escapen, dann Überschriften, Fett, Listen, Links)
+  function renderMarkdown(md) {
+    const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const inline = (t) =>
+      esc(t)
+        .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    let html = "";
+    let inList = false;
+    for (const line of md.split("\n")) {
+      const h = line.match(/^#{1,4}\s+(.*)/);
+      const li = line.match(/^\s*[-*•]\s+(.*)/);
+      if (li) {
+        if (!inList) (html += "<ul>"), (inList = true);
+        html += `<li>${inline(li[1])}</li>`;
+        continue;
+      }
+      if (inList) (html += "</ul>"), (inList = false);
+      if (h) html += `<h4>${inline(h[1])}</h4>`;
+      else if (line.trim()) html += `<p>${inline(line)}</p>`;
+    }
+    return html + (inList ? "</ul>" : "");
+  }
+
   async function loadHistory() {
     $("messages").innerHTML = "";
     try {
       const { verlauf } = await api("/api/verlauf");
-      for (const m of verlauf) addMsg(m.role === "user" ? "user" : "jarvis", m.content);
+      for (const m of verlauf) {
+        if (m.role === "job") addJobResult({ titel: m.titel, status: m.status, ergebnis: m.content });
+        else addMsg(m.role === "user" ? "user" : "jarvis", m.content);
+      }
     } catch {}
   }
 
@@ -153,9 +202,11 @@
         $("subtitle").scrollTop = $("subtitle").scrollHeight;
         scrollChat();
         if (Orb.state === "thinking") setStatus("");
-        feedSpeech(turn, ev.text);
+        if (!serverTts()) feedSpeech(turn, ev.text);
       } else if (ev.type === "memory") {
         if (ev.write) addMsg("note", `◎ Gedächtnis: ${ev.verb} ${ev.path.replace("/memories/", "")}`);
+      } else if (ev.type === "job") {
+        addMsg("note", `⧗ Auftrag an Claude: ${ev.job.titel}`);
       } else if (ev.type === "error") {
         addMsg("err", ev.message);
         $("subtitle").textContent = ev.message;
@@ -164,16 +215,22 @@
   }
 
   function finishTurn() {
-    if (currentTurn) flushSpeech(currentTurn);
+    if (currentTurn && !serverTts()) flushSpeech(currentTurn);
     state.busy = false;
     if (!speaking()) afterSpeech();
   }
 
   async function send(text, { voice = false } = {}) {
     text = text.trim();
-    if (!text || state.busy) return;
+    if (!text) return;
     stopSpeaking();
     addMsg("user", text);
+    if (sock?.readyState === WebSocket.OPEN) {
+      // Der Server unterbricht eine laufende Antwort selbst.
+      sock.send(JSON.stringify({ type: "text", text, voice }));
+      return;
+    }
+    if (state.busy) return;
     const turn = newTurn();
     try {
       await stream("/api/chat", { text, voice }, handleEvent(turn));
@@ -187,23 +244,201 @@
     e.preventDefault();
     const t = $("input").value;
     $("input").value = "";
+    lastInputWasVoice = false;
     send(t);
   });
 
-  // ---------- Sprachausgabe (Browser-TTS, satzweise) ----------
+  // ---------- Sprach-Verbindung zum Server ----------
+  let sock = null;
+  let voiceReady = { stt: "browser", tts: "browser" };
+  let reconnectDelay = 1000;
+
+  function connectVoice() {
+    return new Promise((resolve) => {
+      let settled = false;
+      const done = (ok) => !settled && ((settled = true), resolve(ok));
+      try {
+        sock = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/voice`);
+      } catch {
+        return done(false);
+      }
+      const timer = setTimeout(() => done(false), 4000);
+      sock.onmessage = (e) => {
+        const ev = JSON.parse(e.data);
+        if (ev.type === "ready") {
+          voiceReady = { stt: ev.stt, tts: ev.tts };
+          reconnectDelay = 1000;
+          clearTimeout(timer);
+          done(true);
+        }
+        onVoiceEvent(ev);
+      };
+      sock.onclose = () => {
+        clearTimeout(timer);
+        done(false);
+        if (state.busy) finishTurn();
+        stopCapture();
+        if (!state.user) return;
+        setTimeout(connectVoice, reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+      };
+    });
+  }
+
+  const serverStt = () => voiceReady.stt === "deepgram" && sock?.readyState === WebSocket.OPEN;
+  const serverTts = () => voiceReady.tts === "elevenlabs" && sock?.readyState === WebSocket.OPEN;
+
+  let wsTurn = null;
+  function onVoiceEvent(ev) {
+    switch (ev.type) {
+      case "turn_start":
+        player.reset();
+        wsTurn = newTurn();
+        break;
+      case "turn_end":
+        wsTurn = null;
+        finishTurn();
+        break;
+      case "text":
+      case "memory":
+      case "job":
+      case "error":
+        handleEvent(wsTurn || currentTurn || newTurn())(ev);
+        break;
+      case "audio":
+        player.enqueue(ev.seq, ev.data);
+        break;
+      case "transcript":
+        $("subtitle").classList.toggle("interim", !ev.final);
+        $("subtitle").textContent = ev.text;
+        if (ev.final) {
+          addMsg("user", ev.text);
+          lastInputWasVoice = true;
+          if (!state.user.settings.gespraechsmodus) stopCapture();
+          else pauseCapture();
+        }
+        break;
+      case "barge_in":
+        if (capturing) stopSpeaking();
+        break;
+      case "job_done":
+        addJobResult(ev.job);
+        break;
+    }
+  }
+
+  // ---------- Audio: Wiedergabe der Server-Stimme (ElevenLabs) ----------
+  let audioCtx = null;
+  function ctx() {
+    audioCtx ??= new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+  }
+
+  const player = {
+    next: 0,
+    decoded: new Map(),
+    source: null,
+    analyser: null,
+    playing: false,
+    reset() {
+      this.stop();
+      this.next = 0;
+    },
+    async enqueue(seq, b64) {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      try {
+        this.decoded.set(seq, await ctx().decodeAudioData(bytes.buffer));
+      } catch {
+        this.decoded.set(seq, null);
+      }
+      if (!this.playing) this.playNext();
+    },
+    async playNext() {
+      if (!this.decoded.has(this.next)) {
+        this.playing = false;
+        if (!state.busy) afterSpeech();
+        return;
+      }
+      this.playing = true;
+      const buf = this.decoded.get(this.next);
+      this.decoded.delete(this.next);
+      this.next++;
+      if (!buf) return this.playNext();
+      const c = ctx();
+      if (c.state === "suspended") {
+        // Ohne vorheriges Antippen (z. B. Briefing direkt nach dem Laden) blockt der Browser Audio.
+        await Promise.race([c.resume(), new Promise((r) => setTimeout(r, 300))]);
+        if (c.state !== "running") {
+          this.stop();
+          setStatus("Antippen, damit Jarvis sprechen darf");
+          return;
+        }
+      }
+      this.playing = true;
+      if (!this.analyser) {
+        this.analyser = c.createAnalyser();
+        this.analyser.fftSize = 512;
+        this.analyser.connect(c.destination);
+      }
+      const src = c.createBufferSource();
+      src.buffer = buf;
+      src.connect(this.analyser);
+      src.onended = () => {
+        if (this.source === src) {
+          this.source = null;
+          this.playNext();
+        }
+      };
+      this.source = src;
+      this.playing = true;
+      Orb.setState("speaking");
+      setStatus("");
+      src.start();
+    },
+    stop() {
+      this.decoded.clear();
+      if (this.source) {
+        const s = this.source;
+        this.source = null;
+        try {
+          s.stop();
+        } catch {}
+      }
+      this.playing = false;
+    },
+  };
+
+  // Echter Pegel der Stimme für den Orb
+  const levelData = new Uint8Array(512);
+  setInterval(() => {
+    if (player.playing && player.analyser) {
+      player.analyser.getByteTimeDomainData(levelData);
+      let sum = 0;
+      for (const v of levelData) sum += (v - 128) ** 2;
+      Orb.setLevel(Math.sqrt(sum / levelData.length) / 22);
+    } else if (Orb.state === "speaking" && speechQueue > 0) {
+      Orb.setLevel(0.25 + Math.random() * 0.45); // Browser-Stimme liefert keinen Pegel
+    }
+  }, 50);
+
+  // ---------- Sprachausgabe des Browsers (Ersatz) ----------
   const synth = window.speechSynthesis;
   let speechQueue = 0;
 
   function unlockAudio() {
-    // iOS gibt Sprachausgabe erst nach einer Nutzeraktion frei.
+    // iOS gibt Audio erst nach einer Nutzeraktion frei.
+    try {
+      const c = ctx();
+      if (c.state === "suspended") c.resume();
+    } catch {}
     if (synth && !unlockAudio.done) {
       synth.speak(new SpeechSynthesisUtterance(""));
       unlockAudio.done = true;
     }
   }
 
-  const ttsOn = () => synth && state.user?.settings.sprachausgabe;
-  const speaking = () => speechQueue > 0;
+  const ttsOn = () => state.user?.settings.sprachausgabe;
+  const speaking = () => speechQueue > 0 || player.playing;
 
   function cleanForSpeech(s) {
     return s
@@ -216,9 +451,8 @@
   }
 
   function feedSpeech(turn, chunk) {
-    if (!ttsOn()) return;
+    if (!synth || !ttsOn()) return;
     turn.speech += chunk;
-    // Ganze Sätze sofort vorlesen, nicht auf die komplette Antwort warten.
     const m = turn.speech.match(/^[\s\S]*?[.!?…:](?=\s)/);
     if (m && m[0].length > 12) {
       speak(m[0]);
@@ -227,7 +461,7 @@
   }
 
   function flushSpeech(turn) {
-    if (ttsOn() && turn.speech.trim()) speak(turn.speech);
+    if (synth && ttsOn() && turn.speech.trim()) speak(turn.speech);
     turn.speech = "";
   }
 
@@ -250,7 +484,6 @@
       Orb.setState("speaking");
       setStatus("");
     };
-    u.onboundary = () => Orb.setLevel(0.5 + Math.random() * 0.5);
     u.onend = u.onerror = () => {
       speechQueue = Math.max(0, speechQueue - 1);
       if (!speechQueue && !state.busy) afterSpeech();
@@ -258,44 +491,125 @@
     synth.speak(u);
   }
 
-  // Simulierter Pegel während des Sprechens (Browser-TTS liefert keine Lautstärke).
-  setInterval(() => {
-    if (Orb.state === "speaking") Orb.setLevel(0.25 + Math.random() * 0.45);
-  }, 90);
-
   function stopSpeaking() {
     if (synth) synth.cancel();
     speechQueue = 0;
+    player.stop();
   }
 
   function afterSpeech() {
-    if (state.user?.settings.gespraechsmodus && recognition && lastInputWasVoice) {
+    if (speaking()) return;
+    if (state.user?.settings.gespraechsmodus && canListen() && lastInputWasVoice) {
       startListening();
-    } else {
+    } else if (!capturing && !listening) {
       Orb.setState("idle");
-      setStatus(recognition ? "Tippen zum Sprechen" : "");
+      idleStatus();
     }
   }
 
   function loadVoices() {
     if (!synth) return;
     state.voices = synth.getVoices().filter((v) => /^(de|en)/.test(v.lang));
-    state.voices.sort((a, b) => (b.lang.startsWith("de") - a.lang.startsWith("de")) || a.name.localeCompare(b.name));
+    state.voices.sort((a, b) => b.lang.startsWith("de") - a.lang.startsWith("de") || a.name.localeCompare(b.name));
   }
   if (synth) {
     loadVoices();
     synth.onvoiceschanged = loadVoices;
   }
 
-  // ---------- Spracheingabe (Browser-STT) ----------
+  // ---------- Spracheingabe ----------
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const recognition = SR ? new SR() : null;
-  let listening = false;
+  const canCapture = Boolean(navigator.mediaDevices?.getUserMedia && window.AudioWorkletNode);
+  const canListen = () => (serverStt() ? canCapture : Boolean(recognition) || (voiceReady.stt === "deepgram" && canCapture));
+  let listening = false; // Browser-Erkennung aktiv
+  let capturing = false; // Mikrofon-Stream zum Server aktiv
   let finalText = "";
   let lastInputWasVoice = false;
-  let micStream = null;
-  let analyserTimer = null;
 
+  // --- a) Deepgram über den Server ---
+  let mic = null; // { stream, source, node, analyser }
+
+  async function ensureMic() {
+    if (mic) return mic;
+    const c = ctx();
+    await c.audioWorklet.addModule("pcm-worklet.js");
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    const source = c.createMediaStreamSource(stream);
+    const node = new AudioWorkletNode(c, "pcm16");
+    const analyser = c.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+    node.port.onmessage = (e) => {
+      if (capturing && sock?.readyState === WebSocket.OPEN) sock.send(e.data);
+    };
+    source.connect(node);
+    // Worklet muss am Graphen hängen, damit er läuft – stumm zum Ausgang.
+    const mute = c.createGain();
+    mute.gain.value = 0;
+    node.connect(mute).connect(c.destination);
+    mic = { stream, source, node, analyser, data: new Uint8Array(512) };
+    mic.timer = setInterval(() => {
+      if (!capturing) return;
+      analyser.getByteTimeDomainData(mic.data);
+      let sum = 0;
+      for (const v of mic.data) sum += (v - 128) ** 2;
+      Orb.setLevel(Math.sqrt(sum / mic.data.length) / 30);
+    }, 50);
+    return mic;
+  }
+
+  async function startCapture() {
+    try {
+      const c = ctx();
+      if (c.state === "suspended") await c.resume();
+      await ensureMic();
+    } catch (err) {
+      setStatus("Mikrofon nicht verfügbar");
+      return;
+    }
+    sock.send(JSON.stringify({ type: "listen" }));
+    capturing = true;
+    $("btnMic").classList.add("on");
+    Orb.setState("listening");
+    setStatus("Hört zu …");
+    $("subtitle").textContent = "";
+  }
+
+  // Nach einer erkannten Äußerung: Mikrofon pausieren, bis Jarvis fertig ist.
+  function pauseCapture() {
+    capturing = false;
+    $("btnMic").classList.remove("on");
+  }
+
+  function stopCapture() {
+    if (!capturing && !mic) return;
+    if (capturing && sock?.readyState === WebSocket.OPEN) sock.send(JSON.stringify({ type: "listen_stop" }));
+    // Kurz weiterschicken, damit das Satzende noch ankommt
+    setTimeout(() => {
+      capturing = false;
+      $("btnMic").classList.remove("on");
+      if (!state.busy && !speaking()) {
+        Orb.setState("idle");
+        idleStatus();
+      }
+    }, 300);
+  }
+
+  // Mikrofon freigeben, wenn die App im Hintergrund ist
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && mic) {
+      capturing = false;
+      clearInterval(mic.timer);
+      mic.stream.getTracks().forEach((t) => t.stop());
+      mic.node.disconnect();
+      mic = null;
+    }
+  });
+
+  // --- b) Browser-Spracherkennung (Ersatz) ---
   if (recognition) {
     recognition.lang = "de-DE";
     recognition.interimResults = true;
@@ -303,14 +617,13 @@
     recognition.onresult = (e) => {
       let interim = "";
       finalText = "";
-      for (const r of e.results) (r.isFinal ? (finalText += r[0].transcript) : (interim += r[0].transcript));
+      for (const r of e.results) r.isFinal ? (finalText += r[0].transcript) : (interim += r[0].transcript);
       $("subtitle").classList.add("interim");
       $("subtitle").textContent = finalText + interim;
     };
     recognition.onend = () => {
       listening = false;
       $("btnMic").classList.remove("on");
-      stopMicLevel();
       const t = finalText.trim() || ($("subtitle").classList.contains("interim") ? $("subtitle").textContent.trim() : "");
       $("subtitle").classList.remove("interim");
       if (t) {
@@ -318,7 +631,7 @@
         send(t, { voice: true });
       } else if (!state.busy) {
         Orb.setState("idle");
-        setStatus("Tippen zum Sprechen");
+        idleStatus();
       }
     };
     recognition.onerror = (e) => {
@@ -327,8 +640,10 @@
   }
 
   function startListening() {
-    if (!recognition || listening || state.busy) return;
+    if (listening || capturing) return;
     stopSpeaking();
+    if (serverStt() && canCapture) return startCapture();
+    if (!recognition) return;
     finalText = "";
     $("subtitle").textContent = "";
     try {
@@ -340,58 +655,29 @@
     $("btnMic").classList.add("on");
     Orb.setState("listening");
     setStatus("Hört zu …");
-    startMicLevel();
   }
 
   function stopListening() {
+    if (capturing) stopCapture();
     if (listening) recognition.stop();
-  }
-
-  // Mikrofonpegel für den Orb (optional – wenn der Browser es parallel erlaubt)
-  async function startMicLevel() {
-    try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const ac = new (window.AudioContext || window.webkitAudioContext)();
-      const an = ac.createAnalyser();
-      an.fftSize = 512;
-      ac.createMediaStreamSource(micStream).connect(an);
-      const data = new Uint8Array(an.fftSize);
-      analyserTimer = setInterval(() => {
-        an.getByteTimeDomainData(data);
-        let sum = 0;
-        for (const v of data) sum += (v - 128) ** 2;
-        Orb.setLevel(Math.sqrt(sum / data.length) / 30);
-      }, 50);
-      micStream.ac = ac;
-    } catch {}
-  }
-
-  function stopMicLevel() {
-    clearInterval(analyserTimer);
-    if (micStream) {
-      micStream.getTracks().forEach((t) => t.stop());
-      micStream.ac?.close();
-      micStream = null;
-    }
   }
 
   function toggleTalk() {
     unlockAudio();
-    if (speaking()) {
+    if (speaking() || (state.busy && sock?.readyState === WebSocket.OPEN)) {
+      // Antippen unterbricht Jarvis
       stopSpeaking();
-      afterSpeechManual();
+      if (sock?.readyState === WebSocket.OPEN) sock.send(JSON.stringify({ type: "interrupt" }));
+      lastInputWasVoice = false;
+      Orb.setState("idle");
+      idleStatus();
       return;
     }
-    listening ? stopListening() : startListening();
-  }
-  function afterSpeechManual() {
-    Orb.setState("idle");
-    setStatus("Tippen zum Sprechen");
+    listening || capturing ? stopListening() : startListening();
   }
 
   $("orbHit").addEventListener("click", toggleTalk);
   $("btnMic").addEventListener("click", toggleTalk);
-  $("input").addEventListener("focus", () => (lastInputWasVoice = false));
 
   // ---------- Einstellungen ----------
   $("btnChat").addEventListener("click", () => setChatMode(!document.body.classList.contains("chat-mode")));
@@ -403,11 +689,15 @@
     $("setTts").checked = s.sprachausgabe;
     $("setBriefing").checked = s.autoBriefing;
     $("setConvo").checked = s.gespraechsmodus;
+    $("setVoice").closest("label").classList.toggle("hidden", serverTts());
     loadVoices();
     $("setVoice").innerHTML =
       `<option value="">Automatisch (Deutsch)</option>` +
       state.voices.map((v) => `<option value="${v.name.replace(/"/g, "&quot;")}">${v.name} (${v.lang})</option>`).join("");
     $("setVoice").value = s.stimme;
+    $("engineInfo").textContent =
+      `Gehirn: ${{ gemini: "Gemini + Claude", claude: "Claude", demo: "Demo" }[state.config.gehirn]} · ` +
+      `Hören: ${serverStt() ? "Deepgram" : "Browser"} · Sprechen: ${serverTts() ? "ElevenLabs" : "Browser"}`;
     $("settings").showModal();
   });
 
@@ -447,6 +737,7 @@
   });
 
   $("btnLogout").addEventListener("click", async () => {
+    state.user = null;
     await api("/api/logout", { method: "POST" });
     location.reload();
   });
@@ -505,6 +796,7 @@
   (async () => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
     state.config = await api("/api/config");
+    voiceReady = { stt: state.config.stt, tts: state.config.tts };
     try {
       const { user } = await api("/api/me");
       enterApp(user);

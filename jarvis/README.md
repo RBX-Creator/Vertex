@@ -1,30 +1,35 @@
 # JARVIS – persönlicher KI-Assistent fürs Team
 
-Drei Schichten, klar getrennt, einzeln austauschbar:
+Wie ein Satz durch Jarvis läuft:
 
 ```
    Handy / PC (Web-App mit orangem Orb)
-        │  Sprache/Text rein, Text + Sprache raus
-        ▼
-┌───────────────────────────── Server (läuft dauerhaft) ─────────────────────────────┐
-│  GEHIRN   core/ (Persönlichkeit, Regeln, Fähigkeiten)  +  Claude                   │
-│           Gedächtnis pro Person  (data/users/<id>/ich)  +  Team (data/team)        │
-│  STIMME   heute: Browser-Spracherkennung/-ausgabe · später: Deepgram + ElevenLabs  │
-│  HAND     später: Agent auf dem PC (Browser, Apps) – siehe hand/                   │
-└────────────────────────────────────────────────────────────────────────────────────┘
+        │ Sprache                                             ▲ Stimme
+        ▼                                                     │
+┌──────────────────────────── Server (läuft dauerhaft) ───────┴──────────────────┐
+│  Deepgram      → hört      (Sprache wird Text, noch während du redest)         │
+│  Gemini Flash  → antwortet (führt das Gespräch, entscheidet, was zu tun ist)   │
+│  Claude Sonnet → arbeitet  (übernimmt alles, was länger dauert, meldet sich)   │
+│  ElevenLabs    → spricht   (aus der Antwort wird seine Stimme)                 │
+│                                                                                │
+│  Gehirn: core/ (Persönlichkeit, Regeln) + Gedächtnis pro Person + Team         │
+│  Hand:   später Agent auf dem PC (Browser, Apps) – siehe hand/                 │
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Auf einen Server bringen (für Handy):** [`docs/server-einrichten.md`](docs/server-einrichten.md)
 
 ## Schnellstart
 
 ```bash
 cd jarvis/server
 npm install
-cp ../config/.env.example ../config/.env   # ANTHROPIC_API_KEY eintragen
+cp ../config/.env.example ../config/.env   # Schlüssel eintragen (Gemini, Anthropic, Deepgram, ElevenLabs)
 npm start                                  # → http://localhost:3000
 ```
 
-Ohne API-Schlüssel startet Jarvis im **Demo-Modus** (Oberfläche, Profile und Gedächtnis
-funktionieren, Antworten sind vorgefertigt).
+Jeder Dienst ist optional – fehlt ein Schlüssel, nimmt Jarvis den Ersatz (Browser-Sprache,
+Claude statt Gemini). Ganz ohne Schlüssel läuft der **Demo-Modus**.
 
 Dann: Profil anlegen → Orb antippen → reden. Jarvis lernt aus jedem Gespräch.
 
@@ -36,12 +41,15 @@ Dann: Profil anlegen → Orb antippen → reden. Jarvis lernt aus jedem Gespräc
 | `core/rules.md` | Grundregeln: Gedächtnis (wer/was/wohin), Ehrlichkeit, Sicherheitsstufen für die Hand, Privatsphäre. |
 | `core/faehigkeiten/` | Fähigkeiten: Briefing, Merken, Kennenlernen. Neue einfach als `.md` dazulegen. |
 | `brain-template/` | Vorlage fürs Gedächtnis: `ich/` wird pro neuem Profil kopiert, `team/` einmal fürs Team. |
-| `server/` | Node-Server: Profile, Anmeldung, Claude-Anbindung, Gedächtnis-Werkzeug, Streaming. |
+| `server/` | Node-Server: Profile, Gedächtnis-Werkzeug, Gemini (Gespräch), Claude (Aufträge), Sprach-Hub (Deepgram/ElevenLabs). |
 | `ui/` | Web-App mit Orb (auch als App aufs Handy installierbar). |
-| `voice/`, `hand/` | Pläne für Stimme (Phase 3) und Computersteuerung (Phase 4). |
+| `core/modus/` | Anweisungen für Gesprächsmodus (Gemini) und Arbeitsmodus (Claude). |
+| `voice/` | Beschreibung der Sprach-Pipeline. |
+| `hand/` | Plan für die Computersteuerung (Phase 4). |
+| `deploy/` | Installations-, Update- und Backup-Skript, Caddy-Konfiguration (HTTPS). |
 | `config/.env.example` | Alle Einstellungen. Echte Werte in `config/.env` (nicht im Git). |
 | `data/` | **Laufzeitdaten** – Profile, Gedächtnisse, Verläufe. Wird nie committet. |
-| `Dockerfile`, `docker-compose.yml` | Dauerbetrieb auf einem Server. |
+| `Dockerfile`, `docker-compose.yml` | Dauerbetrieb auf einem Server (Jarvis + Caddy). |
 | `docs/` | Architektur und Roadmap. |
 
 ## Datenschutz

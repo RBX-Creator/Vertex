@@ -1,18 +1,30 @@
 # Voice – Sprach-Pipeline
 
-**Heute (v1):** Browser-Sprach-APIs in `ui/app.js` (Abschnitte „Sprachausgabe“ und „Spracheingabe“).
+So läuft ein Satz durch Jarvis:
 
-Phase 3 ersetzt sie durch Server-Sprache. Siehe [`../docs/architektur.md`](../docs/architektur.md#schicht-2--stimme).
-
-Geplante Schnittstelle (austauschbare Anbieter):
-
-```ts
-interface STTProvider { transcribe(audio: AsyncIterable<Buffer>): AsyncIterable<{ text: string; final: boolean }> }
-interface TTSProvider { speak(text: string): AsyncIterable<Buffer> }
+```
+Handy-Mikrofon ──PCM 16 kHz──► Server ──► Deepgram (hört, live, nova-3, Deutsch)
+                                              │ Text, noch während gesprochen wird
+                                              ▼
+                                         Gemini Flash (antwortet, entscheidet)
+                                              │            └─► Auftrag an Claude Sonnet (arbeitet,
+                                              │                 im Hintergrund, meldet sich selbst)
+                                              ▼ Text, satzweise
+Handy-Lautsprecher ◄──Audio── Server ◄── ElevenLabs (spricht, eleven_flash_v2_5)
+Orb ◄── echter Pegel der Stimme / des Mikrofons
 ```
 
-Start-Implementierung: Deepgram (STT) + ElevenLabs (TTS). Keys in `config/.env`.
+| Datei | Inhalt |
+|-------|--------|
+| `server/src/voice.js` | WebSocket `/api/voice`: Deepgram-Verbindung, Satz-Zerlegung, ElevenLabs, Unterbrechen |
+| `ui/pcm-worklet.js` | Mikrofon → 16-kHz-PCM im Browser |
+| `ui/app.js` | Abschnitte „Sprach-Verbindung“, „Audio“, „Spracheingabe“ |
 
-Umbau: In `ui/app.js` werden `speak()` und `startListening()` durch einen WebSocket zum Server
-ersetzt (`/api/voice`), der Audio an Deepgram schickt und ElevenLabs-Audio zurückstreamt.
-Der echte Audiopegel geht dann an `Orb.setLevel()`.
+- **Latenz:** Jeder fertige Satz geht sofort an ElevenLabs (parallel), die Audiostücke kommen in
+  Reihenfolge zurück. Jarvis beginnt zu sprechen, bevor die Antwort fertig geschrieben ist.
+- **Unterbrechen:** Orb antippen → Ton stoppt sofort, die Antwort wird abgebrochen.
+- **Ersatz:** Ohne `DEEPGRAM_API_KEY` bzw. `ELEVENLABS_API_KEY` nutzt die App automatisch die
+  Spracherkennung bzw. Sprachausgabe des Browsers.
+- **Einstellungen:** `DEEPGRAM_MODEL`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL` in `config/.env`.
+
+Nächste Ausbaustufe: Wake-Word „Jarvis“ (freihändig), Push-Benachrichtigung, wenn ein Auftrag fertig ist.

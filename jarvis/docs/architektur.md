@@ -16,8 +16,8 @@ Anfrage von Nutzer X
            + Kurzüberblick: ich/jetzt.md, ich/profil/ueber-mich.md, team/business/ueberblick.md
            + Dateiliste des Gedächtnisses
   └─ Verlauf: letzte 40 Nachrichten von X (nur Text)
-  └─ Claude (claude-opus-5-5, adaptive thinking, effort low) mit Werkzeug memory_20250818
-       ↺ view / create / str_replace / insert / delete / rename
+  └─ Gemini Flash mit Funktion gedaechtnis (ohne Gemini-Schlüssel: Claude mit memory_20250818)
+       ↺ view / create / str_replace / insert (Claude zusätzlich delete / rename)
          /memories/ich/**   → data/users/<X>/ich/**   (nur X)
          /memories/team/**  → data/team/**            (alle)
   └─ Antwort wird Stück für Stück (SSE) an die App gestreamt
@@ -35,33 +35,33 @@ Anfrage von Nutzer X
   Optional Team-Code für die Registrierung. Fällt Claude eine Anfrage ab, springt der
   serverseitige Fallback (`fallbacks: "default"`) ein.
 
-## Schicht 2 – Stimme
+## Schicht 2 – Stimme und Arbeitsteilung
 
 ```
-Handy/PC (PWA mit Orb)                    Server
-──────────────────────                    ──────────────────────────────
-Mikrofon ──audio stream──► WebSocket ──► Deepgram (STT, streaming)
-                                              │ Transkript
-                                              ▼
-                                         Jarvis-Server (Claude + Gehirn)
-                                              │ Antworttext (gestreamt, satzweise)
-                                              ▼
-Lautsprecher ◄──audio stream── WebSocket ◄── ElevenLabs (TTS, streaming)
-Orb ◄── Pegel/Zustand (idle | hört zu | denkt | spricht)
+Handy/PC (PWA mit Orb)                     Server
+──────────────────────                     ─────────────────────────────────────────
+Mikrofon ──PCM 16 kHz──► WebSocket ──► Deepgram nova-3 (live, Deutsch)
+                         /api/voice          │ Transkript (Endpunkt nach ~0,4 s Stille)
+                                             ▼
+                                        Gemini Flash  ── Gesprächsmodus (core/modus/gespraech.md)
+                                          │   ├─ gedaechtnis(...)        → /memories
+                                          │   └─ auftrag_an_claude(...)  → Claude Sonnet (worker.js)
+                                          │        Arbeitsmodus: Websuche, Seiten lesen, Gedächtnis
+                                          │        → fertig: Ergebnis in den Chat + Gemini meldet es
+                                          ▼ Text, satzweise
+Lautsprecher ◄──Audio── WebSocket ◄── ElevenLabs flash v2.5 (parallel pro Satz, in Reihenfolge)
+Orb ◄── echter Pegel (Mikrofon beim Zuhören, Stimme beim Sprechen)
 ```
 
-- **Austauschbar** über eine kleine Schnittstelle in `voice/`:
-  `STTProvider.transcribe(stream)` und `TTSProvider.speak(text) → stream`.
-  Alternativen: OpenAI Whisper / Realtime, Azure Speech, lokal Whisper.cpp + Piper.
-- **Latenz:** Antworttext satzweise an TTS geben, nicht auf die volle Antwort warten.
-  Ziel < 1,5 s bis zum ersten Ton.
-- **Sprachmodus-Flag:** Der Server markiert Eingaben als `[Sprachmodus]`, damit Jarvis laut
-  `personality.md` kurz und ohne Markdown antwortet.
-- **Heute (v1):** Spracherkennung und -ausgabe des Browsers (Web Speech API), satzweise
-  vorgelesen, Orb-Pegel vom Mikrofon. Kostenlos, Qualität hängt vom Gerät ab.
-- **Handy:** Die UI ist bereits eine **PWA** (installierbar auf iOS/Android, Mikrofon über
-  Browser-API). Später optional native App, wenn Hintergrund-Wake-Word nötig ist.
-- **Wake-Word (optional):** „Jarvis“ via Picovoice Porcupine oder openWakeWord lokal im Client.
+- **Warum zwei Modelle?** Gemini Flash antwortet in Sekundenbruchteilen – gut fürs Gespräch.
+  Claude Sonnet ist gründlicher und kann im Internet recherchieren – gut für echte Arbeit.
+  Gemini entscheidet selbst, wann es abgibt, und sagt dem Nutzer Bescheid.
+- **Meldet sich von selbst:** Ist ein Auftrag fertig, schickt der Server das Ergebnis an alle
+  offenen Geräte des Nutzers und Jarvis fasst es laut zusammen. Ist kein Gerät offen, kommt es
+  beim nächsten Öffnen ins Briefing.
+- **Austauschbar:** Modelle über `GEMINI_MODEL`, `CLAUDE_WORKER_MODEL`, `DEEPGRAM_MODEL`,
+  `ELEVENLABS_MODEL`. Jeder Dienst ist optional (Ersatz: Browser-Sprache bzw. Claude allein).
+- **Wake-Word (später):** „Jarvis“ via Picovoice Porcupine oder openWakeWord lokal im Client.
 
 ## Schicht 3 – Hand
 
@@ -87,8 +87,11 @@ Jarvis-Server ──Tool-Call──► Hand-Agent auf dem PC  (baut ausgehende W
 
 ## Deployment (dauerhaft laufend)
 
-- Ein kleiner VPS (z. B. Hetzner, ~5 €/Monat) oder ein Heimserver.
-- `docker compose up -d` startet Jarvis; `data/` liegt als Volume daneben.
-- Davor Caddy für HTTPS (Pflicht fürs Mikrofon am Handy), z. B. `jarvis.deine-domain.de`.
-- `JARVIS_TEAM_CODE` setzen, damit sich nur das Team registrieren kann.
-- Backup: `data/` regelmäßig sichern (z. B. nächtlich als verschlüsseltes Archiv oder in ein **privates** Git-Repo).
+- `docker compose up -d --build` startet zwei Container: **jarvis** (Node-Server) und **caddy**
+  (HTTPS mit automatischem Let's-Encrypt-Zertifikat für `JARVIS_DOMAIN`, leitet auch den
+  WebSocket durch).
+- `deploy/install.sh` richtet einen frischen Ubuntu-Server in einem Schritt ein.
+- `data/` liegt als Volume neben dem Code; `deploy/backup.sh` sichert es.
+- `JARVIS_TEAM_CODE` schützt die Registrierung.
+
+Schritt-für-Schritt: [`server-einrichten.md`](server-einrichten.md)
