@@ -2,24 +2,38 @@
 
 ## Grundprinzip
 
-**Das Gehirn sind Dateien.** Persönlichkeit, Regeln und Wissen liegen als Markdown in Git.
-Jede Schicht – Claude Code im Terminal, der Sprach-Server, die Handy-App – liest dieselben
-Dateien. Dadurch ist Jarvis überall derselbe und kein Wissen hängt an einem einzelnen Chat.
+**Das Gehirn sind Dateien.** Persönlichkeit, Regeln und Fähigkeiten liegen als Markdown in `core/`
+(im Git). Das Wissen über die Menschen liegt als Markdown in `data/` (nur auf dem Server).
+Claude liest und schreibt dieses Wissen selbst über das **Memory-Tool**.
 
 ## Schicht 1 – Gehirn
 
-- **Laufzeit heute:** Claude Code, gestartet in `jarvis/`. `CLAUDE.md` importiert
-  `core/personality.md`, `core/rules.md`, `brain/jetzt.md` und `brain/profil/ueber-mich.md`.
-  Der Rest von `brain/` wird bei Bedarf gelesen (spart Kontext).
-- **Laufzeit später (Server):** ein kleiner Kern-Dienst `core-server` auf Basis des
-  **Claude Agent SDK**. Er lädt dieselbe `CLAUDE.md`, dieselben Skills und dieselben
-  Werkzeuge – nur ohne Terminal, angesprochen über WebSocket/HTTP.
-- **Persistenz:** `brain/` ist ein Git-Repo. Der Server committet Änderungen automatisch
-  (z. B. „jarvis: merken – neues Projekt X“). Dadurch ist jede Gedächtnisänderung nachvollziehbar
-  und rückgängig zu machen.
-- **Proaktivität:** ein Scheduler (Cron auf dem Server oder geplante Aufgaben in Claude Code)
-  löst zu festen Zeiten Skills aus: `briefing` morgens, später `tagesabschluss` abends,
-  `wochenrueckblick` sonntags. Ergebnis geht als Push/Sprachnachricht aufs Handy.
+```
+Anfrage von Nutzer X
+  └─ Server baut System-Prompt:
+       [1] core/personality.md + rules.md + faehigkeiten/*.md   (stabil, gecacht)
+       [2] Situation: Uhrzeit, Name, Anrede, Sprach-/Textmodus, Team
+           + Kurzüberblick: ich/jetzt.md, ich/profil/ueber-mich.md, team/business/ueberblick.md
+           + Dateiliste des Gedächtnisses
+  └─ Verlauf: letzte 40 Nachrichten von X (nur Text)
+  └─ Claude (claude-opus-5-5, adaptive thinking, effort low) mit Werkzeug memory_20250818
+       ↺ view / create / str_replace / insert / delete / rename
+         /memories/ich/**   → data/users/<X>/ich/**   (nur X)
+         /memories/team/**  → data/team/**            (alle)
+  └─ Antwort wird Stück für Stück (SSE) an die App gestreamt
+```
+
+- **Lernen:** Die Regeln sagen Claude, wann es was wohin speichert. Es lernt nebenbei aus jedem
+  Gespräch, ohne zu verhören. In der App ist sichtbar, wann Jarvis etwas ins Gedächtnis schreibt
+  (◎ Gedächtnis), und alles lässt sich unter ◎ ansehen und von Hand korrigieren.
+- **Mehrere Nutzer:** Jedes Profil hat ein eigenes Gedächtnis und einen eigenen Verlauf.
+  Das Team-Gedächtnis (Business, Kunden, Projekte, Prozesse) teilen alle.
+- **Proaktivität:** Beim ersten Öffnen am Tag gibt Jarvis automatisch ein Briefing
+  (abschaltbar). Später zusätzlich zeitgesteuert per Push.
+- **Sicherheit:** Pfade werden auf den jeweiligen Bereich begrenzt (auch gegen `..` und Symlinks),
+  nur `.md`/`.txt`. Passwörter als scrypt-Hash, Sitzungen als signiertes Token (30 Tage).
+  Optional Team-Code für die Registrierung. Fällt Claude eine Anfrage ab, springt der
+  serverseitige Fallback (`fallbacks: "default"`) ein.
 
 ## Schicht 2 – Stimme
 
@@ -29,7 +43,7 @@ Handy/PC (PWA mit Orb)                    Server
 Mikrofon ──audio stream──► WebSocket ──► Deepgram (STT, streaming)
                                               │ Transkript
                                               ▼
-                                         core-server (Claude + Gehirn)
+                                         Jarvis-Server (Claude + Gehirn)
                                               │ Antworttext (gestreamt, satzweise)
                                               ▼
 Lautsprecher ◄──audio stream── WebSocket ◄── ElevenLabs (TTS, streaming)
@@ -43,14 +57,16 @@ Orb ◄── Pegel/Zustand (idle | hört zu | denkt | spricht)
   Ziel < 1,5 s bis zum ersten Ton.
 - **Sprachmodus-Flag:** Der Server markiert Eingaben als `[Sprachmodus]`, damit Jarvis laut
   `personality.md` kurz und ohne Markdown antwortet.
-- **Handy:** Die UI wird als **PWA** gebaut (installierbar auf iOS/Android, Mikrofon über
+- **Heute (v1):** Spracherkennung und -ausgabe des Browsers (Web Speech API), satzweise
+  vorgelesen, Orb-Pegel vom Mikrofon. Kostenlos, Qualität hängt vom Gerät ab.
+- **Handy:** Die UI ist bereits eine **PWA** (installierbar auf iOS/Android, Mikrofon über
   Browser-API). Später optional native App, wenn Hintergrund-Wake-Word nötig ist.
 - **Wake-Word (optional):** „Jarvis“ via Picovoice Porcupine oder openWakeWord lokal im Client.
 
 ## Schicht 3 – Hand
 
 ```
-Server (core-server) ──Tool-Call──► Hand-Agent auf dem PC  (baut ausgehende WebSocket-
+Jarvis-Server ──Tool-Call──► Hand-Agent auf dem PC  (baut ausgehende WebSocket-
                                     Verbindung zum Server auf → kein offener Port am PC)
                                         ├─ Browser: Playwright (eigenes Chrome-Profil)
                                         ├─ Desktop: Claude Computer Use (Screenshot + Maus/Tastatur)
@@ -71,7 +87,8 @@ Server (core-server) ──Tool-Call──► Hand-Agent auf dem PC  (baut ausge
 
 ## Deployment (dauerhaft laufend)
 
-- Ein kleiner VPS (z. B. Hetzner) oder ein Heimserver, Docker Compose mit:
-  `core-server`, `voice-gateway`, `ui` (statisch), Caddy (HTTPS).
-- Zugriff nur mit `JARVIS_AUTH_TOKEN`, besser zusätzlich über Tailscale (privates Netz).
-- `brain/` als privates Git-Repo, automatisches Pushen als Backup.
+- Ein kleiner VPS (z. B. Hetzner, ~5 €/Monat) oder ein Heimserver.
+- `docker compose up -d` startet Jarvis; `data/` liegt als Volume daneben.
+- Davor Caddy für HTTPS (Pflicht fürs Mikrofon am Handy), z. B. `jarvis.deine-domain.de`.
+- `JARVIS_TEAM_CODE` setzen, damit sich nur das Team registrieren kann.
+- Backup: `data/` regelmäßig sichern (z. B. nächtlich als verschlüsseltes Archiv oder in ein **privates** Git-Repo).

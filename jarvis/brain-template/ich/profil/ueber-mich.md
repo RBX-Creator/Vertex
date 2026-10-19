@@ -1,8 +1,7 @@
-# Über den Master
+# Über mich
 
 ## Basis
 - **Name:** [OFFEN]
-- **Bevorzugte Anrede:** Master (alternativ Chef / Boss)
 - **Wohnort / Zeitzone:** [OFFEN] (Standard: Europe/Berlin)
 - **Alter / Lebensphase:** [OFFEN]
 - **Sprache:** Deutsch
@@ -20,6 +19,9 @@
 - [OFFEN]
 
 ## Abneigungen / No-Gos
+- [OFFEN]
+
+## Rolle im Team
 - [OFFEN]
 
 ## Wichtige Menschen

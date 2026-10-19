@@ -1,41 +1,25 @@
-# JARVIS
+# Jarvis – Entwicklerhinweise für Claude Code
 
-Du bist Jarvis. Diese Datei wird von Claude Code automatisch bei jeder Session geladen,
-wenn Claude im Ordner `jarvis/` gestartet wird.
+Dieses Verzeichnis ist der Quellcode von Jarvis, einem persönlichen KI-Assistenten fürs Team.
+Hier wird an Jarvis **gebaut** – Jarvis selbst läuft im Server (`server/`), nicht in Claude Code.
 
-## Immer geladen
+## Aufbau
+- `core/` – Persönlichkeit, Regeln, Fähigkeiten. Wird zur Laufzeit als System-Prompt geladen.
+  Änderungen hier ändern sofort Jarvis' Verhalten (kein Neustart nötig).
+- `brain-template/` – Vorlage fürs Gedächtnis (`ich/` pro Person, `team/` geteilt).
+- `server/src/` – Node 22, ESM, Express 5, `@anthropic-ai/sdk`.
+  - `index.js` HTTP-API + SSE-Streaming · `jarvis.js` Prompt + Tool-Schleife + Demo-Modus
+  - `brain.js` Memory-Tool-Backend (`/memories/ich`, `/memories/team`) mit Pfad-Sandbox
+  - `users.js` Profile, scrypt-Passwörter, signierte Tokens
+- `ui/` – Web-App ohne Build-Schritt (Vanilla JS): `orb.js`, `app.js`, `style.css`.
+- `data/` – Laufzeitdaten, nie committen.
 
-@core/personality.md
-@core/rules.md
+## Regeln
+- Persönlichkeit nur in `core/personality.md` ändern – nirgendwo duplizieren.
+- Keine echten Personen- oder Business-Daten ins Repo (es ist öffentlich). Die gehören nach `data/`.
+- Gedächtnis-Pfade immer über `brain.js` auflösen (Sandbox!), nie direkt aus Nutzereingaben.
+- Testen: `cd server && JARVIS_DEMO=1 npm start` → http://localhost:3000.
 
-## Das Gehirn – Kurzüberblick (immer geladen)
-
-@brain/jetzt.md
-@brain/profil/ueber-mich.md
-
-## Das Gehirn – bei Bedarf lesen
-
-| Datei / Ordner                        | Inhalt                                   |
-|---------------------------------------|------------------------------------------|
-| `brain/profil/ziele.md`               | Lang- und kurzfristige Ziele             |
-| `brain/profil/gewohnheiten.md`        | Routinen, Tagesablauf, Arbeitsstil       |
-| `brain/business/ueberblick.md`        | Was das Business ist und wie es Geld verdient |
-| `brain/business/angebote.md`          | Produkte, Dienstleistungen, Preise       |
-| `brain/business/kunden.md`            | Zielgruppe, wichtige Kunden, Kontakte    |
-| `brain/business/zahlen.md`            | Umsatz, KPIs, Kennzahlen                 |
-| `brain/projekte/`                     | Eine Datei pro Projekt                   |
-| `brain/aufgaben.md`                   | Offene Aufgaben und Zusagen              |
-| `brain/gedaechtnis/fakten.md`         | Gelerntes, das nirgends sonst hinpasst   |
-| `brain/gedaechtnis/entscheidungen.md` | Getroffene Entscheidungen + Begründung   |
-| `brain/gedaechtnis/journal/`          | Tagesprotokolle                          |
-
-## Skills
-
-- `/briefing` – Morgen-Briefing oder Lagebericht auf Anfrage
-- `/merken` – Information gezielt ins Gehirn schreiben
-- `/kennenlernen` – Interview, um das Gehirn aufzubauen oder zu ergänzen
-
-## Status des Gehirns
-
-Wenn in den Dateien noch `[OFFEN]` steht, ist das Gehirn unvollständig.
-Weise den Master beim ersten Gespräch des Tages **einmal** darauf hin und biete `/kennenlernen` an.
+## Roadmap
+Siehe `docs/roadmap.md`. Nächste Schritte: Stimme über Deepgram/ElevenLabs (`voice/`),
+dann Hand-Agent (`hand/`).

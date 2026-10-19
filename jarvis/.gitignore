@@ -1,5 +1,5 @@
+# Laufzeitdaten: Profile, Gedächtnisse, Verläufe – NIE committen
+data/
 config/.env
-.claude/settings.local.json
 node_modules/
-__pycache__/
 *.log

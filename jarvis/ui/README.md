@@ -1,9 +1,19 @@
 # UI – der Orb
 
-Phase 2. Geplant: eine einzelne Web-App (später PWA) mit großem orangem Orb in der Mitte.
+Web-App, die der Server unter `/` ausliefert. Installierbar auf dem Handy (PWA:
+„Zum Home-Bildschirm hinzufügen“).
 
-- **Zustände:** `idle` (langsames Atmen), `listening` (reagiert auf Mikrofonpegel),
-  `thinking` (rotierendes Glühen), `speaking` (pulsiert mit der TTS-Lautstärke).
-- **Modi:** Sprachmodus (nur Orb + Untertitel) und Chatmodus (Orb klein + Verlauf).
-- Spricht mit `core-server` über WebSocket. Bis der Server steht: Browser-Spracherkennung
-  (Web Speech API) und Browser-TTS als Übergang.
+| Datei | Inhalt |
+|-------|--------|
+| `index.html` | Anmeldung, Orb-Ansicht, Chat, Einstellungen, Gedächtnis-Ansicht |
+| `orb.js` | Der orange Orb (Canvas). Zustände `idle`, `listening`, `thinking`, `speaking`; reagiert auf Pegel |
+| `app.js` | Logik: Login/Profil, Streaming vom Server, Spracheingabe/-ausgabe, Einstellungen |
+| `style.css` | Design |
+| `manifest.webmanifest`, `sw.js`, `icon.svg` | Installierbarkeit als App |
+
+**Bedienung:** Orb antippen → sprechen → Jarvis antwortet und spricht. Während er spricht,
+unterbricht ein Tipp auf den Orb. ☰ schaltet den Chat ein, ◎ zeigt das Gedächtnis, ⚙ die Einstellungen.
+
+**Stimme heute:** Browser-Spracherkennung und Browser-Sprachausgabe (kostenlos, Qualität je nach Gerät;
+in Chrome und Safari am besten). Mikrofon funktioniert auf dem Handy nur über **HTTPS**.
+Später ersetzt durch Deepgram + ElevenLabs – siehe `../voice/README.md`.

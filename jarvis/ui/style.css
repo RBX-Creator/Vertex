@@ -1,0 +1,236 @@
+:root {
+  --bg: #07080a;
+  --fg: #f3ede6;
+  --muted: #8f8a84;
+  --orange: #ff7a1a;
+  --orange-soft: rgba(255, 122, 26, 0.14);
+  --panel: rgba(20, 20, 24, 0.86);
+  --line: rgba(255, 255, 255, 0.08);
+  --danger: #ff5a4f;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hidden { display: none !important; }
+
+canvas#orb {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+input, select, textarea {
+  font: inherit;
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  width: 100%;
+  outline: none;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--orange); }
+
+.primary {
+  background: var(--orange);
+  color: #160800;
+  font-weight: 600;
+  border-radius: 12px;
+  padding: 12px 18px;
+}
+.ghost {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  color: var(--muted);
+}
+.error { color: var(--danger); min-height: 1.2em; margin: 0; font-size: 14px; }
+.hint { color: var(--muted); font-size: 14px; margin-top: 0; }
+
+/* ---------- Anmeldung ---------- */
+#auth {
+  position: fixed;
+  left: 50%;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(380px, calc(100% - 32px));
+  z-index: 2;
+  background: var(--panel);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 22px;
+}
+#auth h1 { margin: 0 0 14px; letter-spacing: 0.35em; font-weight: 300; text-align: center; color: var(--orange); }
+#authForm { display: grid; gap: 10px; }
+#authForm label { font-size: 14px; color: var(--muted); display: grid; gap: 6px; }
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.tabs button { flex: 1; padding: 8px; border-radius: 10px; color: var(--muted); }
+.tabs button.active { background: var(--orange-soft); color: var(--orange); }
+
+/* ---------- Hauptansicht ---------- */
+#app {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+}
+.brand { letter-spacing: 0.35em; font-weight: 300; color: var(--orange); }
+.badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--orange-soft);
+  color: var(--orange);
+}
+header nav { margin-left: auto; display: flex; gap: 4px; }
+header nav button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 18px;
+  color: var(--muted);
+}
+header nav button.on, header nav button:hover { color: var(--orange); background: var(--orange-soft); }
+
+#stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 24px 18px;
+  min-height: 0;
+}
+#orbHit {
+  position: fixed;
+  left: 50%;
+  top: 44%;
+  width: min(62vw, 340px);
+  height: min(62vw, 340px);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+}
+#status {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+#subtitle {
+  margin: 0;
+  max-width: 640px;
+  text-align: center;
+  font-size: 19px;
+  line-height: 1.45;
+  min-height: 2.9em;
+  max-height: 30vh;
+  overflow-y: auto;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.8);
+}
+#subtitle.interim { color: var(--muted); font-style: italic; }
+
+/* Chatmodus: Orb klein oben, Verlauf darunter */
+body.chat-mode #orbHit { top: 105px; width: 110px; height: 110px; }
+body.chat-mode #stage { flex: 0 0 150px; justify-content: flex-end; padding-bottom: 6px; }
+body.chat-mode #subtitle { display: none; }
+
+#chat {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 16px;
+}
+#messages { display: flex; flex-direction: column; gap: 10px; max-width: 720px; margin: 0 auto; }
+.msg {
+  padding: 10px 14px;
+  border-radius: 16px;
+  line-height: 1.45;
+  max-width: 85%;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.msg.user { align-self: flex-end; background: rgba(255, 255, 255, 0.08); }
+.msg.jarvis { align-self: flex-start; background: var(--orange-soft); border: 1px solid rgba(255, 122, 26, 0.25); }
+.msg.note { align-self: center; font-size: 12px; color: var(--muted); background: none; padding: 0; }
+.msg.err { align-self: center; color: var(--danger); background: none; font-size: 14px; }
+
+#composer {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px 14px;
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
+}
+#composer button {
+  flex: 0 0 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 18px;
+}
+#composer #btnSend { background: var(--orange); color: #160800; }
+#composer #btnMic.on { background: var(--orange); color: #160800; }
+#composer input { border-radius: 24px; }
+
+/* ---------- Dialoge ---------- */
+dialog {
+  width: min(520px, calc(100% - 32px));
+  max-height: calc(100% - 48px);
+  background: #141418;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 22px;
+}
+dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+dialog h2 { margin-top: 0; font-weight: 500; }
+dialog label { display: grid; gap: 6px; margin-bottom: 14px; font-size: 14px; color: var(--muted); }
+dialog label.row { display: flex; align-items: center; gap: 10px; color: var(--fg); font-size: 15px; }
+dialog label.row input { width: 20px; height: 20px; accent-color: var(--orange); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+
+#memTree { display: grid; gap: 2px; max-height: 50vh; overflow-y: auto; font-size: 14px; }
+#memTree button {
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+#memTree button:hover { background: var(--orange-soft); }
+#memTree .dir { color: var(--muted); padding: 8px 10px 2px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+#memPath { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+#memText { height: 50vh; font-family: ui-monospace, Menlo, monospace; font-size: 13px; resize: vertical; }

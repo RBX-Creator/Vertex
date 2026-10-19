@@ -4,7 +4,7 @@
 - **Ziel (Definition of Done):**
 - **Deadline:**
 - **Fortschritt:** 0 %
-- **Gehört zu Ziel:** (Link auf brain/profil/ziele.md)
+- **Gehört zu Ziel:** (Bezug zu einem Ziel)
 
 ## Nächste Schritte
 - [ ]

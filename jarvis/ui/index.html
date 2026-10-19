@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#07080a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Jarvis</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="orb"></canvas>
+
+  <!-- Anmeldung -->
+  <section id="auth" class="panel hidden">
+    <h1>JARVIS</h1>
+    <div class="tabs">
+      <button data-tab="login" class="active">Anmelden</button>
+      <button data-tab="register">Profil anlegen</button>
+    </div>
+    <form id="authForm" autocomplete="on">
+      <input name="name" placeholder="Name" autocomplete="username" required />
+      <input name="password" type="password" placeholder="Passwort" autocomplete="current-password" required />
+      <input name="teamCode" placeholder="Team-Code" class="only-register hidden" autocomplete="off" />
+      <label class="only-register hidden">Wie soll Jarvis dich ansprechen?
+        <select name="anrede"></select>
+      </label>
+      <button type="submit" class="primary">Los</button>
+      <p class="error" id="authError"></p>
+    </form>
+  </section>
+
+  <!-- Hauptansicht -->
+  <main id="app" class="hidden">
+    <header>
+      <span class="brand">JARVIS</span>
+      <span id="demoBadge" class="badge hidden">Demo</span>
+      <nav>
+        <button id="btnMemory" title="Gedächtnis">◎</button>
+        <button id="btnChat" title="Chat ein/aus">☰</button>
+        <button id="btnSettings" title="Einstellungen">⚙</button>
+      </nav>
+    </header>
+
+    <div id="stage">
+      <button id="orbHit" aria-label="Sprechen"></button>
+      <p id="status">Tippen zum Sprechen</p>
+      <p id="subtitle"></p>
+    </div>
+
+    <section id="chat" class="hidden">
+      <div id="messages"></div>
+    </section>
+
+    <form id="composer">
+      <button type="button" id="btnMic" title="Sprechen">🎙</button>
+      <input id="input" placeholder="Nachricht an Jarvis …" autocomplete="off" />
+      <button type="submit" id="btnSend" title="Senden">➤</button>
+    </form>
+  </main>
+
+  <!-- Einstellungen -->
+  <dialog id="settings">
+    <h2>Einstellungen</h2>
+    <label>Anrede
+      <input id="setAnrede" list="anredeList" />
+      <datalist id="anredeList"></datalist>
+    </label>
+    <label class="row"><input type="checkbox" id="setTts" /> Sprachausgabe</label>
+    <label>Stimme
+      <select id="setVoice"></select>
+    </label>
+    <label class="row"><input type="checkbox" id="setBriefing" /> Briefing beim ersten Öffnen am Tag</label>
+    <label class="row"><input type="checkbox" id="setConvo" /> Gesprächsmodus (nach der Antwort wieder zuhören)</label>
+    <div class="actions">
+      <button id="btnClear" class="ghost">Verlauf löschen</button>
+      <button id="btnLogout" class="ghost">Abmelden</button>
+      <button id="btnCloseSettings" class="primary">Fertig</button>
+    </div>
+  </dialog>
+
+  <!-- Gedächtnis -->
+  <dialog id="memory">
+    <h2>Gedächtnis</h2>
+    <p class="hint">Was Jarvis über dich (<b>ich</b>) und das Team (<b>team</b>) weiß.</p>
+    <div id="memTree"></div>
+    <div id="memEditor" class="hidden">
+      <p id="memPath"></p>
+      <textarea id="memText" spellcheck="false"></textarea>
+    </div>
+    <div class="actions">
+      <button id="btnMemBack" class="ghost hidden">Zurück</button>
+      <button id="btnMemSave" class="ghost hidden">Speichern</button>
+      <button id="btnCloseMemory" class="primary">Schließen</button>
+    </div>
+  </dialog>
+
+  <script src="orb.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

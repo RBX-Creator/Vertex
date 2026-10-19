@@ -2,11 +2,11 @@
 
 | Phase | Inhalt | Status |
 |-------|--------|--------|
-| 1 | **Gehirn-Grundstruktur:** Ordner, Persönlichkeit, Regeln, Skills, SessionStart-Hook | ✅ erledigt |
-| 1b | **Gehirn füllen:** `/kennenlernen`-Interview, `[OFFEN]` abarbeiten | ⏳ wartet auf Master |
-| 2 | **Oberfläche:** oranger Orb (Canvas/WebGL), Zustände idle/hört/denkt/spricht, Chat-Fenster, Mikrofon-Button mit Browser-Spracherkennung als Übergang | als Nächstes |
-| 3 | **Stimme:** `core-server` (Agent SDK) + Deepgram + ElevenLabs, Streaming, PWA aufs Handy | |
-| 4 | **Hand:** Hand-Agent auf dem PC, Playwright-Browser, Computer Use, Bestätigungen aufs Handy | |
-| 5 | **Proaktivität:** geplantes Briefing, Tagesabschluss, Wochenrückblick, Push-Nachrichten | |
-| 6 | **Integrationen:** Kalender, E-Mail, Business-Dashboards (über MCP-Connectoren) | |
-| 7 | **Handy-Hand:** Aktionen auf dem Handy (Shortcuts / Android) | |
+| 1 | **Gehirn-Grundstruktur:** Persönlichkeit, Regeln, Fähigkeiten, Gedächtnis-Vorlage | ✅ |
+| 2 | **App v1:** Server, Profile fürs Team, persönliches + Team-Gedächtnis, Lernen über das Memory-Tool, oranger Orb, Chat- und Sprachmodus (Browser-Sprache), Briefing beim ersten Öffnen am Tag, Einstellungen, Gedächtnis-Ansicht, PWA, Docker | ✅ |
+| 2b | **Live gehen:** Server (VPS) + Domain + HTTPS, Team-Code setzen, App aufs Handy installieren | ⏳ als Nächstes |
+| 3 | **Stimme:** Deepgram (STT) + ElevenLabs (TTS) über den Server, echte Pegel für den Orb, Wake-Word „Jarvis“ | |
+| 4 | **Hand:** Hand-Agent auf dem PC (Playwright-Browser, Computer Use), Bestätigungen aufs Handy | |
+| 5 | **Proaktivität:** Briefing als Push-Nachricht zu fester Uhrzeit, Tagesabschluss, Wochenrückblick | |
+| 6 | **Integrationen:** Kalender, E-Mail, Verkaufsplattformen (eBay, Vinted …), Shop-/Website-Analytics | |
+| 7 | **Handy-Hand:** Aktionen auf dem Handy (iOS-Kurzbefehle / Android) | |
