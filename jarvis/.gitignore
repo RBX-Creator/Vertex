@@ -1,0 +1,5 @@
+config/.env
+.claude/settings.local.json
+node_modules/
+__pycache__/
+*.log
