@@ -10,6 +10,8 @@ verwendet. Gedacht für den Start, solange es keinen eigenen Server gibt.
 | Augen | Foto aufnehmen → Claude erkennt Essen (Nährwerte ins Tracking), Ware, Belege |
 | Gedächtnis | Pro Person privat (`data/users/<id>/…`), `team/business` geteilt |
 | Hände | – (eine Artifact-Seite darf nicht ins Internet; dafür braucht es den Server) |
+| Hörfehler | Korrektur-Schicht vor dem Senden (Wörterbuch Team + persönlich), lernt aus Korrekturen |
+| Selbstkontrolle | automatisch gründlich bei Zahlen, Preisen, Fakten, Fotos; Gespeichertes sichtbar und rückgängig machbar |
 
 Veröffentlicht mit `capabilities: {sample: {images: true}, db: {}, user: {}}`.
 Der Persönlichkeits-Prompt ist eine kompakte Fassung von `core/personality.md` und `core/rules.md`.

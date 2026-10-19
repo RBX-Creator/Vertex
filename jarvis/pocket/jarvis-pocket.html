@@ -272,9 +272,12 @@ dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
   })();
 
   /* ---------------- Speicher (db pro Person, sonst nur dieses Gerät) ---------------- */
-  const FILES = ["fokus", "profil", "ziele", "aufgaben", "notizen", "business", "ernaehrung-ziele"];
-  const SHARED = new Set(["business"]);
-  const LABEL = { fokus: "Fokus der Woche", profil: "Über mich", ziele: "Ziele", aufgaben: "Aufgaben", notizen: "Notizen", business: "Business (Team)", "ernaehrung-ziele": "Ernährungsziele" };
+  const FILES = ["fokus", "profil", "ziele", "aufgaben", "notizen", "business", "ernaehrung-ziele", "woerterbuch", "woerterbuch-ich"];
+  const SHARED = new Set(["business", "woerterbuch"]);
+  const LABEL = { fokus: "Fokus der Woche", profil: "Über mich", ziele: "Ziele", aufgaben: "Aufgaben", notizen: "Notizen", business: "Business (Team)", "ernaehrung-ziele": "Ernährungsziele", woerterbuch: "Wörterbuch (Team)", "woerterbuch-ich": "Mein Wörterbuch" };
+  // Typische Hörfehler der deutschen Spracherkennung. Zeile: „Richtig: falsch, falsch, …“
+  const DEFAULT_WB = "Jarvis: Javis, Jarwis, Jervis, Charvis, Tschawis, Dschawis, Tscharwis, Jahrwies, Jarviss\nReels: Wheels, Wiels, Riels, Rihls\nTikTok: Tick Tack, Tik Tok, Tiktok, Ticktock, Tick Tock\nVinted: Winted, Vintet, Wintet, Vintid, Wintid\nStockX: Stock X, Stocks X, Stockx, Stock Ex\nSneaker: Snieker, Sniker, Schnieker, Snicker\nSneakers: Sniekers, Snikers, Schniekers, Snickers\nReselling: Re-Selling, Ri-Selling, Riselling, Reseling, Ree Selling\nResell: Re-Sell, Ri-Sell, Risell\nShopify: Schopify, Shopifai, Schopifai, Shoppify\nBriefing: Brieving, Brifing, Briefink";
+  const fallbackText = (name) => (name === "woerterbuch" ? DEFAULT_WB : "");
   const validFile = (f) => FILES.includes(f) || /^ernaehrung-\d{4}-\d{2}-\d{2}$/.test(f);
 
   const store = {
@@ -313,7 +316,7 @@ dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
   async function memorySnapshot() {
     const names = [...FILES, `ernaehrung-${today()}`];
     const docs = await Promise.all(names.map((n) => store.get(n)));
-    return names.map((n, i) => `## ${n}\n${(docs[i]?.text || "").trim() || "(leer)"}`).join("\n\n");
+    return names.map((n, i) => `## ${n}\n${(docs[i]?.text ?? fallbackText(n)).trim() || "(leer)"}`).join("\n\n");
   }
 
   async function applyMemory(ops) {
@@ -322,13 +325,40 @@ dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
       const file = String(op?.datei || "").trim();
       const text = String(op?.text || "").trim();
       if (!validFile(file) || !text) continue;
-      const cur = (await store.get(file))?.text || "";
+      const cur = (await store.get(file))?.text ?? fallbackText(file);
       const replaced = op.aktion === "ersetzen";
       const next = replaced ? text.slice(0, 20000) : `${cur.trim()}\n- (${today()}) ${text}`.trim().slice(-20000);
       // Die vorherige Fassung bleibt erhalten – in der Gedächtnis-Ansicht lässt sie sich wiederherstellen.
       if (await store.set(file, { text: next, vorher: cur, geaendert: new Date().toISOString() })) done.push({ file, text, replaced });
     }
     return done;
+  }
+
+  /* ---------------- Korrektur-Schicht für Hörfehler ---------------- */
+  // Rückt typische Diktat-Fehler gerade, BEVOR Claude den Satz sieht („Wiels“ → „Reels“).
+  function parseWb(text) {
+    const out = [];
+    for (let line of String(text || "").split("\n")) {
+      line = line.replace(/^\s*[-*]\s*(\(\d{4}-\d{2}-\d{2}[^)]*\)\s*)?/, "").trim();
+      if (!line || line.startsWith("#") || line.startsWith(">")) continue;
+      const m = line.match(/^([^:]{1,60}):\s*(.+)$/);
+      if (!m) continue;
+      const richtig = m[1].trim();
+      for (const f of m[2].split(",").map((x) => x.trim())) if (f && f.toLowerCase() !== richtig.toLowerCase()) out.push({ f, r: richtig });
+    }
+    return out;
+  }
+  const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+  async function korrigiere(text) {
+    const [ich, team] = await Promise.all([store.get("woerterbuch-ich"), store.get("woerterbuch")]);
+    const pairs = [...parseWb(ich?.text), ...parseWb(team?.text ?? DEFAULT_WB)].sort((a, b) => b.f.length - a.f.length);
+    const changes = [];
+    let out = text;
+    for (const { f, r } of pairs) {
+      const re = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(f)}(?![\\p{L}\\p{N}])`, "giu");
+      out = out.replace(re, (hit) => { if (hit !== r) changes.push(`${hit} → ${r}`); return r; });
+    }
+    return { text: out, changes };
   }
 
   /* ---------------- Persönlichkeit & Anweisungen ---------------- */
@@ -365,11 +395,16 @@ GEDÄCHTNIS AKTUALISIEREN
 Wenn er etwas sagt, das in einer Woche noch relevant ist (Fakten über ihn, Ziele, Aufgaben, Business, Vorlieben, Mahlzeiten), hänge GANZ AM ENDE deiner Antwort genau diesen Block an:
 [[GEDAECHTNIS]]
 [{"datei":"aufgaben","aktion":"anhaengen","text":"Rechnung an Kunde Müller schreiben, fällig Freitag"}]
-- datei: fokus, profil, ziele, aufgaben, notizen, business (geteilt mit seinem Team), ernaehrung-ziele, ernaehrung-${today()}
+- datei: fokus, profil, ziele, aufgaben, notizen, business (geteilt mit seinem Team), ernaehrung-ziele, ernaehrung-${today()}, woerterbuch (Hörfehler, Team), woerterbuch-ich (Hörfehler bei persönlichen Namen)
 - aktion: "anhaengen" (eine neue Zeile) oder "ersetzen" (die ganze Datei neu – zum Abhaken, Korrigieren, Aufräumen; dann den vollständigen neuen Inhalt schreiben)
 - Kein Block, wenn es nichts zu speichern gibt. Im Text dann nur kurz „Notiert.“ – keine Dateinamen nennen.
 - Speichere nur, was er gesagt hat oder was sicher ist – keine eigenen Vermutungen als Fakten.
 - Widerspricht es einem vorhandenen Eintrag (anderer Preis, anderes Datum, anderer Name)? Nicht still überschreiben, sondern erst fragen: „Bisher stand hier X. Gilt jetzt Y?“
+
+HÖRFEHLER (er diktiert – die Spracherkennung verhört sich zuverlässig)
+- Bekannte Hörfehler sind schon korrigiert, bevor du den Satz liest (siehe woerterbuch).
+- Ergibt ein Wort im Zusammenhang keinen Sinn, ist es wahrscheinlich ein Hörfehler. Überleg, was gemeint war. Sicher → so verstehen. Nicht sicher → kurz nachfragen („Meinen Sie Reels?“).
+- Korrigiert er dich („Ich meinte X, nicht Y“): ins Wörterbuch eintragen – {"datei":"woerterbuch","aktion":"anhaengen","text":"X: Y"} (Namen von Menschen in woerterbuch-ich). Steht X schon drin, die Zeile mit "ersetzen" um Y ergänzen. Nicht eintragen, wenn Y auch ein normales, gemeintes Wort sein kann (z. B. „Java“, „Schatz“).
 
 BRIEFING (wenn er nach Briefing, Tag oder „was steht an“ fragt)
 Begrüßung passend zur Uhrzeit, höchstens drei Punkte aus Fokus, Aufgaben und Zielen (Wichtigstes zuerst), eine klare Empfehlung, womit er anfangen soll. Ist das Gedächtnis fast leer: ehrlich sagen und eine Frage stellen, die dir am meisten bringt.
@@ -457,12 +492,15 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
   async function ask(userText, { image, imageUrl } = {}) {
     userText = userText.trim();
     if ((!userText && !image) || busy) return;
+    const korr = userText ? await korrigiere(userText) : { text: userText, changes: [] };
+    userText = korr.text;
     if (!sample) { addMsg("err", "Jarvis kann Claude in dieser Ansicht nicht erreichen. Öffne die Seite in der Claude-App oder auf claude.ai."); return; }
     stopSpeaking();
     busy = true;
     $("btnSend").textContent = "■"; $("btnSend").classList.replace("send", "stop"); $("btnSend").setAttribute("aria-label", "Stopp");
     const shown = userText || "Was siehst du?";
     addMsg("user", shown, imageUrl);
+    if (korr.changes.length) addMsg("note", "↺ verstanden als: " + korr.changes.join(", "));
     const out = addMsg("jarvis", "Denkt nach …");
     out.classList.add("thinking");
     const careful = needsCare(userText, image);
@@ -620,9 +658,10 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
       const b = document.createElement("button");
       b.type = "button"; b.className = "mem-item";
       const l = document.createElement("span"); l.textContent = LABEL[n] || "Ernährung heute";
-      const r = document.createElement("span"); const len = (docs[i]?.text || "").length; r.textContent = len ? `${len} Zeichen` : "leer";
+      const text = docs[i]?.text ?? fallbackText(n);
+      const r = document.createElement("span"); r.textContent = text.length ? `${text.length} Zeichen` : "leer";
       b.append(l, r);
-      b.onclick = () => openMem(n, docs[i]?.text || "", docs[i]?.vorher);
+      b.onclick = () => openMem(n, text, docs[i]?.vorher);
       $("memList").appendChild(b);
     });
   }

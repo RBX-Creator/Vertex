@@ -13,6 +13,7 @@ const jarvis = await import("./jarvis.js");
 const voice = await import("./voice.js");
 const worker = await import("./worker.js");
 const verbindungen = await import("./verbindungen.js");
+const woerterbuch = await import("./woerterbuch.js");
 const { userDir } = await import("./paths.js");
 const path = (await import("node:path")).default;
 
@@ -199,7 +200,7 @@ app.delete(
 
 const busy = new Set();
 
-async function streamTurn(req, res, text, opts) {
+async function streamTurn(req, res, text, { before = [], ...opts } = {}) {
   if (busy.has(req.user.id)) return res.status(409).json({ error: "Ich antworte noch, Moment." });
   busy.add(req.user.id);
   res.writeHead(200, {
@@ -209,6 +210,7 @@ async function streamTurn(req, res, text, opts) {
     "X-Accel-Buffering": "no",
   });
   const emit = (ev) => res.write(`data: ${JSON.stringify(ev)}\n\n`);
+  for (const ev of before) emit(ev);
   try {
     await jarvis.runTurn(req.user, text, { ...opts, emit });
   } finally {
@@ -223,9 +225,15 @@ app.post(
   requireUser,
   handle(async (req, res) => {
     const image = parseImage(req.body?.image);
-    const text = String(req.body?.text || "").trim().slice(0, 8000) || (image ? "[Foto ohne Kommentar]" : "");
+    let text = String(req.body?.text || "").trim().slice(0, 8000) || (image ? "[Foto ohne Kommentar]" : "");
     if (!text) return res.status(400).json({ error: "Leere Nachricht." });
-    await streamTurn(req, res, text, { voice: Boolean(req.body?.voice), image });
+    const before = [];
+    if (req.body?.voice) {
+      const k = await woerterbuch.korrigiereFuer(req.user.id, text);
+      if (k.changes.length) before.push({ type: "korrigiert", text: k.text, changes: k.changes });
+      text = k.text;
+    }
+    await streamTurn(req, res, text, { voice: Boolean(req.body?.voice), image, before });
   }),
 );
 

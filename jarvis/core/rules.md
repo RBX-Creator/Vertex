@@ -36,6 +36,8 @@ Das Gedächtnis ist die einzige Wahrheit über den Nutzer und das Business.
 | Ein konkretes Projekt / ein Kundenauftrag    | `/memories/team/projekte/<name>.md`        |
 | Team-Entscheidungen, Prozesse, Wissen        | `/memories/team/wissen.md`                 |
 | Content-Plan, Post-Ideen                     | `/memories/team/content/plan.md`           |
+| Hörfehler der Spracherkennung (Marken, Fachwörter) | `/memories/team/woerterbuch.md`      |
+| Hörfehler bei persönlichen Namen             | `/memories/ich/woerterbuch.md`             |
 
 - Im Zweifel: Was nur diese Person betrifft → `ich`. Was jedem im Team hilft → `team`.
 - Bei Team-Einträgen steht dabei, von wem sie stammen: `- (2026-10-19, Max) …`

@@ -4,6 +4,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import * as jarvis from "./jarvis.js";
 import * as worker from "./worker.js";
+import * as woerterbuch from "./woerterbuch.js";
 
 const DG_URL = process.env.DEEPGRAM_URL || "wss://api.deepgram.com/v1/listen";
 const DG_MODEL = process.env.DEEPGRAM_MODEL || "nova-3";
@@ -65,6 +66,8 @@ class Connection {
     this.dgBuffer = [];
     this.finalParts = [];
     this.lastAudio = 0;
+    this.keyterms = [];
+    this.loadKeyterms();
 
     if (!connections.has(user.id)) connections.set(user.id, new Set());
     connections.get(user.id).add(this);
@@ -80,6 +83,11 @@ class Connection {
     }, 8000);
 
     this.send({ type: "ready", stt: sttEnabled() ? "deepgram" : "browser", tts: ttsEnabled() ? "elevenlabs" : "browser" });
+  }
+
+  // Begriffe aus dem Wörterbuch, die Deepgram schon beim Zuhören kennen soll.
+  loadKeyterms() {
+    woerterbuch.schluesselwoerter(this.user.id).then((k) => (this.keyterms = k)).catch(() => {});
   }
 
   send(msg) {
@@ -109,8 +117,15 @@ class Connection {
         break;
       }
       case "text": {
-        const text = String(msg.text || "").trim().slice(0, 8000);
-        if (text) this.startTurn(text, { voice: Boolean(msg.voice) });
+        let text = String(msg.text || "").trim().slice(0, 8000);
+        if (!text) break;
+        if (msg.voice) {
+          // Gesprochen (Browser-Erkennung): erst Hörfehler geraderücken.
+          const k = await woerterbuch.korrigiereFuer(this.user.id, text);
+          if (k.changes.length) this.send({ type: "korrigiert", text: k.text, changes: k.changes });
+          text = k.text;
+        }
+        this.startTurn(text, { voice: Boolean(msg.voice) });
         break;
       }
       case "image": {
@@ -122,6 +137,7 @@ class Connection {
         break;
       }
       case "listen":
+        this.loadKeyterms(); // Wörterbuch kann sich seit dem letzten Mal geändert haben
         if (sttEnabled()) this.openDeepgram();
         break;
       case "listen_stop":
@@ -158,6 +174,11 @@ class Connection {
       utterance_end_ms: "1200",
       vad_events: "true",
     });
+    // Vorbeugen statt nur korrigieren: Deepgram kennt die Wörterbuch-Begriffe schon beim Zuhören.
+    for (const k of this.keyterms) {
+      if (DG_MODEL.startsWith("nova-3")) params.append("keyterm", k);
+      else params.append("keywords", `${k}:2`);
+    }
     const dg = new WebSocket(`${DG_URL}?${params}`, {
       headers: { Authorization: `Token ${process.env.DEEPGRAM_API_KEY}` },
     });
@@ -212,11 +233,13 @@ class Connection {
     if (msg.type === "UtteranceEnd") this.endUtterance();
   }
 
-  endUtterance() {
-    const text = this.finalParts.join(" ").trim();
+  async endUtterance() {
+    const heard = this.finalParts.join(" ").trim();
     this.finalParts = [];
-    if (!text) return;
-    this.send({ type: "transcript", text, final: true });
+    if (!heard) return;
+    // Korrektur-Schicht: Hörfehler geraderücken, bevor das Modell den Satz sieht.
+    const { text, changes } = await woerterbuch.korrigiereFuer(this.user.id, heard);
+    this.send({ type: "transcript", text, final: true, ...(changes.length ? { changes } : {}) });
     this.startTurn(text, { voice: true });
   }
 

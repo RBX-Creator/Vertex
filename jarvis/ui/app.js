@@ -123,13 +123,22 @@
   }
   const scrollChat = () => ($("chat").scrollTop = $("chat").scrollHeight);
 
+  let lastUserEl = null;
   function addMsg(kind, text) {
     const el = document.createElement("div");
     el.className = `msg ${kind}`;
     el.textContent = text;
     $("messages").appendChild(el);
     scrollChat();
+    if (kind === "user") lastUserEl = el;
     return el;
+  }
+
+  // Zeigt, was die Korrektur-Schicht an Hörfehlern geraderückt hat – zur Kontrolle.
+  function showCorrections(changes) {
+    if (!changes?.length) return;
+    const list = changes.map((c) => `${c.von} → ${c.zu}`).join(", ");
+    addMsg("note", `↺ verstanden als: ${list}`);
   }
 
   function addJobResult(job) {
@@ -219,6 +228,9 @@
       } else if (ev.type === "tool") {
         const names = { kalender: "Kalender", postfach: "Postfach", mail_entwurf: "Mail-Entwurf" };
         addMsg("note", `⚙ ${names[ev.name] || ev.name}`);
+      } else if (ev.type === "korrigiert") {
+        if (lastUserEl) lastUserEl.textContent = ev.text;
+        showCorrections(ev.changes);
       } else if (ev.type === "error") {
         addMsg("err", ev.message);
         $("subtitle").textContent = ev.message;
@@ -377,10 +389,16 @@
         $("subtitle").textContent = ev.text;
         if (ev.final) {
           addMsg("user", ev.text);
+          showCorrections(ev.changes);
           lastInputWasVoice = true;
           if (!state.user.settings.gespraechsmodus) stopCapture();
           else pauseCapture();
         }
+        break;
+      case "korrigiert":
+        // Browser-Spracherkennung: die angezeigte Nachricht durch die korrigierte ersetzen
+        if (lastUserEl) lastUserEl.textContent = ev.text;
+        showCorrections(ev.changes);
         break;
       case "barge_in":
         if (capturing) stopSpeaking();
