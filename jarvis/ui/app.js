@@ -136,7 +136,8 @@
     const el = addMsg("job", "");
     const head = document.createElement("div");
     head.className = "job-head";
-    head.textContent = `${job.status === "fertig" ? "✔" : "✖"} Auftrag: ${job.titel}`;
+    const pruefung = { ok: " · geprüft", korrigiert: " · geprüft und korrigiert" }[job.pruefung] || "";
+    head.textContent = `${job.status === "fertig" ? "✔" : "✖"} Auftrag: ${job.titel}${pruefung}`;
     const body = document.createElement("div");
     body.className = "md";
     body.innerHTML = renderMarkdown(job.ergebnis || job.content || "");
@@ -181,7 +182,7 @@
     try {
       const { verlauf } = await api("/api/verlauf");
       for (const m of verlauf) {
-        if (m.role === "job") addJobResult({ id: m.id, bild: m.bild, titel: m.titel, status: m.status, ergebnis: m.content });
+        if (m.role === "job") addJobResult({ id: m.id, bild: m.bild, titel: m.titel, status: m.status, pruefung: m.pruefung, ergebnis: m.content });
         else addMsg(m.role === "user" ? "user" : "jarvis", m.role === "user" ? m.content.replace(/^\[Foto\]/, "📷") : m.content);
       }
     } catch {}

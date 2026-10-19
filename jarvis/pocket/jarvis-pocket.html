@@ -173,7 +173,8 @@ dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
   <label class="field" id="voiceField">Stimme
     <select id="setVoice"></select>
   </label>
-  <label class="check"><input type="checkbox" id="setDeep"> Gründlich nachdenken (langsamer, klüger)</label>
+  <label class="check"><input type="checkbox" id="setDeep"> Immer gründlich nachdenken</label>
+  <p class="hint">Sonst automatisch bei Zahlen, Preisen, Fakten, Entscheidungen und Fotos – dort prüft Jarvis lieber, statt zu raten.</p>
   <div class="actions">
     <button class="btn" id="btnClearChat" type="button">Verlauf löschen</button>
     <button class="btn primary" id="btnSaveSettings" type="button">Fertig</button>
@@ -191,6 +192,7 @@ dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
   </div>
   <div class="actions">
     <button class="btn" id="btnMemBack" type="button" hidden>Zurück</button>
+    <button class="btn" id="btnMemUndo" type="button" hidden>Vorherige Fassung</button>
     <button class="btn" id="btnMemSave" type="button" hidden>Speichern</button>
     <button class="btn primary" id="btnMemClose" type="button">Schließen</button>
   </div>
@@ -315,14 +317,16 @@ dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
   }
 
   async function applyMemory(ops) {
-    const done = [];
+    const done = []; // [{file, text, replaced}]
     for (const op of Array.isArray(ops) ? ops.slice(0, 8) : []) {
       const file = String(op?.datei || "").trim();
       const text = String(op?.text || "").trim();
       if (!validFile(file) || !text) continue;
       const cur = (await store.get(file))?.text || "";
-      const next = op.aktion === "ersetzen" ? text.slice(0, 20000) : `${cur.trim()}\n- (${today()}) ${text}`.trim().slice(-20000);
-      if (await store.set(file, { text: next, geaendert: new Date().toISOString() })) done.push(file);
+      const replaced = op.aktion === "ersetzen";
+      const next = replaced ? text.slice(0, 20000) : `${cur.trim()}\n- (${today()}) ${text}`.trim().slice(-20000);
+      // Die vorherige Fassung bleibt erhalten – in der Gedächtnis-Ansicht lässt sie sich wiederherstellen.
+      if (await store.set(file, { text: next, vorher: cur, geaendert: new Date().toISOString() })) done.push({ file, text, replaced });
     }
     return done;
   }
@@ -338,10 +342,19 @@ PERSÖNLICHKEIT
 - Ergebnis zuerst. Standard: 1–3 Sätze. Länger nur, wenn er es will oder die Sache es braucht.
 - Bei Entscheidungen: eine klare Empfehlung mit dem wichtigsten Grund.
 - Proaktiv: erinnere an Aufgaben und Ziele, widersprich einmal klar, wenn etwas seinen Zielen schadet. Höchstens ein ungefragter Hinweis pro Antwort.
-- Verboten: „Gute Frage!“, „Gerne helfe ich…“, „Ich hoffe, das hilft“, Emojis, Ausrufezeichen-Ketten, unnötige Entschuldigungen, erfundene Fakten.
+- Verboten: „Gute Frage!“, „Gerne helfe ich…“, „Ich hoffe, das hilft“, Emojis, Ausrufezeichen-Ketten, unnötige Entschuldigungen, erfundene Fakten, Raten, das wie Wissen klingt.
 - Beispiele für den Ton: „Sehr wohl, ${a}.“ · „Bereits erledigt.“ · „Ein halbes Prozent Unterschied für die Hälfte des Geldes – die Rechnung macht sich von selbst.“
 - Er nutzt dich auf dem iPhone, oft per Diktat: Schreibe so, dass es vorgelesen gut klingt – kein Markdown, keine Listenzeichen, keine Links. Zahlen so, wie man sie spricht.
 - Du lernst nebenbei. Verhöre ihn nicht; höchstens eine beiläufige Frage, wenn sie gerade passt.
+
+PRÜFEN STATT RATEN – wichtiger als Schnelligkeit
+- Drei Sorten Aussagen, immer erkennbar: WEISS ICH (steht im Gedächtnis oder hat er gesagt) · SCHÄTZE ICH (Allgemeinwissen, Hochrechnung – sag „geschätzt“ oder „vermutlich“) · WEISS ICH NICHT (dann sag das).
+- Fakten über ihn und sein Business NUR aus dem GEDÄCHTNIS. Steht es dort nicht: nicht erfinden, sondern sagen, dass du es noch nicht weißt.
+- Aktuelle Preise, Marktwerte, Kurse, Öffnungszeiten, Gesetze, Nachrichten kannst du hier nicht nachsehen. Nie als sicher ausgeben – höchstens als grobe Schätzung mit Hinweis, wo er es prüfen kann.
+- Rechnungen: Rechenweg im Kopf gegenprüfen (Summe, Einheit, Größenordnung), bei Geld zweimal.
+- Unklar, was er meint, und eine falsche Annahme wäre teuer? Eine kurze Rückfrage statt raten.
+- Bevor du antwortest: kurz gegenlesen – stimmt jede Zahl, passt es zum Gedächtnis, widerspricht es nichts, was er früher gesagt hat?
+- Lieber „Weiß ich nicht sicher“ als eine selbstbewusste falsche Antwort.
 
 JETZT: ${nowText()} (${TZ}). Heute ist ${today()}.
 
@@ -355,13 +368,15 @@ Wenn er etwas sagt, das in einer Woche noch relevant ist (Fakten über ihn, Ziel
 - datei: fokus, profil, ziele, aufgaben, notizen, business (geteilt mit seinem Team), ernaehrung-ziele, ernaehrung-${today()}
 - aktion: "anhaengen" (eine neue Zeile) oder "ersetzen" (die ganze Datei neu – zum Abhaken, Korrigieren, Aufräumen; dann den vollständigen neuen Inhalt schreiben)
 - Kein Block, wenn es nichts zu speichern gibt. Im Text dann nur kurz „Notiert.“ – keine Dateinamen nennen.
+- Speichere nur, was er gesagt hat oder was sicher ist – keine eigenen Vermutungen als Fakten.
+- Widerspricht es einem vorhandenen Eintrag (anderer Preis, anderes Datum, anderer Name)? Nicht still überschreiben, sondern erst fragen: „Bisher stand hier X. Gilt jetzt Y?“
 
 BRIEFING (wenn er nach Briefing, Tag oder „was steht an“ fragt)
 Begrüßung passend zur Uhrzeit, höchstens drei Punkte aus Fokus, Aufgaben und Zielen (Wichtigstes zuerst), eine klare Empfehlung, womit er anfangen soll. Ist das Gedächtnis fast leer: ehrlich sagen und eine Frage stellen, die dir am meisten bringt.
 
 FOTOS (seine „Augen“)
-- Essen: Bestandteile und Portion schätzen, kcal, Eiweiß, Kohlenhydrate, Fett. In ernaehrung-${today()} anhängen als „Uhrzeit Mahlzeit: X kcal, Y g Eiweiß, Z g KH, W g Fett“. Antwort: Schätzung plus Tagessumme (aus ernaehrung-${today()}); falls in ernaehrung-ziele ein Ziel steht, den Rest bis dahin.
-- Ware/Produkt (er macht Reselling): Modell, Variante, sichtbarer Zustand, grobe Preiseinschätzung mit Vorsicht.
+- Essen: Bestandteile und Portion schätzen, kcal, Eiweiß, Kohlenhydrate, Fett – und einmal kurz sagen, dass es eine Schätzung ist. Ist etwas Wichtiges nicht erkennbar (Soße, Füllung, Portionsgröße), lieber kurz fragen als eine Zahl erfinden. In ernaehrung-${today()} anhängen als „Uhrzeit Mahlzeit: X kcal, Y g Eiweiß, Z g KH, W g Fett“. Antwort: Schätzung plus Tagessumme (aus ernaehrung-${today()}); falls in ernaehrung-ziele ein Ziel steht, den Rest bis dahin.
+- Ware/Produkt (er macht Reselling): nur nennen, was wirklich zu sehen ist (Modell, Variante, Zustand). Unsicher bei Echtheit, Variante oder Größe? Das klar sagen. Preise nur als grobe Schätzung, nie als aktueller Marktwert.
 - Beleg/Rechnung: Betrag, Datum, Absender, Fälligkeit – bei Bedarf als Aufgabe merken.
 - Sonst: in ein, zwei Sätzen, was zu sehen ist, und der sinnvolle nächste Schritt.
 
@@ -419,6 +434,10 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
   /* ---------------- Gespräch ---------------- */
   let sample = null, busy = false, ctl = null, imagesOk = false;
 
+  // Wo Raten teuer wäre, denkt Jarvis gründlich nach (dauert länger): Fotos, Zahlen, Geld, Fakten, Entscheidungen.
+  const NEEDS_CARE = /\d|€|euro|preis|kost|wie ?viel|rechn|gewinn|marge|umsatz|steuer|gebühr|prozent|kalorien|eiweiß|datum|wann|frist|vertrag|recht|gesetz|vergleich|lohnt|soll ich|empfiehl|stimmt|warum|erklär|plan|strategie|angebot/i;
+  const needsCare = (text, image) => settings.deep || Boolean(image) || NEEDS_CARE.test(text);
+
   function visiblePart(text) {
     const i = text.indexOf("[[GEDAECHTNIS]]");
     let v = i >= 0 ? text.slice(0, i) : text;
@@ -446,7 +465,8 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
     addMsg("user", shown, imageUrl);
     const out = addMsg("jarvis", "Denkt nach …");
     out.classList.add("thinking");
-    Orb.set("thinking"); setStatus("Denkt nach");
+    const careful = needsCare(userText, image);
+    Orb.set("thinking"); setStatus(careful ? "Prüft gründlich" : "Denkt nach");
 
     const memory = await memorySnapshot();
     const history = turns.slice(-16).map((t) => ({ role: t.role, content: t.content.slice(0, 2000) }));
@@ -467,7 +487,7 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
       const res = await sample(input, {
         cache: false,
         signal: ctl.signal,
-        modelTier: settings.deep ? "default" : "quick",
+        modelTier: careful ? "default" : "quick",
         ...(image ? { images: [image] } : {}),
         onText: ({ text }) => {
           full = text;
@@ -485,7 +505,10 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
       speakNew(vis || "Notiert.", true);
       if (res.truncated) addMsg("note", "Antwort wurde gekürzt.");
       const saved = await applyMemory(parseOps(full));
-      if (saved.length) addMsg("note", "◎ Notiert: " + saved.map((f) => LABEL[f] || (f.startsWith("ernaehrung-") ? "Ernährung" : f)).join(", "));
+      for (const s of saved) {
+        const name = LABEL[s.file] || (s.file.startsWith("ernaehrung-") ? "Ernährung" : s.file);
+        addMsg("note", s.replaced ? `◎ ${name} neu gefasst – Rückgängig unter ◎` : `◎ ${name}: ${s.text.slice(0, 140)}`);
+      }
       turns.push({ role: "user", content: msg }, { role: "assistant", content: vis || "Notiert." });
       if (/briefing|was steht/i.test(userText)) lastBriefing = today();
       await saveVerlauf();
@@ -589,7 +612,7 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
   let memOpen = null;
   async function showMemList() {
     memOpen = null;
-    $("memEditor").hidden = true; $("btnMemBack").hidden = true; $("btnMemSave").hidden = true; $("memList").hidden = false;
+    $("memEditor").hidden = true; $("btnMemBack").hidden = true; $("btnMemSave").hidden = true; $("btnMemUndo").hidden = true; $("memList").hidden = false;
     $("memList").innerHTML = "";
     const names = [...FILES, `ernaehrung-${today()}`];
     const docs = await Promise.all(names.map((n) => store.get(n)));
@@ -599,12 +622,15 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
       const l = document.createElement("span"); l.textContent = LABEL[n] || "Ernährung heute";
       const r = document.createElement("span"); const len = (docs[i]?.text || "").length; r.textContent = len ? `${len} Zeichen` : "leer";
       b.append(l, r);
-      b.onclick = () => openMem(n, docs[i]?.text || "");
+      b.onclick = () => openMem(n, docs[i]?.text || "", docs[i]?.vorher);
       $("memList").appendChild(b);
     });
   }
-  function openMem(name, text) {
+  let memPrev = null;
+  function openMem(name, text, vorher) {
     memOpen = name;
+    memPrev = typeof vorher === "string" && vorher !== text ? vorher : null;
+    $("btnMemUndo").hidden = memPrev === null;
     $("memList").hidden = true; $("memEditor").hidden = false; $("btnMemBack").hidden = false; $("btnMemSave").hidden = false;
     $("memName").textContent = LABEL[name] || name;
     $("memText").value = text;
@@ -612,8 +638,16 @@ Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen 
   $("btnMemory").addEventListener("click", async () => { $("dlgMemory").showModal(); await showMemList(); });
   $("btnMemBack").addEventListener("click", showMemList);
   $("btnMemSave").addEventListener("click", async () => {
-    if (memOpen) await store.set(memOpen, { text: $("memText").value.slice(0, 20000), geaendert: new Date().toISOString() });
+    if (memOpen) {
+      const before = (await store.get(memOpen))?.text || "";
+      await store.set(memOpen, { text: $("memText").value.slice(0, 20000), vorher: before, geaendert: new Date().toISOString() });
+    }
     await showMemList();
+  });
+  $("btnMemUndo").addEventListener("click", () => {
+    if (memPrev === null) return;
+    $("memText").value = memPrev; // erst anzeigen – gespeichert wird mit „Speichern“
+    $("btnMemUndo").hidden = true;
   });
   $("btnMemClose").addEventListener("click", () => $("dlgMemory").close());
 

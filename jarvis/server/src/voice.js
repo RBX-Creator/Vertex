@@ -43,7 +43,14 @@ export function attachVoice(server, authenticate) {
     for (const c of conns) c.send({ type: "job_done", job });
     worker.markReported(userId, job.id);
     conns[0].queueHidden(jarvis.jobDoneHint(job), {
-      job: { id: job.id, titel: job.titel, ergebnis: job.ergebnis, status: job.status, ...(job.bild ? { bild: true } : {}) },
+      job: {
+        id: job.id,
+        titel: job.titel,
+        ergebnis: job.ergebnis,
+        status: job.status,
+        ...(job.bild ? { bild: true } : {}),
+        ...(job.pruefung ? { pruefung: job.pruefung } : {}),
+      },
     });
   });
 }

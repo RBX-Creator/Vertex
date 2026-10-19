@@ -140,7 +140,10 @@ app.get(
   handle(async (req, res) => {
     const verlauf = [];
     for (const m of await jarvis.loadHistory(req.user.id)) {
-      if (m.job) verlauf.push({ role: "job", id: m.job.id, bild: m.job.bild, titel: m.job.titel, status: m.job.status, content: m.job.ergebnis });
+      if (m.job) {
+        const { id, bild, titel, status, pruefung, ergebnis } = m.job;
+        verlauf.push({ role: "job", id, bild, titel, status, pruefung, content: ergebnis });
+      }
       else if (!m.hidden) verlauf.push({ role: m.role, content: m.content });
     }
     res.json({ verlauf });

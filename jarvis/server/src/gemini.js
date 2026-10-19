@@ -16,9 +16,11 @@ const getClient = () =>
     ...(process.env.GEMINI_BASE_URL ? { httpOptions: { baseUrl: process.env.GEMINI_BASE_URL } } : {}),
   }));
 
-// 2.5-Modelle: Denken aus (schnellste Antwort). Neuere Modelle: niedrigste Denkstufe.
+// Kurz nachdenken statt raten: kleines Denkbudget (2.5) bzw. niedrige Denkstufe (neuere Modelle).
+// GEMINI_THINKING_BUDGET=0 macht 2.5 wieder maximal schnell, aber ratefreudiger.
 function thinkingConfig() {
-  return MODEL.includes("2.5") ? { thinkingBudget: 0 } : { thinkingLevel: "LOW" };
+  if (MODEL.includes("2.5")) return { thinkingBudget: Number(process.env.GEMINI_THINKING_BUDGET || 1024) };
+  return { thinkingLevel: process.env.GEMINI_THINKING_LEVEL || "LOW" };
 }
 
 const FUNCTIONS = [

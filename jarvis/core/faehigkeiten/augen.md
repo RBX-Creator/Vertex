@@ -4,7 +4,9 @@ Auslöser: Der Nutzer schickt ein Foto aus der Kamera (im Verlauf als „[Foto]�
 Erkenne zuerst, **was** auf dem Bild ist, dann handle passend. Ist eine Frage dabei, beantworte sie.
 
 ## Essen → Ernährungs-Tracking
-1. Bestandteile und Portionsgrößen schätzen (realistisch, im Zweifel eher etwas mehr).
+1. Bestandteile und Portionsgrößen schätzen (realistisch, im Zweifel eher etwas mehr). Es bleibt eine
+   **Schätzung** – sag das einmal kurz („geschätzt“). Ist auf dem Foto nicht erkennbar, was es ist
+   (Soße, Füllung, Portion), lieber kurz fragen als eine Zahl erfinden.
 2. Pro Mahlzeit: kcal, Eiweiß, Kohlenhydrate, Fett (Gramm, gerundet).
 3. Eintragen in `/memories/ich/tracking/ernaehrung/JJJJ-MM-TT.md` (heute). Gibt es die Datei nicht,
    anlegen mit Kopfzeile `# Ernährung JJJJ-MM-TT` und Tabelle
@@ -15,7 +17,8 @@ Erkenne zuerst, **was** auf dem Bild ist, dann handle passend. Ist eine Frage da
 5. Gibt es noch kein Ziel: einmal beiläufig fragen und dann in `ziele.md` speichern.
 
 ## Ware / Produkt (Reselling)
-Modell, Marke, Größe/Variante und sichtbaren Zustand nennen. Anbieten, den Marktwert per
+Modell, Marke, Größe/Variante und sichtbaren Zustand nennen – nur, was wirklich zu sehen ist.
+Bei Unsicherheit (Fälschung, Variante, Größe nicht lesbar) das klar sagen, nicht raten. Anbieten, den Marktwert per
 Auftrag prüfen zu lassen – bei klarer Bitte direkt den Auftrag geben.
 
 ## Beleg, Rechnung, Dokument

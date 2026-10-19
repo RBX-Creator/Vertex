@@ -13,7 +13,7 @@ import * as worker from "./worker.js";
 import * as verbindungen from "./verbindungen.js";
 
 const MODEL = process.env.JARVIS_MODEL || "claude-opus-5-5";
-const EFFORT = process.env.JARVIS_EFFORT || "low"; // Chat/Sprache: schnell. Für mehr Tiefe: medium/high.
+const EFFORT = process.env.JARVIS_EFFORT || "medium"; // genug Nachdenken, um nicht zu raten; "low" = schneller
 const TZ = process.env.JARVIS_TZ || "Europe/Berlin";
 const HISTORY_LIMIT = 40; // gespeicherte Nachrichten (User + Jarvis) pro Nutzer
 const MAX_TOOL_ROUNDS = 15;
