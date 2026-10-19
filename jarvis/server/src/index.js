@@ -257,6 +257,9 @@ app.post(
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 
+// Gleiche Sprechtext-Aufbereitung für die Browser-Stimme wie für ElevenLabs.
+app.get("/sprechtext.js", (req, res) => res.sendFile(path.join(import.meta.dirname, "sprechtext.js")));
+
 app.use(express.static(UI_DIR, { extensions: ["html"] }));
 
 const port = Number(process.env.PORT || 3000);

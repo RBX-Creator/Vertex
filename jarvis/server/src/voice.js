@@ -5,6 +5,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import * as jarvis from "./jarvis.js";
 import * as worker from "./worker.js";
 import * as woerterbuch from "./woerterbuch.js";
+import { sprechbar, satzEnde } from "./sprechtext.js";
 
 const DG_URL = process.env.DEEPGRAM_URL || "wss://api.deepgram.com/v1/listen";
 const DG_MODEL = process.env.DEEPGRAM_MODEL || "nova-3";
@@ -13,6 +14,8 @@ const EL_URL = process.env.ELEVENLABS_URL || "https://api.elevenlabs.io";
 const EL_MODEL = process.env.ELEVENLABS_MODEL || "eleven_flash_v2_5";
 // Standard: „George“ – warm, britisch, ruhig. Eigene Stimme über ELEVENLABS_VOICE_ID.
 const EL_VOICE = process.env.ELEVENLABS_VOICE_ID || "JBFqnCBsd6RMkjVDRZzb";
+const EL_LANGUAGE = process.env.ELEVENLABS_LANGUAGE ?? "de"; // erzwingt Deutsch (Flash/Turbo v2.5); leer = automatisch
+const EL_SPEED = Number(process.env.ELEVENLABS_SPEED) || 1; // 0.7 – 1.2
 
 export const sttEnabled = () => Boolean(process.env.DEEPGRAM_API_KEY);
 export const ttsEnabled = () => Boolean(process.env.ELEVENLABS_API_KEY);
@@ -311,18 +314,18 @@ class SpeechStream {
   push(text) {
     this.buffer += text;
     for (;;) {
-      const m = this.buffer.match(/^[\s\S]*?(?:[.!?…](?=\s)|\n\n)/);
-      if (!m || m[0].trim().length < 2) break;
-      if (m[0].length < 25 && !/\n\n$/.test(m[0]) && this.seq > 0) {
+      // satzEnde kennt Abkürzungen und Daten („ca.“, „z. B.“, „19.10.“) – dort wird nicht getrennt.
+      const ende = satzEnde(this.buffer);
+      if (ende < 0) break;
+      let laenge = ende;
+      if (ende < 25 && this.seq > 0 && !/\n\s*$/.test(this.buffer.slice(0, ende))) {
         // Sehr kurze Sätze (außer dem ersten) mit dem nächsten zusammenfassen – klingt natürlicher.
-        const rest = this.buffer.slice(m[0].length).match(/^[\s\S]*?(?:[.!?…](?=\s)|\n\n)/);
-        if (!rest) break;
-        this.say(m[0] + rest[0]);
-        this.buffer = this.buffer.slice(m[0].length + rest[0].length);
-        continue;
+        const rest = satzEnde(this.buffer.slice(ende));
+        if (rest < 0) break;
+        laenge += rest;
       }
-      this.say(m[0]);
-      this.buffer = this.buffer.slice(m[0].length);
+      this.say(this.buffer.slice(0, laenge));
+      this.buffer = this.buffer.slice(laenge);
     }
   }
 
@@ -333,10 +336,13 @@ class SpeechStream {
   }
 
   say(text) {
-    const clean = cleanForSpeech(text);
+    const clean = sprechbar(text);
     if (!clean || this.signal.aborted) return;
     const seq = this.seq++;
-    const audio = synthesize(clean, this.signal).catch((err) => {
+    // Der vorige Satz als Kontext hält Tonfall und Tempo über die Satzgrenzen gleich.
+    const previous = this.previous;
+    this.previous = clean;
+    const audio = synthesize(clean, this.signal, previous).catch((err) => {
       if (!this.signal.aborted) {
         console.error("[elevenlabs]", err.message);
         this.conn.send({ type: "error", message: `Sprachausgabe fehlgeschlagen (${err.message}).` });
@@ -350,25 +356,16 @@ class SpeechStream {
   }
 }
 
-function cleanForSpeech(s) {
-  return s
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/https?:\/\/\S+/g, "")
-    .replace(/[*_#`>|~]/g, "")
-    .replace(/^\s*[-•]\s+/gm, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-async function synthesize(text, signal) {
+async function synthesize(text, signal, previous) {
   const res = await fetch(`${EL_URL}/v1/text-to-speech/${EL_VOICE}/stream?output_format=mp3_44100_128`, {
     method: "POST",
     headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" },
     body: JSON.stringify({
       text,
       model_id: EL_MODEL,
-      voice_settings: { stability: 0.55, similarity_boost: 0.75, style: 0.15, use_speaker_boost: true },
+      ...(EL_LANGUAGE && /v2_5|v3/.test(EL_MODEL) && { language_code: EL_LANGUAGE }),
+      ...(previous && { previous_text: previous }),
+      voice_settings: { stability: 0.55, similarity_boost: 0.75, style: 0.15, use_speaker_boost: true, speed: EL_SPEED },
     }),
     signal,
   });

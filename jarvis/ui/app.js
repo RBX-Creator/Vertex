@@ -522,7 +522,9 @@
   const ttsOn = () => state.user?.settings.sprachausgabe;
   const speaking = () => speechQueue > 0 || player.playing;
 
+  // Sprechtext (sprechtext.js, als Modul geladen): „119,99 €“ → „119 Euro 99“, „19.10.“ → „19. Oktober“ …
   function cleanForSpeech(s) {
+    if (window.Sprechtext) return window.Sprechtext.sprechbar(s);
     return s
       .replace(/```[\s\S]*?```/g, " ")
       .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
@@ -532,13 +534,26 @@
       .trim();
   }
 
+  // Ende des ersten fertigen Satzes oder -1. Trennt nicht bei „ca.“, „z. B.“ oder „19.10.“.
+  function satzEnde(t) {
+    if (window.Sprechtext) return window.Sprechtext.satzEnde(t);
+    const m = t.match(/^[\s\S]*?[.!?…](?=\s)/);
+    return m ? m[0].length : -1;
+  }
+
   function feedSpeech(turn, chunk) {
     if (!synth || !ttsOn()) return;
     turn.speech += chunk;
-    const m = turn.speech.match(/^[\s\S]*?[.!?…:](?=\s)/);
-    if (m && m[0].length > 12) {
-      speak(m[0]);
-      turn.speech = turn.speech.slice(m[0].length);
+    for (;;) {
+      // Sehr kurze Sätze („Sehr wohl.“) mit dem nächsten zusammen sprechen.
+      let ende = satzEnde(turn.speech);
+      while (ende >= 0 && ende <= 12) {
+        const rest = satzEnde(turn.speech.slice(ende));
+        ende = rest < 0 ? -1 : ende + rest;
+      }
+      if (ende < 0) break;
+      speak(turn.speech.slice(0, ende));
+      turn.speech = turn.speech.slice(ende);
     }
   }
 
@@ -550,6 +565,25 @@
   function pickVoice() {
     const wanted = state.user?.settings.stimme;
     return state.voices.find((v) => v.name === wanted) || state.voices.find((v) => v.lang.startsWith("de"));
+  }
+
+  // Beste Stimme zuerst: Premium/Erweitert > Siri (Martin, Helena) > Anna & Co. Spielzeugstimmen und
+  // Eloquence (Reed, Eddy, Flo …) klingen blechern und landen hinten.
+  const STIMMEN_RANG = [
+    [/premium/i, 40],
+    [/enhanced|erweitert|verbessert/i, 30],
+    [/natural|neural|online|google/i, 15],
+    [/siri/i, 12],
+    [/\bmartin\b/i, 10], [/\bmarkus\b/i, 9], [/\b(yannick|viktor)\b/i, 8], [/\b(helena|anna)\b/i, 7], [/\bpetra\b/i, 6],
+  ];
+  const SPIELZEUG =
+    /eloquence|\b(albert|bahh|bells|boing|bubbles|cellos|jester|organ|superstar|trinoids|whisper|wobble|zarvox|good news|bad news|reed|eddy|rocko|grandpa|grandma|shelley|sandy|flo)\b/i;
+  function voiceScore(v) {
+    const id = `${v.name} ${v.voiceURI}`;
+    let s = /^de[-_]DE/i.test(v.lang) ? 5 : 0;
+    for (const [re, p] of STIMMEN_RANG) if (re.test(id)) s += p;
+    if (SPIELZEUG.test(id)) s -= 30;
+    return s;
   }
 
   function speak(text) {
@@ -592,11 +626,19 @@
   function loadVoices() {
     if (!synth) return;
     state.voices = synth.getVoices().filter((v) => /^(de|en)/.test(v.lang));
-    state.voices.sort((a, b) => b.lang.startsWith("de") - a.lang.startsWith("de") || a.name.localeCompare(b.name));
+    state.voices.sort(
+      (a, b) => b.lang.startsWith("de") - a.lang.startsWith("de") || voiceScore(b) - voiceScore(a) || a.name.localeCompare(b.name),
+    );
   }
   if (synth) {
     loadVoices();
     synth.onvoiceschanged = loadVoices;
+    // iOS liefert die Stimmenliste verzögert und meldet sich nicht immer – kurz nachfragen.
+    let versuche = 0;
+    const warten = setInterval(() => {
+      loadVoices();
+      if (state.voices.length || ++versuche >= 12) clearInterval(warten);
+    }, 250);
   }
 
   // ---------- Spracheingabe ----------
