@@ -1,0 +1,33 @@
+# Dauerbetrieb auf einem Server:  docker compose up -d --build
+# Caddy holt automatisch ein HTTPS-Zertifikat für VERTEX_DOMAIN (Pflicht fürs Mikrofon am Handy).
+services:
+  vertex:
+    build: .
+    restart: unless-stopped
+    env_file: config/.env
+    environment:
+      VERTEX_DATA_DIR: /data
+      PORT: "3000"
+    volumes:
+      - ./data:/data
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - vertex
+    env_file: config/.env
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

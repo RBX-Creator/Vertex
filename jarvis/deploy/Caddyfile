@@ -1,4 +1,0 @@
-# HTTPS automatisch über Let's Encrypt. WebSocket (/api/voice) und Streaming laufen direkt durch.
-{$JARVIS_DOMAIN} {
-	reverse_proxy jarvis:3000
-}

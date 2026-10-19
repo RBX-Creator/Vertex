@@ -1,0 +1,4 @@
+# HTTPS automatisch über Let's Encrypt. WebSocket (/api/voice) und Streaming laufen direkt durch.
+{$VERTEX_DOMAIN} {
+	reverse_proxy vertex:3000
+}
