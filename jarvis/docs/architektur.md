@@ -63,27 +63,19 @@ Orb ◄── echter Pegel (Mikrofon beim Zuhören, Stimme beim Sprechen)
   `ELEVENLABS_MODEL`. Jeder Dienst ist optional (Ersatz: Browser-Sprache bzw. Claude allein).
 - **Wake-Word (später):** „Jarvis“ via Picovoice Porcupine oder openWakeWord lokal im Client.
 
-## Schicht 3 – Hand
+## Schicht 3 – Hände, Augen, Anbindungen
 
-```
-Jarvis-Server ──Tool-Call──► Hand-Agent auf dem PC  (baut ausgehende WebSocket-
-                                    Verbindung zum Server auf → kein offener Port am PC)
-                                        ├─ Browser: Playwright (eigenes Chrome-Profil)
-                                        ├─ Desktop: Claude Computer Use (Screenshot + Maus/Tastatur)
-                                        └─ System: Apps öffnen, Dateien, Shell (Allowlist)
-```
-
-- **Warum ein Agent auf dem PC?** Der Server läuft dauerhaft in der Cloud, aber den Rechner
-  steuern kann nur etwas, das *auf* dem Rechner läuft. Der Hand-Agent meldet sich beim Server
-  an und nimmt Aufträge entgegen. So kann der Master per Handy sagen „Öffne mir das Dashboard“,
-  und der PC zu Hause tut es.
-- **Werkzeuge als MCP-Server:** Browser- und Computer-Steuerung werden als MCP-Tools angeboten.
-  Dann funktionieren sie identisch in Claude Code (lokal) und im Agent-SDK-Server.
-- **Sicherheit:** Die Stufen 🟢/🟡/🔴 aus `core/rules.md` werden im Agent technisch erzwungen,
-  nicht nur per Prompt: 🔴-Aktionen brauchen eine Bestätigung, die auf dem Handy angezeigt wird.
-  Inhalte von Webseiten gelten als Daten, nie als Befehle.
-- **Handy steuern (später):** Android über ADB / Accessibility-Service, iOS über
-  Kurzbefehle (Shortcuts), die per URL/Webhook ausgelöst werden.
+- **Hände (Server):** `browser.js` – Chromium auf dem Server, gesteuert vom Arbeitsmodus über das
+  Werkzeug `browser`. Pro Person ein Profil. 🔴-Aktionen technisch gesperrt ohne `freigabe` im Auftrag.
+  Details: [`../hand/README.md`](../hand/README.md).
+- **Augen:** Die App verkleinert Fotos (max. 1280 px, JPEG) und schickt sie über `/api/voice`.
+  Gemini bekommt das Bild als `inlineData`; die Fähigkeit `augen.md` sagt, was zu tun ist
+  (Essen → `/memories/ich/tracking/ernaehrung/…`, Ware → Marktwert-Auftrag, Belege → Zahlen/Aufgaben).
+  Fotos werden nicht gespeichert, nur das Ergebnis.
+- **Gedächtnis-Anbindungen:** `verbindungen.js` – Kalender per ICS-Abo-Link (inkl. Serienterminen),
+  Postfach per IMAP (lesen ohne als gelesen zu markieren, Entwürfe ablegen). Zugangsdaten in
+  `data/users/<id>/verbindungen.json` (Rechte 600), nie an App oder KI zurückgegeben.
+  Werkzeuge `kalender`, `postfach`, `mail_entwurf` stehen Gemini und Claude zur Verfügung (`tools.js`).
 
 ## Deployment (dauerhaft laufend)
 

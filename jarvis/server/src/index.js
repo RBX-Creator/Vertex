@@ -12,14 +12,18 @@ const brain = await import("./brain.js");
 const jarvis = await import("./jarvis.js");
 const voice = await import("./voice.js");
 const worker = await import("./worker.js");
+const verbindungen = await import("./verbindungen.js");
+const { userDir } = await import("./paths.js");
+const path = (await import("node:path")).default;
 
 await users.initUsers();
 await brain.ensureTeamBrain();
 await worker.recoverJobs(users.allUserIds());
+for (const id of users.allUserIds()) await brain.ensureUserBrain(id);
 
 const app = express();
 app.set("trust proxy", 1);
-app.use(express.json({ limit: "300kb" }));
+app.use(express.json({ limit: "6mb" })); // Fotos aus der Kamera
 
 // ---------- Anmeldung ----------
 
@@ -56,7 +60,7 @@ const handle = (fn) => async (req, res) => {
   try {
     await fn(req, res);
   } catch (err) {
-    if (err instanceof users.UserError || err instanceof brain.MemoryError) {
+    if (err instanceof users.UserError || err instanceof brain.MemoryError || err instanceof verbindungen.VerbindungsFehler) {
       return res.status(400).json({ error: err.message });
     }
     console.error(err);
@@ -136,10 +140,40 @@ app.get(
   handle(async (req, res) => {
     const verlauf = [];
     for (const m of await jarvis.loadHistory(req.user.id)) {
-      if (m.job) verlauf.push({ role: "job", titel: m.job.titel, status: m.job.status, content: m.job.ergebnis });
+      if (m.job) verlauf.push({ role: "job", id: m.job.id, bild: m.job.bild, titel: m.job.titel, status: m.job.status, content: m.job.ergebnis });
       else if (!m.hidden) verlauf.push({ role: m.role, content: m.content });
     }
     res.json({ verlauf });
+  }),
+);
+
+// ---------- Verbindungen (Kalender, Postfach) ----------
+
+app.get(
+  "/api/verbindungen",
+  requireUser,
+  handle(async (req, res) => res.json(await verbindungen.publicView(req.user.id))),
+);
+
+app.put(
+  "/api/verbindungen",
+  requireUser,
+  handle(async (req, res) => res.json(await verbindungen.update(req.user.id, req.body || {}))),
+);
+
+app.post(
+  "/api/verbindungen/test",
+  requireUser,
+  handle(async (req, res) => res.json(await verbindungen.testen(req.user.id))),
+);
+
+// Bildschirmfoto, das der Arbeitsmodus für den Nutzer gemacht hat
+app.get(
+  "/api/bild/:jobId",
+  requireUser,
+  handle(async (req, res) => {
+    if (!/^[a-f0-9-]{1,40}$/.test(req.params.jobId)) return res.status(404).end();
+    res.sendFile(path.join(userDir(req.user.id), "bilder", `${req.params.jobId}.jpg`), (err) => err && res.status(404).end());
   }),
 );
 
@@ -185,11 +219,19 @@ app.post(
   "/api/chat",
   requireUser,
   handle(async (req, res) => {
-    const text = String(req.body?.text || "").trim().slice(0, 8000);
+    const image = parseImage(req.body?.image);
+    const text = String(req.body?.text || "").trim().slice(0, 8000) || (image ? "[Foto ohne Kommentar]" : "");
     if (!text) return res.status(400).json({ error: "Leere Nachricht." });
-    await streamTurn(req, res, text, { voice: Boolean(req.body?.voice) });
+    await streamTurn(req, res, text, { voice: Boolean(req.body?.voice), image });
   }),
 );
+
+function parseImage(img) {
+  if (!img || typeof img.data !== "string") return undefined;
+  if (!/^image\/(jpeg|png|webp)$/.test(img.mime)) return undefined;
+  if (img.data.length > 5_500_000) return undefined;
+  return { mime: img.mime, data: img.data };
+}
 
 // Beim Öffnen der App (ohne Sprach-Verbindung): Begrüßung bzw. einmal pro Tag Briefing.
 app.post(

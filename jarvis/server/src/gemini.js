@@ -2,6 +2,7 @@
 // gibt längere Aufgaben per Werkzeug an den Claude-Arbeitsmodus ab.
 import { GoogleGenAI, ApiError } from "@google/genai";
 import { runMemoryCommand, MemoryError } from "./brain.js";
+import { availableTools, findTool } from "./tools.js";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const MAX_ROUNDS = 8;
@@ -44,7 +45,8 @@ const FUNCTIONS = [
   {
     name: "auftrag_an_claude",
     description:
-      "Gibt eine Aufgabe, die länger dauert (Recherche im Internet, Preise prüfen, Texte schreiben, Analysen, Pläne), " +
+      "Gibt eine Aufgabe, die länger dauert (Recherche im Internet, Preise prüfen, Texte schreiben, Analysen, Pläne, " +
+      "Webseiten bedienen, etwas in einen Warenkorb legen, Postfach durcharbeiten), " +
       "an den Arbeitsmodus ab. Läuft im Hintergrund; das Ergebnis kommt später automatisch. " +
       "Der Auftrag muss ohne das Gespräch verständlich sein.",
     parametersJsonSchema: {
@@ -52,6 +54,12 @@ const FUNCTIONS = [
       properties: {
         titel: { type: "string", description: "Kurzer Titel, 2–6 Wörter" },
         auftrag: { type: "string", description: "Vollständige Aufgabe mit Ziel, Kontext und gewünschtem Format" },
+        freigabe: {
+          type: "string",
+          description:
+            "NUR wenn der Nutzer eine 🔴-Aktion ausdrücklich bestätigt hat (z. B. „Ja, bestell es“): genau, was erlaubt ist " +
+            "(was, wo, Höchstbetrag). Sonst weglassen.",
+        },
       },
       required: ["titel", "auftrag"],
     },
@@ -67,10 +75,17 @@ const FUNCTIONS = [
  * Ein Gesprächszug mit Gemini.
  * tools.startJob({titel, auftrag}) und tools.listJobs() kommen vom Aufrufer.
  */
-export async function geminiTurn({ user, history, text, systemText, out, emit, tools, signal }) {
+export async function geminiTurn({ user, history, text, image, systemText, out, emit, tools, signal }) {
+  const userParts = [{ text }];
+  if (image) userParts.unshift({ inlineData: { mimeType: image.mime, data: image.data } });
   const contents = [
     ...history.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
-    { role: "user", parts: [{ text }] },
+    { role: "user", parts: userParts },
+  ];
+  const shared = await availableTools(user);
+  const declarations = [
+    ...FUNCTIONS,
+    ...shared.map((t) => ({ name: t.name, description: t.description, parametersJsonSchema: t.schema })),
   ];
   let produced = false;
   let lastChunk = "";
@@ -81,7 +96,7 @@ export async function geminiTurn({ user, history, text, systemText, out, emit, t
       contents,
       config: {
         systemInstruction: systemText,
-        tools: [{ functionDeclarations: FUNCTIONS }],
+        tools: [{ functionDeclarations: declarations }],
         thinkingConfig: thinkingConfig(),
         abortSignal: signal,
       },
@@ -137,7 +152,7 @@ async function runFunction(user, call, emit, tools) {
         return { ergebnis: await runMemoryCommand(user.id, args) };
       }
       case "auftrag_an_claude": {
-        const job = await tools.startJob({ titel: args.titel, auftrag: args.auftrag });
+        const job = await tools.startJob({ titel: args.titel, auftrag: args.auftrag, freigabe: args.freigabe });
         emit({ type: "job", job });
         return { ergebnis: `Auftrag ${job.id} läuft im Hintergrund.` };
       }
@@ -145,11 +160,15 @@ async function runFunction(user, call, emit, tools) {
         const jobs = (await tools.listJobs()).slice(-10).map(({ id, titel, status, erstellt }) => ({ id, titel, status, erstellt }));
         return { auftraege: jobs };
       }
-      default:
-        return { fehler: `Unbekannte Funktion ${call.name}` };
+      default: {
+        const tool = findTool(call.name);
+        if (!tool || !(await tool.available(user))) return { fehler: `Unbekannte Funktion ${call.name}` };
+        emit({ type: "tool", name: call.name });
+        return await tool.run(user, args);
+      }
     }
   } catch (err) {
-    if (!(err instanceof MemoryError)) console.error("[gemini-tool]", err);
+    if (!(err instanceof MemoryError) && err.name !== "VerbindungsFehler") console.error("[gemini-tool]", err);
     return { fehler: err.message };
   }
 }

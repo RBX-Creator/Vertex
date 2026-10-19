@@ -141,6 +141,14 @@
     body.className = "md";
     body.innerHTML = renderMarkdown(job.ergebnis || job.content || "");
     el.append(head, body);
+    if (job.bild && job.id) {
+      const img = document.createElement("img");
+      img.className = "shot";
+      img.alt = "Bildschirmfoto";
+      img.src = `/api/bild/${encodeURIComponent(job.id)}`;
+      img.onclick = () => window.open(img.src, "_blank");
+      el.appendChild(img);
+    }
     scrollChat();
   }
 
@@ -173,8 +181,8 @@
     try {
       const { verlauf } = await api("/api/verlauf");
       for (const m of verlauf) {
-        if (m.role === "job") addJobResult({ titel: m.titel, status: m.status, ergebnis: m.content });
-        else addMsg(m.role === "user" ? "user" : "jarvis", m.content);
+        if (m.role === "job") addJobResult({ id: m.id, bild: m.bild, titel: m.titel, status: m.status, ergebnis: m.content });
+        else addMsg(m.role === "user" ? "user" : "jarvis", m.role === "user" ? m.content.replace(/^\[Foto\]/, "📷") : m.content);
       }
     } catch {}
   }
@@ -207,6 +215,9 @@
         if (ev.write) addMsg("note", `◎ Gedächtnis: ${ev.verb} ${ev.path.replace("/memories/", "")}`);
       } else if (ev.type === "job") {
         addMsg("note", `⧗ Auftrag an Claude: ${ev.job.titel}`);
+      } else if (ev.type === "tool") {
+        const names = { kalender: "Kalender", postfach: "Postfach", mail_entwurf: "Mail-Entwurf" };
+        addMsg("note", `⚙ ${names[ev.name] || ev.name}`);
       } else if (ev.type === "error") {
         addMsg("err", ev.message);
         $("subtitle").textContent = ev.message;
@@ -247,6 +258,57 @@
     lastInputWasVoice = false;
     send(t);
   });
+
+  // ---------- Augen: Foto aus der Kamera ----------
+  $("btnCam").addEventListener("click", () => {
+    unlockAudio();
+    $("camInput").click();
+  });
+
+  $("camInput").addEventListener("change", async () => {
+    const file = $("camInput").files[0];
+    $("camInput").value = "";
+    if (!file) return;
+    let img;
+    try {
+      img = await shrinkImage(file, 1280, 0.82);
+    } catch {
+      return addMsg("err", "Foto konnte nicht gelesen werden.");
+    }
+    const text = $("input").value.trim();
+    $("input").value = "";
+    stopSpeaking();
+    const el = addMsg("user", text);
+    const thumb = document.createElement("img");
+    thumb.className = "foto";
+    thumb.src = `data:${img.mime};base64,${img.data}`;
+    el.prepend(thumb);
+    lastInputWasVoice = false;
+    if (sock?.readyState === WebSocket.OPEN) {
+      sock.send(JSON.stringify({ type: "image", mime: img.mime, data: img.data, text }));
+      return;
+    }
+    if (state.busy) return;
+    const turn = newTurn();
+    try {
+      await stream("/api/chat", { text, image: img }, handleEvent(turn));
+    } catch (err) {
+      addMsg("err", err.message);
+    }
+    finishTurn();
+  });
+
+  // Verkleinert ein Foto auf max. `max` Pixel Kantenlänge (JPEG) – spart Zeit und Datenvolumen.
+  async function shrinkImage(file, max, quality) {
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", quality);
+    return { mime: "image/jpeg", data: dataUrl.slice(dataUrl.indexOf(",") + 1) };
+  }
 
   // ---------- Sprach-Verbindung zum Server ----------
   let sock = null;
@@ -302,6 +364,7 @@
       case "text":
       case "memory":
       case "job":
+      case "tool":
       case "error":
         handleEvent(wsTurn || currentTurn || newTurn())(ev);
         break;
@@ -740,6 +803,70 @@
     state.user = null;
     await api("/api/logout", { method: "POST" });
     location.reload();
+  });
+
+  // ---------- Verbindungen (Kalender, Postfach) ----------
+  $("btnVerbindungen").addEventListener("click", async () => {
+    $("vStatus").textContent = "";
+    try {
+      const v = await api("/api/verbindungen");
+      $("vKalender").value = v.kalender.map((k) => (k.name && k.name !== "Kalender" ? `${k.name} | ${k.url}` : k.url)).join("\n");
+      $("vHost").value = v.mail?.host || "";
+      $("vPort").value = v.mail?.port || "";
+      $("vUser").value = v.mail?.user || "";
+      $("vPass").value = "";
+      $("vPass").placeholder = v.mail?.passwortGesetzt ? "gespeichert – leer lassen = unverändert" : "App-Passwort";
+      $("btnVRemoveMail").classList.toggle("hidden", !v.mail);
+    } catch (err) {
+      $("vStatus").textContent = err.message;
+    }
+    $("verbindungen").showModal();
+  });
+
+  function readVerbindungen() {
+    const kalender = $("vKalender")
+      .value.split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => {
+        const [a, b] = l.split("|").map((x) => x.trim());
+        return b ? { name: a, url: b } : { name: "Kalender", url: a };
+      });
+    const body = { kalender };
+    if ($("vHost").value.trim() || $("vUser").value.trim()) {
+      body.mail = { host: $("vHost").value, port: $("vPort").value, user: $("vUser").value, pass: $("vPass").value };
+    }
+    return body;
+  }
+
+  $("btnVSave").addEventListener("click", async () => {
+    try {
+      await api("/api/verbindungen", { method: "PUT", body: readVerbindungen() });
+      $("verbindungen").close();
+    } catch (err) {
+      $("vStatus").textContent = err.message;
+    }
+  });
+
+  $("btnVTest").addEventListener("click", async () => {
+    $("vStatus").textContent = "Teste …";
+    try {
+      await api("/api/verbindungen", { method: "PUT", body: readVerbindungen() });
+      const r = await api("/api/verbindungen/test", { method: "POST" });
+      const parts = [];
+      if (r.kalender) parts.push(`Kalender: ${r.kalender}`);
+      if (r.mail) parts.push(`Postfach: ${r.mail}`);
+      $("vStatus").textContent = parts.join(" · ") || "Noch nichts eingetragen.";
+    } catch (err) {
+      $("vStatus").textContent = err.message;
+    }
+  });
+
+  $("btnVRemoveMail").addEventListener("click", async () => {
+    if (!confirm("Postfach-Verbindung entfernen?")) return;
+    await api("/api/verbindungen", { method: "PUT", body: { mail: null } });
+    $("vHost").value = $("vPort").value = $("vUser").value = $("vPass").value = "";
+    $("btnVRemoveMail").classList.add("hidden");
   });
 
   // ---------- Gedächtnis ----------

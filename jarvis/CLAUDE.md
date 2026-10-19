@@ -11,7 +11,9 @@ Hier wird an Jarvis **gebaut** – Jarvis selbst läuft im Server (`server/`), n
   - `index.js` HTTP-API + SSE-Streaming · `jarvis.js` Prompt, Routing (Gemini/Claude/Demo), Briefing
   - `gemini.js` Gesprächsmodus (Gemini Flash, Funktionen: gedaechtnis, auftrag_an_claude, auftraege)
   - `worker.js` Arbeitsmodus (Claude Sonnet, Memory-Tool + Websuche), Aufträge in data/users/<id>/auftraege.json
-  - `voice.js` WebSocket /api/voice: Deepgram (STT), ElevenLabs (TTS), Unterbrechen, Auftrags-Meldungen
+  - `voice.js` WebSocket /api/voice: Deepgram (STT), ElevenLabs (TTS), Fotos, Unterbrechen, Auftrags-Meldungen
+  - `browser.js` Hände: Chromium (playwright-core) mit 🔴-Sperre · `verbindungen.js` Kalender (ICS) + Postfach (IMAP)
+  - `tools.js` gemeinsame Werkzeuge (kalender, postfach, mail_entwurf) für Gemini und Claude
   - `brain.js` Memory-Tool-Backend (`/memories/ich`, `/memories/team`) mit Pfad-Sandbox
   - `users.js` Profile, scrypt-Passwörter, signierte Tokens
 - `ui/` – Web-App ohne Build-Schritt (Vanilla JS): `orb.js`, `app.js`, `pcm-worklet.js`, `style.css`.
@@ -27,4 +29,4 @@ Hier wird an Jarvis **gebaut** – Jarvis selbst läuft im Server (`server/`), n
   `GEMINI_BASE_URL`, `ANTHROPIC_BASE_URL`, `DEEPGRAM_URL`, `ELEVENLABS_URL`.
 
 ## Roadmap
-Siehe `docs/roadmap.md`. Nächster Schritt: Hand-Agent (`hand/`).
+Siehe `docs/roadmap.md`. Nächster Schritt: Hand-Agent auf dem PC (`hand/`).

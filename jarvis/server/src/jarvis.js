@@ -10,6 +10,7 @@ import { brainSnapshot, countOpenPlaceholders, runMemoryCommand, MemoryError } f
 import { teamNames } from "./users.js";
 import { geminiEnabled, geminiTurn, geminiErrorText } from "./gemini.js";
 import * as worker from "./worker.js";
+import * as verbindungen from "./verbindungen.js";
 
 const MODEL = process.env.JARVIS_MODEL || "claude-opus-5-5";
 const EFFORT = process.env.JARVIS_EFFORT || "low"; // Chat/Sprache: schnell. Für mehr Tiefe: medium/high.
@@ -110,6 +111,10 @@ export function jobTools(user) {
   };
 }
 
+const noNewJobs = async () => {
+  throw new Error("Während einer Auftrags-Rückmeldung werden keine neuen Aufträge gestartet. Frag den Nutzer, ob er einen will.");
+};
+
 // ---------- Ein Gesprächszug ----------
 
 const describeMemory = (input) => {
@@ -125,11 +130,18 @@ const describeMemory = (input) => {
  *   {type:"job", job}                  Auftrag an den Arbeitsmodus gestartet
  *   {type:"error", message}
  * `hidden` = die Eingabe kommt vom System (z. B. App geöffnet) und wird nicht als Chat angezeigt.
+ * `image` = {mime, data(base64)} – ein Foto aus der Kamera („Augen“).
  * `signal` = AbortSignal zum Unterbrechen. `meta` wird am Verlaufseintrag gespeichert (z. B. Auftragsergebnis).
  */
-export async function runTurn(user, text, { voice = false, hidden = false, meta, emit, signal }) {
+export async function runTurn(user, text, { voice = false, hidden = false, image, meta, emit, signal }) {
   const history = await loadHistory(user.id);
-  const userEntry = { role: "user", content: text, ...(hidden ? { hidden: true } : {}), ...(meta || {}) };
+  // Bilder werden nicht im Verlauf gespeichert – nur ein Vermerk.
+  const userEntry = {
+    role: "user",
+    content: image ? (text === "[Foto ohne Kommentar]" ? "[Foto]" : `[Foto] ${text}`) : text,
+    ...(hidden ? { hidden: true } : {}),
+    ...(meta || {}),
+  };
   let answer = "";
   const out = (t) => {
     if (!t || signal?.aborted) return;
@@ -147,14 +159,16 @@ export async function runTurn(user, text, { voice = false, hidden = false, meta,
         user,
         history,
         text,
+        image,
         systemText: `${ctx.core}\n\n---\n\n${ctx.situation}`,
         out,
         emit,
-        tools: jobTools(user),
+        // Während ein fertiger Auftrag gemeldet wird, keine neuen Aufträge (verhindert Schleifen).
+        tools: meta?.job ? { ...jobTools(user), startJob: noNewJobs } : jobTools(user),
         signal,
       });
     } else {
-      await claudeTurn(user, history, text, voice, out, emit, signal);
+      await claudeTurn(user, history, text, image, voice, out, emit, signal);
     }
   } catch (err) {
     if (!signal?.aborted) {
@@ -180,13 +194,18 @@ function errorText(err) {
   return "Interner Fehler.";
 }
 
-async function claudeTurn(user, history, text, voice, out, emit, signal) {
+async function claudeTurn(user, history, text, image, voice, out, emit, signal) {
   client ??= new Anthropic();
   const system = claudeSystem(await buildContext(user, { voice }));
   // Verlauf nur als Text (ohne Denk-/Tool-Blöcke) – innerhalb eines Zugs wird nur angehängt.
   const messages = [
     ...history.map(({ role, content }) => ({ role, content })),
-    { role: "user", content: text },
+    {
+      role: "user",
+      content: image
+        ? [{ type: "image", source: { type: "base64", media_type: image.mime, data: image.data } }, { type: "text", text }]
+        : text,
+    },
   ];
   let jsonRetries = 0;
   let lastChunk = "";
@@ -283,13 +302,24 @@ export async function openHint(user) {
         .map((j) => `- „${j.titel}“ (${j.status}): ${j.ergebnis.split("\n")[0].slice(0, 300)}`)
         .join("\n")}`
     : "";
+  let termine = "";
+  if (firstToday && user.settings.autoBriefing && (await verbindungen.hasKalender(user.id))) {
+    try {
+      const t = await verbindungen.termine(user.id, 2);
+      termine = t.length
+        ? `\nTermine heute und morgen:\n${t.map((x) => `- ${x.tag} ${x.zeit}: ${x.titel}${x.ort ? ` (${x.ort})` : ""}`).join("\n")}`
+        : "\nKeine Termine heute und morgen.";
+    } catch (err) {
+      termine = `\n(Kalender gerade nicht erreichbar: ${err.message})`;
+    }
+  }
   if (neu) {
     return `[System: Der Nutzer hat die App zum allerersten Mal geöffnet. Stell dich in zwei, drei Sätzen vor – im Jarvis-Stil – und stell genau eine Frage, mit der du ihn kennenlernst.]`;
   }
   if (!firstToday || !user.settings.autoBriefing) {
     return `[System: Der Nutzer ist wieder da.${berichte}]`;
   }
-  return `[System: Der Nutzer hat die App heute zum ersten Mal geöffnet. Gib das Briefing.${berichte}]`;
+  return `[System: Der Nutzer hat die App heute zum ersten Mal geöffnet. Gib das Briefing.${termine}${berichte}]`;
 }
 
 export const jobDoneHint = (job) =>

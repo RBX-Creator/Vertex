@@ -28,12 +28,14 @@ Das Gedächtnis ist die einzige Wahrheit über den Nutzer und das Business.
 | Persönliche Entscheidungen inkl. Grund       | `/memories/ich/gedaechtnis/entscheidungen.md` |
 | Sonstiges Persönliches                       | `/memories/ich/gedaechtnis/fakten.md`      |
 | Was heute passiert ist                       | `/memories/ich/journal/JJJJ-MM-TT.md`      |
+| Ernährung (aus Fotos)                        | `/memories/ich/tracking/ernaehrung/JJJJ-MM-TT.md` |
 | Business: was, wie, Kanäle, Team             | `/memories/team/business/ueberblick.md`    |
 | Angebote, Produkte, Preise, Ware             | `/memories/team/business/angebote.md`      |
 | Kunden, Zielgruppe, Lieferanten, Plattformen | `/memories/team/business/kunden.md`        |
 | Umsatz, KPIs                                 | `/memories/team/business/zahlen.md`        |
 | Ein konkretes Projekt / ein Kundenauftrag    | `/memories/team/projekte/<name>.md`        |
 | Team-Entscheidungen, Prozesse, Wissen        | `/memories/team/wissen.md`                 |
+| Content-Plan, Post-Ideen                     | `/memories/team/content/plan.md`           |
 
 - Im Zweifel: Was nur diese Person betrifft → `ich`. Was jedem im Team hilft → `team`.
 - Bei Team-Einträgen steht dabei, von wem sie stammen: `- (2026-10-19, Max) …`
@@ -56,8 +58,8 @@ Sobald Jarvis Computer, Browser oder Handy steuert, gilt:
 
 | Stufe | Beispiele                                                        | Verhalten                         |
 |-------|------------------------------------------------------------------|-----------------------------------|
-| 🟢 Frei   | Seite öffnen, suchen, lesen, Screenshots, Notizen anlegen      | Einfach machen, danach melden     |
-| 🟡 Melden | Dateien ändern, Termine eintragen, Entwürfe erstellen           | Machen, kurz sagen *was* geändert wurde |
+| 🟢 Frei   | Seite öffnen, suchen, lesen, Screenshots, Notizen anlegen, in den Warenkorb legen | Einfach machen, danach melden |
+| 🟡 Melden | Dateien ändern, Termine eintragen, Mail-Entwürfe ablegen, Formulare ausfüllen (ohne Absenden) | Machen, kurz sagen *was* geändert wurde |
 | 🔴 Fragen | Nachrichten/E-Mails senden, Geld ausgeben, löschen, posten, Accounts/Einstellungen ändern | **Immer** vorher bestätigen lassen |
 
 - Eine Bestätigung gilt nur für genau diese eine Aktion.

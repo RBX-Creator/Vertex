@@ -66,6 +66,15 @@ Am Ende zeigt es die Adresse und den **Team-Code**.
 
 Teammitglieder machen dasselbe mit ihrem eigenen Namen – jeder bekommt sein eigenes Gedächtnis.
 
+## 6. (Optional) Kalender und Postfach verbinden
+
+In der App: ⚙ → **Verbindungen**. Jede Person verbindet ihren eigenen Kalender und ihr Postfach.
+- **Kalender:** den privaten ICS-Abo-Link einfügen (Anleitung steht im Dialog). Jarvis liest Termine
+  und nennt sie im Morgen-Briefing.
+- **Postfach:** IMAP-Server, E-Mail und ein **App-Passwort** (nicht das normale Passwort).
+  Jarvis liest neue Mails und legt Antworten als Entwurf ab – senden tust du selbst.
+- „Testen“ zeigt sofort, ob es klappt.
+
 ---
 
 ## Pflege

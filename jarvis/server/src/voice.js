@@ -19,7 +19,7 @@ export const ttsEnabled = () => Boolean(process.env.ELEVENLABS_API_KEY);
 const connections = new Map(); // userId → Set<Connection>
 
 export function attachVoice(server, authenticate) {
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 1 << 20 });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 6 << 20 }); // Fotos bis ~4 MB
 
   server.on("upgrade", (req, socket, head) => {
     let user = null;
@@ -42,7 +42,9 @@ export function attachVoice(server, authenticate) {
     if (conns.length === 0) return; // wird beim nächsten Öffnen gemeldet
     for (const c of conns) c.send({ type: "job_done", job });
     worker.markReported(userId, job.id);
-    conns[0].queueHidden(jarvis.jobDoneHint(job), { job: { titel: job.titel, ergebnis: job.ergebnis, status: job.status } });
+    conns[0].queueHidden(jarvis.jobDoneHint(job), {
+      job: { id: job.id, titel: job.titel, ergebnis: job.ergebnis, status: job.status, ...(job.bild ? { bild: true } : {}) },
+    });
   });
 }
 
@@ -102,6 +104,14 @@ class Connection {
       case "text": {
         const text = String(msg.text || "").trim().slice(0, 8000);
         if (text) this.startTurn(text, { voice: Boolean(msg.voice) });
+        break;
+      }
+      case "image": {
+        // „Augen“: Foto aus der Kamera, optional mit Frage
+        const ok = typeof msg.data === "string" && /^image\/(jpeg|png|webp)$/.test(msg.mime) && msg.data.length < 5_500_000;
+        if (!ok) return this.send({ type: "error", message: "Foto ungültig oder zu groß." });
+        const text = String(msg.text || "").trim().slice(0, 2000) || "[Foto ohne Kommentar]";
+        this.startTurn(text, { voice: Boolean(msg.voice), image: { mime: msg.mime, data: msg.data } });
         break;
       }
       case "listen":
@@ -210,7 +220,7 @@ class Connection {
     else this.startTurn(text, { hidden: true, voice: true, meta });
   }
 
-  async startTurn(text, { voice = false, hidden = false, meta } = {}) {
+  async startTurn(text, { voice = false, hidden = false, meta, image } = {}) {
     // Neue Eingabe unterbricht die laufende Antwort.
     const mine = (this.turnSeq = (this.turnSeq || 0) + 1);
     if (this.turn) {
@@ -222,7 +232,7 @@ class Connection {
     const tts = ttsEnabled() && this.user.settings.sprachausgabe ? new SpeechStream(this, abort.signal) : null;
     const turn = { abort };
     this.turn = turn;
-    this.send({ type: "turn_start", hidden, ...(meta?.job ? { job: meta.job } : {}) });
+    this.send({ type: "turn_start", hidden });
 
     turn.done = (async () => {
       try {
@@ -230,6 +240,7 @@ class Connection {
           voice,
           hidden,
           meta,
+          image,
           signal: abort.signal,
           emit: (ev) => {
             if (abort.signal.aborted) return;

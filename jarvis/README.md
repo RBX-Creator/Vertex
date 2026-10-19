@@ -1,20 +1,20 @@
 # JARVIS – persönlicher KI-Assistent fürs Team
 
-Wie ein Satz durch Jarvis läuft:
+**Der Server ist der Rahmen** – alles lebt darin und läuft durch, ohne dass man etwas anschalten muss.
+
+| Baustein | Was er tut | Umsetzung |
+|----------|-----------|-----------|
+| **Kopf** – denkt und entscheidet | Schnelles Modell fürs Gespräch, starkes für die Arbeit | Gemini Flash (Gespräch) · Claude Sonnet (Aufträge im Hintergrund) |
+| **Stimme** – hört und spricht | Sprache rein, Stimme raus, oranger Orb | Deepgram (hört) · ElevenLabs (spricht) |
+| **Hände** – erledigt statt bespricht | Öffnet Seiten, legt in den Warenkorb, schreibt Mails, plant Content | Browser auf dem Server · Mail-Entwürfe · Content-Plan · 🔴 nur mit Freigabe |
+| **Augen** – sieht, was du siehst | Kamera aufs Essen → Nährwerte im Tracking; Ware, Belege erkennen | Foto aus der App → Gemini Vision |
+| **Gedächtnis** – kennt dein Geschäft | Kunden, Kalender, Postfach, Zahlen – ohne dass du etwas erklärst | Gedächtnis pro Person + Team · Kalender (ICS) · Postfach (IMAP) |
 
 ```
-   Handy / PC (Web-App mit orangem Orb)
-        │ Sprache                                             ▲ Stimme
-        ▼                                                     │
-┌──────────────────────────── Server (läuft dauerhaft) ───────┴──────────────────┐
-│  Deepgram      → hört      (Sprache wird Text, noch während du redest)         │
-│  Gemini Flash  → antwortet (führt das Gespräch, entscheidet, was zu tun ist)   │
-│  Claude Sonnet → arbeitet  (übernimmt alles, was länger dauert, meldet sich)   │
-│  ElevenLabs    → spricht   (aus der Antwort wird seine Stimme)                 │
-│                                                                                │
-│  Gehirn: core/ (Persönlichkeit, Regeln) + Gedächtnis pro Person + Team         │
-│  Hand:   später Agent auf dem PC (Browser, Apps) – siehe hand/                 │
-└────────────────────────────────────────────────────────────────────────────────┘
+Du sprichst → Deepgram → Gemini Flash ──────────────────────────→ ElevenLabs → du hörst
+                            ├─ Gedächtnis · Kalender · Postfach
+                            └─ Auftrag → Claude Sonnet (Websuche, Browser, Mail-Entwürfe)
+                                           └─ meldet sich von selbst, wenn fertig
 ```
 
 **Auf einen Server bringen (für Handy):** [`docs/server-einrichten.md`](docs/server-einrichten.md)
@@ -47,6 +47,8 @@ Dann: Profil anlegen → Orb antippen → reden. Jarvis lernt aus jedem Gespräc
 | `voice/` | Beschreibung der Sprach-Pipeline. |
 | `hand/` | Plan für die Computersteuerung (Phase 4). |
 | `deploy/` | Installations-, Update- und Backup-Skript, Caddy-Konfiguration (HTTPS). |
+| `server/src/browser.js` | Die Hände: Chromium auf dem Server, mit Sperre für 🔴-Aktionen. |
+| `server/src/verbindungen.js` | Kalender (ICS) und Postfach (IMAP) pro Person. |
 | `config/.env.example` | Alle Einstellungen. Echte Werte in `config/.env` (nicht im Git). |
 | `data/` | **Laufzeitdaten** – Profile, Gedächtnisse, Verläufe. Wird nie committet. |
 | `Dockerfile`, `docker-compose.yml` | Dauerbetrieb auf einem Server (Jarvis + Caddy). |
@@ -54,7 +56,10 @@ Dann: Profil anlegen → Orb antippen → reden. Jarvis lernt aus jedem Gespräc
 
 ## Datenschutz
 
-Persönliche Daten liegen ausschließlich in `data/` auf dem Server – nicht im Git-Repo.
+Persönliche Daten liegen ausschließlich in `data/` auf **deinem** Server – nicht im Git-Repo,
+nicht bei einem Anbieter. Ehrlich dazu: Was Jarvis gerade verarbeitet (dein Satz, ein Foto, eine Mail),
+geht zum Beantworten an die jeweilige KI-API (Google, Anthropic, Deepgram, ElevenLabs). Gespeichert
+wird es nur bei dir.
 Jede Person sieht nur ihr eigenes Gedächtnis (`ich`) und das gemeinsame Team-Gedächtnis (`team`).
 Auf einem öffentlich erreichbaren Server **immer** `JARVIS_TEAM_CODE` setzen und HTTPS verwenden.
 

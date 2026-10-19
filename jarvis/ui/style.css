@@ -247,3 +247,15 @@ dialog label.row input { width: 20px; height: 20px; accent-color: var(--orange);
 #memTree .dir { color: var(--muted); padding: 8px 10px 2px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
 #memPath { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); margin: 0 0 8px; }
 #memText { height: 50vh; font-family: ui-monospace, Menlo, monospace; font-size: 13px; resize: vertical; }
+
+/* Verbindungen & Fotos */
+dialog h3 { margin: 18px 0 8px; font-size: 15px; font-weight: 600; }
+.grid2 { display: grid; grid-template-columns: 1fr 90px; gap: 10px; }
+.wide { width: 100%; margin-bottom: 10px; }
+details.hint { margin: -6px 0 12px; }
+details.hint summary { cursor: pointer; color: var(--orange); }
+details.hint p { line-height: 1.5; }
+.msg img.foto { display: block; max-width: 220px; max-height: 220px; border-radius: 10px; margin-bottom: 6px; }
+.msg.job img.shot { display: block; width: 100%; border-radius: 10px; margin-top: 8px; border: 1px solid var(--line); }
+#composer #btnCam { font-size: 17px; }
+@media (max-width: 380px) { #composer button { flex-basis: 42px; height: 42px; } }

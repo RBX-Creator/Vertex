@@ -10,17 +10,15 @@ import { TEMPLATE_DIR, TEAM_DIR, userDir } from "./paths.js";
 const MAX_FILE_BYTES = 200_000;
 const ALLOWED_EXT = new Set([".md", ".txt"]);
 
+// Legt fehlende Vorlagendateien an (auch nach Updates), überschreibt aber nie Vorhandenes.
+const copyMissing = (from, to) => fs.cp(from, to, { recursive: true, force: false, errorOnExist: false });
+
 export async function ensureTeamBrain() {
-  if (!existsSync(TEAM_DIR)) {
-    await fs.cp(path.join(TEMPLATE_DIR, "team"), TEAM_DIR, { recursive: true });
-  }
+  await copyMissing(path.join(TEMPLATE_DIR, "team"), TEAM_DIR);
 }
 
 export async function ensureUserBrain(userId) {
-  const dir = path.join(userDir(userId), "ich");
-  if (!existsSync(dir)) {
-    await fs.cp(path.join(TEMPLATE_DIR, "ich"), dir, { recursive: true });
-  }
+  await copyMissing(path.join(TEMPLATE_DIR, "ich"), path.join(userDir(userId), "ich"));
 }
 
 class MemoryError extends Error {}

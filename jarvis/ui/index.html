@@ -58,6 +58,8 @@
 
     <form id="composer">
       <button type="button" id="btnMic" title="Sprechen">🎙</button>
+      <button type="button" id="btnCam" title="Foto (Jarvis' Augen)">📷</button>
+      <input type="file" id="camInput" accept="image/*" capture="environment" class="hidden" />
       <input id="input" placeholder="Nachricht an Jarvis …" autocomplete="off" />
       <button type="submit" id="btnSend" title="Senden">➤</button>
     </form>
@@ -76,11 +78,49 @@
     </label>
     <label class="row"><input type="checkbox" id="setBriefing" /> Briefing beim ersten Öffnen am Tag</label>
     <label class="row"><input type="checkbox" id="setConvo" /> Gesprächsmodus (nach der Antwort wieder zuhören)</label>
+    <button id="btnVerbindungen" class="ghost wide">Verbindungen: Kalender &amp; Postfach …</button>
     <p class="hint" id="engineInfo"></p>
     <div class="actions">
       <button id="btnClear" class="ghost">Verlauf löschen</button>
       <button id="btnLogout" class="ghost">Abmelden</button>
       <button id="btnCloseSettings" class="primary">Fertig</button>
+    </div>
+  </dialog>
+
+  <!-- Verbindungen -->
+  <dialog id="verbindungen">
+    <h2>Verbindungen</h2>
+    <p class="hint">Nur für dich. Zugangsdaten bleiben auf deinem Server und werden nie angezeigt.</p>
+
+    <h3>Kalender</h3>
+    <label>Abo-Link (ICS), einer pro Zeile – optional „Name | Link“
+      <textarea id="vKalender" rows="3" placeholder="Privat | https://calendar.google.com/calendar/ical/…/basic.ics"></textarea>
+    </label>
+    <details class="hint"><summary>Wo finde ich den Link?</summary>
+      <p><b>Google:</b> calendar.google.com → Einstellungen → Kalender auswählen → „Privatadresse im iCal-Format“.<br />
+      <b>iCloud:</b> Kalender-App → Kalender teilen → „Öffentlicher Kalender“ → Link kopieren.<br />
+      <b>Outlook:</b> Einstellungen → Kalender → Freigegebene Kalender → „Kalender veröffentlichen“ → ICS-Link.</p>
+    </details>
+
+    <h3>Postfach</h3>
+    <div class="grid2">
+      <label>IMAP-Server <input id="vHost" placeholder="imap.gmail.com" autocomplete="off" /></label>
+      <label>Port <input id="vPort" placeholder="993" inputmode="numeric" autocomplete="off" /></label>
+    </div>
+    <label>E-Mail / Benutzer <input id="vUser" autocomplete="off" /></label>
+    <label>App-Passwort <input id="vPass" type="password" autocomplete="new-password" placeholder="unverändert lassen" /></label>
+    <details class="hint"><summary>Was ist ein App-Passwort?</summary>
+      <p>Ein eigenes Passwort nur für Jarvis – nicht dein normales.
+      <b>Gmail:</b> myaccount.google.com → Sicherheit → 2-Faktor an → „App-Passwörter“ (Server imap.gmail.com).
+      <b>iCloud:</b> appleid.apple.com → App-spezifische Passwörter (imap.mail.me.com).
+      <b>Outlook:</b> account.microsoft.com → Sicherheit → App-Kennwörter (outlook.office365.com).
+      Jarvis liest nur und legt Entwürfe ab – er sendet nie selbst.</p>
+    </details>
+    <p id="vStatus" class="hint"></p>
+    <div class="actions">
+      <button id="btnVRemoveMail" class="ghost">Postfach trennen</button>
+      <button id="btnVTest" class="ghost">Testen</button>
+      <button id="btnVSave" class="primary">Speichern</button>
     </div>
   </dialog>
 
