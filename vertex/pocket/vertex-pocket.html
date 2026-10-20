@@ -426,6 +426,8 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
   // Beträge werden in Cent (ganze Zahlen) gespeichert und gerechnet – keine Rundungsfehler.
   // Kaufmännisch runden: 9.995 → 1000 Cent (ohne toPrecision wären es durch Binärbrüche 999).
   const cent = (euro) => Math.round(Number((euro * 100).toPrecision(12)));
+  const glatt = (x) => Number(x.toPrecision(12)); // Binärbruch-Reste weg, bevor gerundet wird
+  const gesetzt = (v) => v !== undefined && v !== null && v !== ""; // leer = unverändert
   function toCents(v, feld = "Betrag") {
     if (v === undefined || v === null) return null;
     if (typeof v === "number") {
@@ -493,6 +495,7 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
     function expr() { let v = term(); while (peek() === "+" || peek() === "-") { const op = take(), r = term(); v = op === "+" ? v + r : v - r; } return v; }
     if (!tokens.length) throw new Error("Leerer Ausdruck");
     const v = expr();
+    if (!Number.isFinite(v)) throw new Error("Ergebnis ist zu groß oder ungültig (z. B. geteilt durch 0).");
     if (i < tokens.length) throw new Error(`Unerwartet: „${tokens[i]}“`);
     return Math.round(v * 1e10) / 1e10;
   }
@@ -503,10 +506,10 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
     const pz = Number(String(gebuehr_prozent ?? 0).replace(",", ".")) || 0;
     const fix = toCents(gebuehr_fix, "Fixgebühr") ?? 0;
     const vs = toCents(versand, "Versand") ?? 0;
-    const gebuehr = Math.round((vk * pz) / 100) + fix;
+    const gebuehr = Math.round(glatt((vk * pz) / 100)) + fix;
     const gewinn = vk - ek - gebuehr - vs;
     // Mindestpreis: vk − vk·p − fix − versand − einkauf ≥ 0  ⇒  vk ≥ (einkauf + fix + versand) / (1 − p)
-    const breakEven = pz < 100 ? Math.ceil((ek + fix + vs) / (1 - pz / 100)) : null;
+    const breakEven = pz < 100 ? Math.ceil(glatt(((ek + fix + vs) * 100) / (100 - pz))) : null; // 6 % auf 38,07 € → 40,50 €, nicht 40,51 €
     return {
       verkauf: eur(vk), einkauf: eur(ek), gebuehren: eur(gebuehr), versand: eur(vs), gewinn: eur(gewinn),
       marge: vk ? pct((gewinn / vk) * 100) : null, roi: ek ? pct((gewinn / ek) * 100) : null,
@@ -634,7 +637,7 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
         }
         x = x || findOne(items, a, "Artikel");
         const warVerkauft = x.status === "verkauft";
-        if (a.status !== undefined) { if (!LAGER_STATUS.includes(a.status)) throw new Error(`status muss einer von ${LAGER_STATUS.join(", ")} sein`); x.status = a.status; }
+        if (gesetzt(a.status)) { if (!LAGER_STATUS.includes(a.status)) throw new Error(`status muss einer von ${LAGER_STATUS.join(", ")} sein`); x.status = a.status; }
         const betrag = (k, feld) => { const c = toCents(a[k], feld); return c == null ? undefined : c; }; // leer = unverändert
         const vk = betrag("verkauf", "Verkauf"), gb = betrag("gebuehren", "Gebühren"), vs = betrag("versand", "Versand"), ek = betrag("einkauf", "Einkauf");
         const neuVerkauft = !warVerkauft && (vk !== undefined || a.status === "verkauft");
@@ -644,7 +647,7 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
         if (gb !== undefined) x.gebuehren_ct = gb;
         if (vs !== undefined) x.versand_ct = vs;
         if (ek !== undefined) x.einkauf_ct = ek;
-        for (const k of ["plattform", "name", "groesse", "zustand", "notiz"]) if (a[k] !== undefined) x[k] = String(a[k]).slice(0, 300);
+        for (const k of ["plattform", "name", "groesse", "zustand", "notiz"]) if (gesetzt(a[k])) x[k] = String(a[k]).slice(0, 300);
         if (x.status === "verkauft") {
           if (x.verkauf_ct == null) throw new Error("Für „verkauft“ fehlt der Verkaufspreis (verkauf).");
           // Wiederverkauf nach Retoure zählt im neuen Monat – nur eine Korrektur behält das alte Datum.
@@ -720,10 +723,10 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
         let x = (a.id && items.find((k) => k.id === a.id)) || items.find((k) => k.name.toLowerCase() === name.toLowerCase());
         const neu = !x;
         x = x || { id: newId(), name: name.slice(0, 120), status: "anfrage", erstellt: new Date().toISOString() };
-        if (a.status !== undefined) { if (!KUNDEN_STATUS.includes(a.status)) throw new Error(`status muss einer von ${KUNDEN_STATUS.join(", ")} sein`); x.status = a.status; }
+        if (gesetzt(a.status)) { if (!KUNDEN_STATUS.includes(a.status)) throw new Error(`status muss einer von ${KUNDEN_STATUS.join(", ")} sein`); x.status = a.status; }
         if (a.betrag !== undefined && toCents(a.betrag, "Betrag") != null) x.betrag_ct = toCents(a.betrag, "Betrag");
         if (a.faellig !== undefined) x.faellig = isDate(a.faellig) ? a.faellig : "";
-        for (const k of ["projekt", "notiz"]) if (a[k] !== undefined) x[k] = String(a[k]).slice(0, 300);
+        for (const k of ["projekt", "notiz"]) if (gesetzt(a[k])) x[k] = String(a[k]).slice(0, 300);
         x.geaendert = new Date().toISOString();
         await cols.put("kunden", x);
         noteTool(`◇ Kunde ${neu ? "neu" : "aktualisiert"}: ${x.name} – ${x.status}${x.betrag_ct != null ? `, ${eur(x.betrag_ct)}` : ""}`);
@@ -748,6 +751,7 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
       description: "Eine Mahlzeit ins heutige Ernährungs-Tracking eintragen (geschätzte Werte). Gibt die exakte Tagessumme und den Rest bis zum Ziel zurück.",
       inputSchema: { type: "object", properties: { mahlzeit: { type: "string" }, kcal: { type: "number" }, eiweiss: { type: "number" }, kh: { type: "number" }, fett: { type: "number" }, zeit: { type: "string", description: "HH:MM, Standard jetzt" } }, required: ["mahlzeit", "kcal"] },
       async execute(a) {
+        if (!String(a.mahlzeit ?? "").trim()) throw new Error("mahlzeit fehlt");
         const name = `ernaehrung-${today()}`;
         const doc = (await store.getStrict(name)) || {};
         const eintraege = Array.isArray(doc.eintraege) ? doc.eintraege : [];
