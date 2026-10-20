@@ -39,6 +39,7 @@ Das Gedächtnis ist die einzige Wahrheit über den Nutzer und das Business.
 | Hörfehler der Spracherkennung (Marken, Fachwörter) | `/memories/team/woerterbuch.md`      |
 | Hörfehler bei persönlichen Namen             | `/memories/ich/woerterbuch.md`             |
 
+- Aufgaben, Lager-Artikel, Kunden-Status und Mahlzeiten führen die Listen-Werkzeuge (Fähigkeit Business) – die Dateien oben sind für Wissen in Worten.
 - Im Zweifel: Was nur diese Person betrifft → `ich`. Was jedem im Team hilft → `team`.
 - Bei Team-Einträgen steht dabei, von wem sie stammen: `- (2026-10-19, Max) …`
 - Jeder neue Eintrag bekommt ein Datum: `- (2026-10-19) …`

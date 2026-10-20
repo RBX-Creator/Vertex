@@ -226,7 +226,13 @@
       } else if (ev.type === "job") {
         addMsg("note", `⧗ Auftrag an Claude: ${ev.job.titel}`);
       } else if (ev.type === "tool") {
-        const names = { kalender: "Kalender", postfach: "Postfach", mail_entwurf: "Mail-Entwurf" };
+        const names = {
+          kalender: "Kalender", postfach: "Postfach", mail_entwurf: "Mail-Entwurf",
+          rechnen: "Rechner", gewinn_berechnen: "Gewinnrechner", lager_hinzufuegen: "Lager: neu", lager_aktualisieren: "Lager: geändert",
+          lager_liste: "Lager", lager_auswertung: "Lager-Auswertung", aufgabe_hinzufuegen: "Aufgabe: neu", aufgabe_erledigen: "Aufgabe erledigt",
+          aufgaben_liste: "Aufgaben", kunde_speichern: "Kunde gespeichert", kunden_liste: "Kunden", ernaehrung_eintragen: "Ernährung: eingetragen",
+          ernaehrung_korrigieren: "Ernährung: korrigiert", ernaehrung_tag: "Ernährung heute",
+        };
         addMsg("note", `⚙ ${names[ev.name] || ev.name}`);
       } else if (ev.type === "korrigiert") {
         if (lastUserEl) lastUserEl.textContent = ev.text;

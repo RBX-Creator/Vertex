@@ -81,7 +81,8 @@ Orb ◄── echter Pegel (Mikrofon beim Zuhören, Stimme beim Sprechen)
 - **Gedächtnis-Anbindungen:** `verbindungen.js` – Kalender per ICS-Abo-Link (inkl. Serienterminen),
   Postfach per IMAP (lesen ohne als gelesen zu markieren, Entwürfe ablegen). Zugangsdaten in
   `data/users/<id>/verbindungen.json` (Rechte 600), nie an App oder KI zurückgegeben.
-  Werkzeuge `kalender`, `postfach`, `mail_entwurf` stehen Gemini und Claude zur Verfügung (`tools.js`).
+  Werkzeuge `kalender`, `postfach`, `mail_entwurf` und die Business-Werkzeuge (`business.js`: Rechner,
+  Gewinn, Lager, Kunden, Aufgaben, Ernährung) stehen Gemini und Claude zur Verfügung (`tools.js`).
 
 ## Deployment (dauerhaft laufend)
 
