@@ -17,6 +17,10 @@ Du sprichst → Deepgram → Gemini Flash ────────────�
                                            └─ meldet sich von selbst, wenn fertig
 ```
 
+**Ohne Server, nur mit dem Handy:** [Vertex Pocket](pocket/README.md) – eine claude.ai-Seite mit Stimme,
+Gedächtnis, Werkzeugen fürs Business und Händen (Claude-Code-Aufträge, Kalender, Gmail-Entwürfe, Drive, Notion,
+Dokumente, Handy-Knöpfe). Läuft über das eigene Claude-Konto, ohne API-Schlüssel.
+
 **Auf einen Server bringen (für Handy):** [`docs/server-einrichten.md`](docs/server-einrichten.md)
 
 ## Schnellstart
