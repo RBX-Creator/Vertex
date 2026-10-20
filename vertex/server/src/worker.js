@@ -214,7 +214,9 @@ async function claudeWork(user, job, system) {
         results.push({ type: "tool_result", tool_use_id: tool.id, content });
         logEntry(toolLog, `${tool.name}(${short(tool.input, 160)}) → ${typeof content === "string" ? short(content, 500) : "[Text + Bildschirmfoto] " + short(content[0]?.text, 300)}`);
       } catch (err) {
-        if (!(err instanceof MemoryError) && err.name !== "VerbindungsFehler") console.error("[auftrag-werkzeug]", tool.name, err.message);
+        if (!(err instanceof MemoryError) && !["VerbindungsFehler", "BusinessFehler"].includes(err.name)) {
+          console.error("[auftrag-werkzeug]", tool.name, err.message);
+        }
         results.push({ type: "tool_result", tool_use_id: tool.id, is_error: true, content: err.message });
         logEntry(toolLog, `${tool.name}(${short(tool.input, 160)}) → FEHLER: ${short(err.message, 300)}`);
       }

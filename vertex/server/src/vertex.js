@@ -7,6 +7,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { CORE_DIR, userDir } from "./paths.js";
 import { brainSnapshot, countOpenPlaceholders, runMemoryCommand, MemoryError } from "./brain.js";
+import { standSnapshot } from "./business.js";
 import { teamNames } from "./users.js";
 import { geminiEnabled, geminiTurn, geminiErrorText } from "./gemini.js";
 import * as worker from "./worker.js";
@@ -67,6 +68,9 @@ async function buildContext(user, { voice, modus }) {
     open > 0
       ? `- Gedächtnis noch lückenhaft (${open} offene Stellen). Nebenbei lernen, nicht verhören.`
       : "- Gedächtnis ist gut gefüllt.",
+    "",
+    "# Stand aus den Listen (exakt, aus den Business-Werkzeugen)",
+    await standSnapshot(user.id),
     "",
     "# Kurzüberblick aus dem Gedächtnis",
     await brainSnapshot(user.id),

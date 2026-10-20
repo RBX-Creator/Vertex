@@ -170,7 +170,7 @@ async function runFunction(user, call, emit, tools) {
       }
     }
   } catch (err) {
-    if (!(err instanceof MemoryError) && err.name !== "VerbindungsFehler") console.error("[gemini-tool]", err);
+    if (!(err instanceof MemoryError) && !["VerbindungsFehler", "BusinessFehler"].includes(err.name)) console.error("[gemini-tool]", err);
     return { fehler: err.message };
   }
 }

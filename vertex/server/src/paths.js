@@ -16,3 +16,9 @@ export const TEAM_DIR = path.join(DATA_DIR, "team");
 export const USERS_DIR = path.join(DATA_DIR, "users");
 
 export const userDir = (id) => path.join(USERS_DIR, id);
+
+// Listen der Business-Werkzeuge als JSON: Lager und Kunden fürs Team, Aufgaben und Ernährung pro Person.
+// Bewusst neben den Gedächtnis-Ordnern (TEAM_DIR, users/<id>/ich), nicht darin – sonst könnte das
+// Memory-Tool die Listen lesen, per str_replace verbiegen oder löschen.
+export const TEAM_LISTEN_DIR = path.join(DATA_DIR, "team-listen");
+export const userListenDir = (id) => path.join(userDir(id), "listen");
