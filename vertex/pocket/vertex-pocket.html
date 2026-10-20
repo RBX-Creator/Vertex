@@ -97,6 +97,7 @@ a.btn.aktion { display: block; }
 .round.go { background: var(--orange); color: #1a0a00; }
 .round.stop { background: var(--danger); color: #1a0500; }
 .round.mic { background: var(--panel-2); color: var(--orange); border: 1px solid rgba(255, 122, 26, 0.45); }
+.diktat-hilfe { flex: 0 0 auto; margin: 0 0 6px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255, 122, 26, 0.55); background: var(--orange-soft); font-size: 14px; line-height: 1.45; }
 .tip { flex: 0 0 auto; font-size: 13px; color: var(--muted); text-align: center; margin: 0; padding-bottom: 4px; }
 
 dialog { width: min(560px, calc(100% - 32px)); max-height: calc(100% - 48px); background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 18px; padding: 20px; }
@@ -173,7 +174,8 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
     <button class="chip" data-fill="Neue Aufgabe: ">Aufgabe …</button>
     <button class="chip" data-say="Lern mich kennen. Frag mich das Wichtigste.">Lern mich kennen</button>
   </div>
-  <p class="tip" id="tip">Tipp: 🎙 antippen, dann auf der Tastatur 🎤 – Vertex sendet von selbst, wenn du eine Pause machst.</p>
+  <p class="tip" id="tip">Tipp: 🎙 antippen und sprechen – Vertex sendet von selbst, wenn du eine Pause machst.</p>
+  <p class="diktat-hilfe" id="diktatHilfe" hidden><b>Jetzt unten rechts auf der Tastatur 🎤 antippen und sprechen.</b> Vertex sendet von selbst, wenn du eine Pause machst.<br>Kein 🎤 auf der Tastatur? iPhone-Einstellungen → Allgemein → Tastatur → „Diktierfunktion“ einschalten.</p>
 
   <form class="composer" id="composer" autocomplete="off">
     <label class="round" title="Foto" aria-label="Foto aufnehmen oder wählen" id="camLabel">
@@ -2133,23 +2135,22 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
     return out.map((x) => x.trim()).filter(Boolean);
   }
   // Text in kurze, natürlich gegliederte Stücke teilen (lange Äußerungen brechen auf iOS gern ab).
-  function chunkText(text, max = 180) {
-    const sentences = splitSentences(text);
+  // Jeder Satz eine eigene Äußerung (danach eine kurze Pause) – das klingt ruhiger als ein durchgehender Redeschwall.
+  // Nur Satzfetzen werden angehängt, sehr lange Sätze an Kommas geteilt.
+  function chunkText(text, max = 170) {
     const out = [];
-    let buf = "";
-    for (let s of sentences) {
+    for (let s of splitSentences(text)) {
       while (s.length > max) {
         const cut = Math.max(s.lastIndexOf(", ", max), s.lastIndexOf("; ", max), s.lastIndexOf(" – ", max), s.lastIndexOf(" und ", max));
         const at = cut > 40 ? cut + 1 : s.lastIndexOf(" ", max) > 40 ? s.lastIndexOf(" ", max) : max;
-        if (buf) { out.push(buf); buf = ""; }
         out.push(s.slice(0, at).trim()); s = s.slice(at).trim();
       }
-      if (buf && (buf + " " + s).length > max) { out.push(buf); buf = s; }
-      else buf = buf ? buf + " " + s : s;
+      if (out.length && s.length < 12) out[out.length - 1] += " " + s;
+      else if (s) out.push(s);
     }
-    if (buf) out.push(buf);
     return out;
   }
+  const SATZPAUSE = 280; // ms Stille zwischen zwei Sätzen
 
   // Eigene Warteschlange: immer nur eine Äußerung im System, mit Wächter, falls „onend“ ausbleibt.
   const tts = {
@@ -2174,7 +2175,8 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
         if (this.current !== u) return;
         clearTimeout(this.watchdog);
         this.current = null;
-        this.next();
+        clearTimeout(this.pause);
+        if (this.queue.length) this.pause = setTimeout(() => this.next(), SATZPAUSE); else this.next();
       };
       u.onstart = () => { if (this.current !== u) return; Orb.set("speaking"); setStatus("Spricht – antippen zum Unterbrechen"); };
       u.onboundary = () => Orb.level(0.5 + Math.random() * 0.5);
@@ -2184,7 +2186,7 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
       try { synth.speak(u); } catch { done(); }
     },
     stop() {
-      this.queue = []; this.current = null; clearTimeout(this.watchdog);
+      this.queue = []; this.current = null; clearTimeout(this.watchdog); clearTimeout(this.pause);
       try { synth?.cancel(); } catch {}
     },
     idle() {
@@ -2204,7 +2206,7 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
   setInterval(() => { if (Orb.state === "speaking") Orb.level(0.25 + Math.random() * 0.45); }, 90);
 
   /* ---------------- Einstellungen und Zustand ---------------- */
-  let settings = { anrede: "Master", tts: true, voice: "", rate: 1.0, pitch: 0.95, deep: false, autoSend: true, pause: 2.2, convo: false, auftragFrei: false };
+  let settings = { anrede: "Master", tts: true, voice: "", rate: 0.9, pitch: 1.0, deep: false, autoSend: true, pause: 2.2, convo: false, auftragFrei: false };
   let turns = []; // [{role, content}] – nur Text
   let lastBriefing = "";
 
@@ -2294,6 +2296,18 @@ PERSÖNLICHKEIT
 - Proaktiv: erinnere an fällige Aufgaben, offene Angebote und Ziele, widersprich einmal klar, wenn etwas seinen Zielen schadet. Höchstens ein ungefragter Hinweis pro Antwort.
 - Verboten: „Gute Frage!“, „Gerne helfe ich…“, „Ich hoffe, das hilft“, Emojis, Ausrufezeichen-Ketten, unnötige Entschuldigungen, erfundene Fakten, Raten, das wie Wissen klingt.
 - Ton: „Sehr wohl, ${a}.“ · „Bereits erledigt.“ · „Ein halbes Prozent Unterschied für die Hälfte des Geldes – die Rechnung macht sich von selbst.“
+
+SO KLINGST DU – ruhig, kontrolliert, wie ein Mensch, nicht wie ein Chatbot
+- Sprich wie ein souveräner Stabschef, der seit Jahren für ihn arbeitet: gelassen, knapp, sicher. Nie aufgeregt, nie unterwürfig, nie belehrend.
+- Kurze Sätze. Ein Gedanke pro Satz. Punkte statt Kommaketten – das gibt beim Vorlesen ruhige Pausen.
+- Aussagen statt Fragen. Höchstens EINE Frage pro Antwort, und nur wenn du die Antwort wirklich brauchst. Nicht jede Antwort mit einer Frage beenden.
+- Keine Chatbot-Floskeln, nie: „Danke der Nachfrage“, „Gerne!“, „Natürlich!“, „Absolut!“, „Wenn Sie wollen, …“, „Ich bin bereit“, „Ich bin für Sie da“, „Lassen Sie mich wissen …“, „Zögern Sie nicht …“, „Als KI …“, „Großartig!“, „Super Frage“. Keine Zusammenfassung dessen, was er gerade gesagt hat.
+- Kein Smalltalk-Pingpong: Fragt er, wie es dir geht, antworte kurz und trocken im Charakter und kehr zur Sache zurück.
+- Beispiele für den Ton (die Inhalte sind erfunden – nie als Fakten übernehmen):
+  Er: „Wie geht's dir?“ → Du: „Ausgezeichnet, ${a}. Die Listen sind sauber, der Kaffee ist Ihre Baustelle.“
+  Er: „Was steht heute an?“ → Du: „Drei Dinge. Die Rechnung an Schmidt ist seit gestern fällig. Um zehn haben Sie den Kundentermin. Und die Jordans liegen seit fünfzig Tagen im Lager. Ich würde mit der Rechnung anfangen.“
+  Er: „Hab die Panda Dunks für 140 verkauft.“ → Du: „Eingetragen. 55 Euro Gewinn. Ordentlich.“
+  Er: „Soll ich das Billige nehmen?“ → Du: „Nein. Zwei Euro gespart, dafür ein Wochenende Ärger. Nehmen Sie das andere.“
 - Deine Antwort wird VORGELESEN: kein Markdown, keine Listenzeichen, keine Tabellen, keine Links, kurze Sätze. Beträge mit €-Zeichen, Daten als „19. Oktober“.
 - Beginnt seine Nachricht mit [Sprache], hat er gesprochen: dann besonders kurz (ein bis zwei Sätze), außer er will mehr.
 - Du lernst nebenbei. Verhöre ihn nicht; höchstens eine beiläufige Frage, wenn sie gerade passt.
@@ -2637,20 +2651,69 @@ ${appsFuerPrompt()}
     return ergebnis; // true, Fehlercode oder false – für die Auftrags-Meldungen
   }
 
-  /* ---------------- Sprechen (Eingabe per iPhone-Diktat) ---------------- */
-  // Mikrofon-Zugriff ist in dieser Ansicht gesperrt – das iPhone-Diktat (🎤 auf der Tastatur) ist der Weg.
-  // Im Sprechmodus sendet Vertex von selbst, sobald der Text eine Weile nicht mehr wächst.
-  let listening = false, sendTimer = null;
+  /* ---------------- Sprechen ---------------- */
+  // 1. Wo das Gerät es dieser Seite erlaubt, hört Vertex selbst zu (Spracherkennung) – im Gesprächsmodus freihändig.
+  // 2. Sonst (meist in der Claude-App: Seiten bekommen dort kein Mikrofon) das iPhone-Diktat: 🎤 auf der Tastatur.
+  // In beiden Fällen sendet Vertex von selbst, sobald der Text eine Weile nicht mehr wächst.
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let listening = false, sendTimer = null, erkennung = null, erkennungGeht = Boolean(SR);
+  let tipVorher = null;
+  function diktatHilfe(an) {
+    if (an === !$("diktatHilfe").hidden) return;
+    $("diktatHilfe").hidden = !an;
+    if (an) { tipVorher = $("tip").hidden; $("tip").hidden = true; } else if (tipVorher !== null) { $("tip").hidden = tipVorher; tipVorher = null; }
+    $("input").placeholder = an ? "Jetzt 🎤 auf der Tastatur …" : "Sag etwas zu Vertex …";
+  }
+  function starteErkennung() {
+    if (!erkennungGeht || busy) return false;
+    try {
+      const r = new SR();
+      r.lang = "de-DE"; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
+      let fest = $("input").value.trim() ? $("input").value.trim() + " " : "";
+      r.onresult = (ev) => {
+        let vorlaeufig = "";
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          const t = ev.results[i][0]?.transcript || "";
+          if (ev.results[i].isFinal) fest += t + " "; else vorlaeufig += t;
+        }
+        $("input").value = (fest + vorlaeufig).replace(/\s+/g, " ").trimStart();
+        $("input").dispatchEvent(new Event("input"));
+      };
+      r.onerror = (e) => {
+        // Kein Mikrofon für diese Seite → dauerhaft aufs Tastatur-Diktat wechseln (in dieser Sitzung).
+        if (["not-allowed", "service-not-allowed", "audio-capture", "language-not-supported"].includes(e.error)) {
+          erkennungGeht = false;
+          if (listening) { diktatHilfe(true); setStatus("Tippe auf der Tastatur auf 🎤", true); }
+        }
+      };
+      r.onend = () => {
+        if (erkennung === r) erkennung = null;
+        // Geräte beenden die Erkennung nach Pausen von selbst – solange zugehört wird, weitermachen.
+        if (listening && erkennungGeht && !busy) setTimeout(() => { if (listening && !erkennung && !busy) starteErkennung(); }, 300);
+      };
+      r.start();
+      erkennung = r;
+      return true;
+    } catch {
+      erkennungGeht = false;
+      return false;
+    }
+  }
   function startListening() {
     if (busy) return;
     listening = true;
     $("composer").classList.add("listening");
     Orb.set("listening");
-    setStatus("Hört zu – 🎤 auf der Tastatur", true);
+    if (starteErkennung()) { diktatHilfe(false); setStatus("Ich höre – sprich einfach", true); return; }
+    diktatHilfe(true);
+    setStatus("Tippe auf der Tastatur auf 🎤", true);
     $("input").focus();
   }
   function stopListening(resetOrb = true) {
     listening = false; clearTimeout(sendTimer);
+    const r = erkennung; erkennung = null;
+    try { r?.abort(); } catch {}
+    diktatHilfe(false);
     $("composer").classList.remove("listening");
     if (resetOrb && !busy && !tts.active) { Orb.set("idle"); setStatus("Bereit"); }
   }
@@ -2668,7 +2731,7 @@ ${appsFuerPrompt()}
       ask(t, { voice: true });
     }, settings.pause * 1000);
   });
-  $("input").addEventListener("blur", () => { if (listening && !$("input").value.trim()) stopListening(); });
+  $("input").addEventListener("blur", () => { if (listening && !erkennung && !$("input").value.trim()) stopListening(); });
 
   /* ---------------- Bedienung ---------------- */
   $("composer").addEventListener("submit", (e) => {

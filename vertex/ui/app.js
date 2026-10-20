@@ -599,8 +599,8 @@
     const voice = pickVoice();
     if (voice) u.voice = voice;
     u.lang = voice?.lang || "de-DE";
-    u.rate = 1.04;
-    u.pitch = 0.9;
+    u.rate = 0.92; // ruhig und kontrolliert
+    u.pitch = 1;
     speechQueue++;
     u.onstart = () => {
       Orb.setState("speaking");

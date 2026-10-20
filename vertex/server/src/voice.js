@@ -365,7 +365,8 @@ async function synthesize(text, signal, previous) {
       model_id: EL_MODEL,
       ...(EL_LANGUAGE && /v2_5|v3/.test(EL_MODEL) && { language_code: EL_LANGUAGE }),
       ...(previous && { previous_text: previous }),
-      voice_settings: { stability: 0.55, similarity_boost: 0.75, style: 0.15, use_speaker_boost: true, speed: EL_SPEED },
+      // Höhere Stabilität und wenig „Stil“ = ruhige, gleichmäßige Stimme statt Show.
+      voice_settings: { stability: 0.68, similarity_boost: 0.75, style: 0.08, use_speaker_boost: true, speed: EL_SPEED },
     }),
     signal,
   });

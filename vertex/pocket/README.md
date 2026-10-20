@@ -6,7 +6,8 @@ verwendet. Gedacht für den Start, solange es keinen eigenen Server gibt.
 | Baustein | Umsetzung in Pocket |
 |----------|---------------------|
 | Kopf | Claude über das eigene Konto (Fähigkeit `sample`, schnell oder „gründlich“) |
-| Stimme | Eingabe per iPhone-Diktat (🎤 auf der Tastatur) mit Auto-Senden nach einer Sprechpause, Gesprächsmodus; Ausgabe per Sprachausgabe des Geräts, satzweise schon während die Antwort entsteht, oranger Orb |
+| Stimme | Eingabe: Spracherkennung des Geräts, wo die Seite sie bekommt (dann freihändig im Gesprächsmodus) – sonst iPhone-Diktat (🎤 auf der Tastatur) mit klarer Anleitung; Auto-Senden nach einer Sprechpause. Ausgabe: ruhig (Tempo 0,9, Pause nach jedem Satz), satzweise schon während die Antwort entsteht, oranger Orb |
+| Ton | Klingt nicht wie ein Chatbot: kurze Sätze, Aussagen statt Fragen, keine Floskeln (siehe `core/personality.md`) |
 | Sprechtext | Geld, Datum, Uhrzeit, Einheiten, Abkürzungen werden so vorgelesen, wie man sie sagt (aus `server/src/sprechtext.js`) |
 | Stimmenwahl | Beste zuerst (Premium/Erweitert > Siri Martin/Helena > Anna, blecherne Stimmen hinten), „iPhone-Systemstimme“, Tempo und Tonhöhe |
 | Werkzeuge | Rechner, Gewinn mit Gebühren und Mindestpreis, Lager (Einkauf, Verkauf, Auswertung pro Monat), Aufgaben mit Fälligkeit, Kunden/Projekte, Ernährung – Zahlen werden gerechnet, nicht geschätzt |
@@ -32,7 +33,9 @@ unter ⚙ → Apps & Hände „Erlauben“. Claude Code braucht eine Claude-Code
 Den Sprechtext nicht hier bearbeiten, sondern in `server/src/sprechtext.js` und dann
 `node pocket/sync-sprechtext.mjs` ausführen.
 
-Grenzen: Eine Artifact-Seite bekommt kein Mikrofon – gesprochen wird über das Diktat der
+Echtes freihändiges Sprechen mit natürlicher Stimme: [Sprachmodus der Claude-App mit Projekt „Vertex“](claude-sprachmodus.md).
+
+Grenzen: Eine Artifact-Seite bekommt in der Claude-App meist kein Mikrofon – gesprochen wird über das Diktat der
 iPhone-Tastatur. Selbst geladene Premium-Stimmen zeigt iOS Web-Seiten oft nicht an.
 Der Persönlichkeits-Prompt ist eine kompakte Fassung von `core/personality.md` und `core/rules.md`.
 
