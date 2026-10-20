@@ -1,24 +1,24 @@
 <title>Vertex</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-/* Layout: one-screen app – orb stage on top, conversation below, composer pinned to the bottom.
-   Deliberately single-theme (night HUD with the orange orb), every color set explicitly. */
+/* Vertex – ein Bildschirm fürs iPhone: oben Begrüßung, Mitte der Orb, darunter die Heute-Karte, unten Chat und Mikrofon.
+   Warmes Nacht-HUD in Terrakotta (Palette wie jarvis.moritzmaaker.com); bewusst ein Farbschema, jede Farbe explizit. */
 :root {
-  --bg: #08090b;
-  --panel: #121317;
-  --panel-2: #191a1f;
-  --line: #24262c;
-  --fg: #f1ece6;
-  --muted: #8e8981;
-  --orange: #ff7a1a;
-  --orange-soft: rgba(255, 122, 26, 0.13);
-  --good: #7fd18b;
-  --warn: #f2c14e;
-  --danger: #ff6a5c;
-  --font-body: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --bg: #17130f;
+  --panel: #201a15;
+  --panel-2: #2a221c;
+  --line: #3a2f27;
+  --fg: #f2e8dc;
+  --muted: #a8998a;
+  --accent: #c26b4c;
+  --accent-2: #d48466;
+  --accent-soft: rgba(194, 107, 76, 0.14);
+  --accent-line: rgba(212, 132, 102, 0.4);
+  --good: #9cc493;
+  --warn: #d48466;
+  --danger: #e2735a;
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   color-scheme: dark;
 }
 html, body { height: 100%; }
@@ -29,124 +29,156 @@ body {
   font-size: 16px;
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
 }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { background: none; border: 0; cursor: pointer; }
-button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
-
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+/* Kleine Terrakotta-Labels in Großbuchstaben über fetten Titeln (Stil wie bei Moritz) */
+.label { margin: 0; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-2); }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .app {
   height: 100%;
   display: flex;
   flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px);
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   max-width: 720px;
   margin: 0 auto;
 }
-header { display: flex; align-items: center; gap: 10px; padding-block: 12px 4px; }
-.brand { font-family: var(--font-mono); letter-spacing: 0.42em; color: var(--orange); font-size: 14px; }
-.mode { font-family: var(--font-mono); font-size: 11px; color: var(--muted); letter-spacing: 0.08em; }
-header nav { margin-left: auto; display: flex; gap: 2px; }
+/* Kopf: Datum-Label + Begrüßung, rechts die drei Ansichten */
+.top { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding-block: 12px 2px; }
+.greet { min-width: 0; flex: 1 1 auto; }
+.greet h1 { margin: 2px 0 0; font-size: clamp(19px, 5.6vw, 22px); line-height: 1.2; font-weight: 700; letter-spacing: -0.01em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.mode { font-family: var(--font-mono); font-size: 10px; color: var(--accent-2); letter-spacing: 0.12em; }
+.top nav { display: flex; gap: 2px; flex: 0 0 auto; }
 .icon-btn { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); font-size: 18px; }
-.icon-btn:hover, .icon-btn[aria-pressed="true"] { color: var(--orange); background: var(--orange-soft); }
-
-.stage { position: relative; flex: 0 0 auto; height: min(28vh, 240px); display: grid; place-items: center; }
+.icon-btn:hover, .icon-btn[aria-pressed="true"] { color: var(--accent-2); background: var(--accent-soft); }
+/* Orb: groß, solange noch nicht geredet wird; im Gespräch kompakter */
+.stage { position: relative; flex: 0 0 auto; height: min(30vh, 250px); display: grid; place-items: center; transition: height 0.35s ease; }
+.app.chatting .stage { height: min(17vh, 140px); }
 .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.orb-hit { position: relative; width: min(50vw, 210px); aspect-ratio: 1; max-width: 100%; border-radius: 50%; }
-.status {
-  text-align: center; min-height: 1.4em; margin: 0;
-  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted);
-}
-.status.live { color: var(--orange); }
-
-.chat { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-block: 12px; overscroll-behavior: contain; }
+.orb-hit { position: relative; height: 72%; aspect-ratio: 1; max-width: 100%; border-radius: 50%; }
+.status { flex: 0 0 auto; text-align: center; min-height: 1.4em; margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+.status.live { color: var(--accent-2); }
+/* Heute-Karte */
+.today-card { flex: 0 0 auto; margin: 8px 0 2px; padding: 10px 12px 12px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); }
+.tc-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.tc-brief { font-size: 13px; font-weight: 600; color: var(--bg); background: var(--accent); padding: 5px 12px; border-radius: 99px; }
+.tc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tc { text-align: left; min-width: 0; padding: 8px 10px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); display: grid; gap: 2px; }
+.tc .label { font-size: 10px; letter-spacing: 0.1em; }
+.tc b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc.warn small { color: var(--warn); }
+/* Gespräch */
+.chat { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-block: 10px; overscroll-behavior: contain; }
 .msg { max-width: 88%; padding: 10px 14px; border-radius: 16px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
-.msg.user { align-self: flex-end; background: #1c1d22; }
-.msg.vertex { align-self: flex-start; background: var(--orange-soft); border: 1px solid rgba(255, 122, 26, 0.28); }
+.msg.user { align-self: flex-end; background: var(--panel-2); }
+.msg.vertex { align-self: flex-start; background: var(--accent-soft); border: 1px solid rgba(194, 107, 76, 0.32); }
 .msg.note { align-self: center; padding: 0; font-family: var(--font-mono); font-size: 11px; color: var(--muted); text-align: center; }
 .msg.err { align-self: center; padding: 0; color: var(--danger); font-size: 14px; text-align: center; }
 .msg img { display: block; max-width: 200px; max-height: 200px; border-radius: 10px; margin-bottom: 6px; }
+.notiert { display: block; margin-top: 6px; font-family: var(--font-mono); font-size: 12px; color: var(--good); letter-spacing: 0.04em; }
 .thinking { color: var(--muted); font-style: italic; }
-.msg-actions { display: flex; gap: 4px; margin-top: 6px; }
-.msg-actions button { font-size: 12px; font-family: var(--font-mono); color: var(--muted); padding: 3px 8px; border-radius: 8px; border: 1px solid rgba(255, 122, 26, 0.25); }
-.msg-actions button:hover { color: var(--orange); }
+.msg-actions { display: flex; gap: 4px; margin-top: 6px; align-items: center; flex-wrap: wrap; }
+.msg-actions button { font-size: 12px; font-family: var(--font-mono); color: var(--muted); padding: 3px 8px; border-radius: 8px; border: 1px solid rgba(194, 107, 76, 0.3); }
+.msg-actions button:hover { color: var(--accent-2); }
+.route-tag { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding: 3px 6px; }
 .card { margin: 8px 0 2px; padding: 10px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); white-space: pre-wrap; font-size: 15px; }
-.card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
-.card-head button { color: var(--orange); font-size: 12px; letter-spacing: 0; text-transform: none; }
-
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--accent-2); letter-spacing: 0.12em; text-transform: uppercase; }
+.card-head button { color: var(--accent-2); font-size: 12px; letter-spacing: 0; text-transform: none; }
 .msg.confirm, .msg.doc { align-self: stretch; max-width: 100%; background: var(--panel); border: 1px solid var(--line); white-space: normal; }
-.msg.confirm { border-color: rgba(255, 122, 26, 0.55); }
-.msg.confirm.ok { border-color: rgba(127, 209, 139, 0.5); }
+.msg.confirm { border-color: var(--accent); }
+.msg.confirm.ok { border-color: rgba(156, 196, 147, 0.55); }
 .msg.confirm.no { opacity: 0.6; }
-.confirm-title { font-weight: 600; margin-bottom: 4px; }
+.confirm-title { font-weight: 700; margin-bottom: 4px; }
 .confirm-details { white-space: pre-wrap; font-family: var(--font-mono); font-size: 12px; color: var(--muted); max-height: 9em; overflow-y: auto; margin-bottom: 4px; }
 .msg.doc .actions, .msg.confirm .actions { justify-content: flex-start; }
 a.btn { display: inline-block; text-decoration: none; text-align: center; }
 a.btn.aktion { display: block; }
 .li .btn { flex: 0 0 auto; padding: 6px 10px; font-size: 13px; }
+/* Schnellaktionen und Eingabe (Daumenzone) */
 .chips { flex: 0 0 auto; display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; padding-bottom: 8px; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
 .chip { flex: 0 0 auto; white-space: nowrap; padding: 7px 12px; border-radius: 99px; border: 1px solid var(--line); font-size: 14px; color: var(--fg); background: var(--panel); }
-.chip.hot { border-color: var(--orange); color: var(--orange); }
-
+.chip.hot { border-color: var(--accent); color: var(--accent-2); }
 .composer { flex: 0 0 auto; display: flex; gap: 8px; align-items: center; padding-block: 8px max(10px, env(safe-area-inset-bottom, 0px)); }
 .composer input[type="text"] { flex: 1 1 auto; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 24px; padding: 12px 16px; outline: none; }
-.composer input[type="text"]:focus { border-color: var(--orange); }
-.composer.listening input[type="text"] { border-color: var(--orange); box-shadow: 0 0 0 3px var(--orange-soft); }
+.composer input[type="text"]::placeholder { color: var(--muted); }
+.composer input[type="text"]:focus { border-color: var(--accent); }
+.composer.listening input[type="text"] { border-color: var(--accent-2); box-shadow: 0 0 0 3px var(--accent-soft); }
 .round { flex: 0 0 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); font-size: 18px; }
-.round.go { background: var(--orange); color: #1a0a00; }
-.round.stop { background: var(--danger); color: #1a0500; }
-.round.mic { background: var(--panel-2); color: var(--orange); border: 1px solid rgba(255, 122, 26, 0.45); }
-.diktat-hilfe { flex: 0 0 auto; margin: 0 0 6px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255, 122, 26, 0.55); background: var(--orange-soft); font-size: 14px; line-height: 1.45; }
+.round.go { background: var(--accent); color: var(--bg); }
+.round.stop { background: var(--danger); color: var(--bg); }
+.round.mic { background: var(--panel-2); color: var(--accent-2); border: 1px solid var(--accent-line); }
+.diktat-hilfe { flex: 0 0 auto; margin: 0 0 6px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--accent); background: var(--accent-soft); font-size: 14px; line-height: 1.45; }
 .tip { flex: 0 0 auto; font-size: 13px; color: var(--muted); text-align: center; margin: 0; padding-bottom: 4px; }
-
+/* Bestätigung „Notiert.“ */
+.toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 14px); transform: translateX(-50%); z-index: 20; padding: 8px 16px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--accent); color: var(--fg); font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.06em; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45); transition: opacity 0.25s ease, transform 0.25s ease; }
+.toast[hidden] { display: block; opacity: 0; pointer-events: none; transform: translate(-50%, -8px); }
+/* Dialoge */
 dialog { width: min(560px, calc(100% - 32px)); max-height: calc(100% - 48px); background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 18px; padding: 20px; }
-dialog::backdrop { background: rgba(0, 0, 0, 0.65); }
-dialog h2 { margin: 0 0 4px; font-weight: 600; font-size: 20px; }
-dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+dialog::backdrop { background: rgba(10, 7, 5, 0.7); }
+dialog h2 { margin: 0 0 4px; font-weight: 700; font-size: 21px; }
+dialog h3 { margin: 18px 0 8px; font-size: 11px; font-family: var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-2); font-weight: 500; }
 .hint { color: var(--muted); font-size: 14px; line-height: 1.45; margin: 0 0 14px; }
+.warnung { color: var(--warn); }
 .field { display: grid; gap: 6px; margin-bottom: 14px; font-size: 14px; color: var(--muted); }
 .field input, .field select, .field textarea { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; color: var(--fg); }
-.field input[type="range"] { padding: 0; accent-color: var(--orange); }
+.field input[type="range"] { padding: 0; accent-color: var(--accent); }
 .field output { color: var(--fg); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .check { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
-.check input { width: 20px; height: 20px; accent-color: var(--orange); flex: 0 0 auto; }
+.check input { width: 20px; height: 20px; accent-color: var(--accent); flex: 0 0 auto; }
 .row { display: flex; gap: 8px; align-items: end; }
 .row > * { flex: 1 1 0; min-width: 0; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 6px; }
 .btn { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
-.btn.primary { background: var(--orange); color: #1a0a00; border-color: var(--orange); font-weight: 600; }
+.btn.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
 .btn:disabled { opacity: 0.45; cursor: default; }
+.modell { font-family: var(--font-mono); font-size: 13px; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 0 0 12px; }
+/* Plattform-Gebühren */
+.fee-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 6px 8px; align-items: center; margin-bottom: 8px; font-size: 14px; }
+.fee-grid .label { color: var(--muted); }
+.fee-grid input { box-sizing: border-box; width: 100%; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; color: var(--fg); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .mem-list { display: grid; gap: 4px; max-height: 50vh; overflow-y: auto; }
 .mem-item { display: flex; justify-content: space-between; gap: 10px; text-align: left; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
 .mem-item span:last-child { color: var(--muted); font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
 .mem-editor textarea { width: 100%; height: 45vh; font-family: var(--font-mono); font-size: 13px; resize: vertical; }
-
-/* Heute-Übersicht */
+/* Heute-Übersicht (Dialog) */
 .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 6px; }
 .tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .tile { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; min-width: 0; }
-.tile .k { font-family: var(--font-mono); font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
-.tile .v { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.tile .k { font-family: var(--font-mono); font-size: 11px; color: var(--accent-2); letter-spacing: 0.12em; text-transform: uppercase; }
+.tile .v { font-size: 22px; font-weight: 700; font-family: var(--font-mono); font-variant-numeric: tabular-nums; margin-top: 2px; }
 .tile .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 6px; }
-.bar > i { display: block; height: 100%; background: var(--orange); border-radius: 3px; }
+.bar > i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
 .list { display: grid; gap: 4px; }
 .li { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; background: var(--bg); font-size: 14px; }
 .li .t { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .li .m { flex: 0 0 auto; color: var(--muted); font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
 .li.due .m { color: var(--warn); }
 .li.over .m { color: var(--danger); }
-.li input { width: 20px; height: 20px; accent-color: var(--orange); flex: 0 0 auto; }
+.li input { width: 20px; height: 20px; accent-color: var(--accent); flex: 0 0 auto; }
 .empty { color: var(--muted); font-size: 14px; padding: 6px 2px; }
-@media (max-width: 360px) { .tiles { grid-template-columns: 1fr; } }
-
+/* Wenig Höhe (z. B. Tastatur offen): Orb klein, Heute-Karte weg – das Gespräch hat Vorrang */
+@media (max-height: 640px) {
+  .stage, .app.chatting .stage { height: 84px; }
+  .today-card { display: none; }
+  .greet h1 { font-size: 18px; }
+}
+@media (max-width: 360px) { .tiles { grid-template-columns: 1fr; } .tc b { font-size: 16px; } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 
-<div class="app">
-  <header>
-    <span class="brand">VERTEX</span>
+<div class="app" id="app">
+  <header class="top">
+    <div class="greet">
+      <p class="label" id="dateLabel">Vertex</p>
+      <h1 id="greeting">Guten Tag.</h1>
+    </div>
     <span class="mode" id="modeLabel"></span>
     <nav>
       <button class="icon-btn" id="btnToday" title="Heute" aria-label="Heute-Übersicht">▦</button>
@@ -160,6 +192,18 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
     <button class="orb-hit" id="orbHit" aria-label="Mit Vertex sprechen"></button>
   </div>
   <p class="status" id="status">Bereit</p>
+
+  <section class="today-card" id="todayCard" aria-label="Heute">
+    <div class="tc-head">
+      <span class="label">Heute</span>
+      <button type="button" class="tc-brief" id="btnBriefing">Briefing</button>
+    </div>
+    <div class="tc-grid">
+      <button type="button" class="tc" id="tcTermine"><span class="label">Termine</span><b>–</b><small>Kalender verbinden</small></button>
+      <button type="button" class="tc" id="tcAufgaben"><span class="label">Aufgaben</span><b>–</b><small>offen</small></button>
+      <button type="button" class="tc" id="tcReselling"><span class="label">Reselling</span><b>–</b><small>Gewinn im Monat</small></button>
+    </div>
+  </section>
 
   <div class="chat" id="chat" aria-live="polite"></div>
 
@@ -186,9 +230,14 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
   </form>
 </div>
 
+<div class="toast" id="toast" role="status" aria-live="polite" hidden>Notiert.</div>
+
 <dialog id="dlgSettings">
   <h2>Einstellungen</h2>
   <p class="hint">Gilt nur für dich, auf all deinen Geräten.</p>
+  <label class="field">Dein Name (für die Begrüßung)
+    <input id="setName" autocomplete="given-name" autocapitalize="words" placeholder="z. B. Alex">
+  </label>
   <label class="field">Anrede
     <input id="setAnrede" list="anreden">
     <datalist id="anreden"><option value="Master"><option value="Chef"><option value="Boss"></datalist>
@@ -224,9 +273,15 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
   <label class="check"><input type="checkbox" id="setJobsFree"> Aufträge an Claude Code ohne Nachfrage starten</label>
   <p class="hint">Apps verbindest du einmal in claude.ai → Einstellungen → Connectors. Vertex fragt vor allem nach, was löscht oder andere benachrichtigt – Mails legt er nur als Entwurf an.</p>
 
-  <h3>Denken</h3>
-  <label class="check"><input type="checkbox" id="setDeep"> Immer gründlich nachdenken</label>
-  <p class="hint">Sonst automatisch bei Fotos, Entscheidungen, Erklärungen und Plänen. Zahlen rechnet Vertex immer exakt mit seinen Werkzeugen.</p>
+  <h3>Denken &amp; Sparen</h3>
+  <p class="modell" id="modellInfo">Zuletzt: –</p>
+  <label class="check"><input type="checkbox" id="setSpar"> Sparmodus (zwei Gehirne)</label>
+  <p class="hint">An: Grüße, Danke, Ja/Nein und einfache Befehle beantwortet Vertex selbst – ohne Modell. Smalltalk und einfache Fragen gehen an das schnelle, günstige Modell (Haiku). Fotos, Rechnen, Eintragen, Entscheidungen, Recherche und lange Texte an das starke Modell. Mitgeschickt wird nur der kurze Verlauf und ein kompaktes Gedächtnis.</p>
+  <label class="check"><input type="checkbox" id="setDeep"> Immer gründlich nachdenken (starkes Modell für alles)</label>
+
+  <h3>Plattform-Gebühren (Team)</h3>
+  <div class="fee-grid" id="feeGrid"></div>
+  <p class="hint">Werden bei jedem Verkauf automatisch abgezogen. Vorschläge (Okt. 2026): Vinted und eBay privat 0 %, StockX 9 % + 3 % Zahlungsgebühr (Level 1). <span class="warnung">Bitte mit deinem Verkäuferkonto abgleichen.</span></p>
   <div class="actions">
     <button class="btn" id="btnClearChat" type="button">Verlauf löschen</button>
     <button class="btn primary" id="btnSaveSettings" type="button">Fertig</button>
@@ -286,78 +341,107 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
   const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => (b % 36).toString(36)).join("");
 
   /* ---------------- Orb ---------------- */
+  // Zustände: idle atmet langsam · listening pulsiert deutlich · speaking folgt dem Sprechpegel · thinking mit rotierendem Schimmer.
+  // Bei „Bewegung reduzieren“ steht der Orb still und zeigt den Zustand nur über Farbe und Ring.
   const Orb = (() => {
     const canvas = $("orb");
     const ctx = canvas.getContext("2d");
-    const STATES = { idle: [0.15, 0.35, 0.55], thinking: [0.35, 1.8, 0.7], speaking: [0.6, 0.9, 0.95], listening: [0.45, 0.6, 0.8] };
-    let state = "idle", cur = [...STATES.idle], level = 0, levelT = 0, t = 0, last = 0, dpr = 1;
-    const blobs = Array.from({ length: 7 }, (_, i) => ({ a: (i / 7) * 6.283, r: 0.25 + Math.random() * 0.35, s: 0.6 + Math.random() * 0.9, size: 0.35 + Math.random() * 0.3, hue: 18 + Math.random() * 22 }));
+    // [Bewegung, Glanz, Helligkeit des Leuchtens]
+    const STATES = { idle: [0.12, 0.5, 0.5], listening: [0.4, 0.8, 0.85], speaking: [0.55, 0.9, 0.95], thinking: [0.3, 1, 0.75] };
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let state = "idle", cur = [...STATES.idle], level = 0, levelT = 0, t = 0, last = 0, dpr = 1, W = 0, H = 0, laeuft = false;
+    const blobs = Array.from({ length: 5 }, (_, i) => ({ a: (i / 5) * 6.283, r: 0.28 + (i % 3) * 0.12, s: 0.5 + i * 0.17, size: 0.42 + (i % 2) * 0.12 }));
     function resize() {
       dpr = Math.min(devicePixelRatio || 1, 2);
       const r = canvas.getBoundingClientRect();
-      canvas.width = r.width * dpr; canvas.height = r.height * dpr;
+      W = canvas.width = Math.round(r.width * dpr); H = canvas.height = Math.round(r.height * dpr);
+      if (reduce) zeichne(0);
     }
-    addEventListener("resize", resize); resize();
-    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    function frame(now) {
-      const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now;
+    addEventListener("resize", resize);
+    new ResizeObserver(resize).observe(canvas);
+    function zeichne(dt) {
       const tgt = STATES[state];
-      for (let i = 0; i < 3; i++) cur[i] += (tgt[i] - cur[i]) * Math.min(1, dt * 4);
+      for (let i = 0; i < 3; i++) cur[i] += (tgt[i] - cur[i]) * (reduce ? 1 : Math.min(1, dt * 4));
       level += (levelT - level) * Math.min(1, dt * 14);
-      levelT *= Math.pow(0.02, dt);
-      if (!reduce) t += dt * cur[1];
-      const W = canvas.width, H = canvas.height, x = W / 2, y = H / 2;
-      const R = Math.min(W, H) * 0.3 * (1 + Math.sin(t * 2.2) * 0.025 + level * 0.16);
+      levelT *= Math.pow(0.03, dt);
+      t += dt;
+      const x = W / 2, y = H / 2, base = Math.min(W, H) * 0.3;
+      // Atmen (idle, 4,5 s) – Pulsieren (zuhören, 1,1 s) – Pegel (sprechen)
+      let puls = 0;
+      if (!reduce) {
+        if (state === "listening") puls = 0.055 * Math.sin((t * 6.283) / 1.1) + level * 0.08;
+        else if (state === "speaking") puls = level * 0.16 + 0.012 * Math.sin(t * 9);
+        else puls = 0.03 * Math.sin((t * 6.283) / 4.5);
+      }
+      const R = base * (1 + puls);
       ctx.clearRect(0, 0, W, H);
-      const glow = ctx.createRadialGradient(x, y, R * 0.6, x, y, R * (2.4 + level));
-      glow.addColorStop(0, `rgba(255,110,20,${0.32 * cur[2] + level * 0.2})`);
-      glow.addColorStop(0.4, `rgba(255,80,0,${0.1 * cur[2]})`);
-      glow.addColorStop(1, "rgba(255,60,0,0)");
+      const glow = ctx.createRadialGradient(x, y, R * 0.6, x, y, R * (2.3 + level * 0.8));
+      glow.addColorStop(0, `rgba(212,132,102,${0.3 * cur[2] + level * 0.18})`);
+      glow.addColorStop(0.45, `rgba(194,107,76,${0.1 * cur[2]})`);
+      glow.addColorStop(1, "rgba(194,107,76,0)");
       ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
       ctx.save(); ctx.beginPath();
-      const wob = (cur[0] + level) * 0.045;
-      for (let i = 0; i <= 96; i++) {
-        const a = (i / 96) * 6.283;
-        const n = Math.sin(a * 3 + t * 2.1) * 0.5 + Math.sin(a * 5 - t * 1.4) * 0.35 + Math.sin(a * 7 + t * 3.3) * 0.15;
+      const wob = reduce ? 0 : (cur[0] + level) * 0.04;
+      for (let i = 0; i <= 72; i++) {
+        const a = (i / 72) * 6.283;
+        const n = Math.sin(a * 3 + t * 1.6) * 0.5 + Math.sin(a * 5 - t * 1.1) * 0.35 + Math.sin(a * 7 + t * 2.4) * 0.15;
         const rr = R * (1 + n * wob);
         i ? ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr) : ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
       }
       ctx.closePath();
-      const body = ctx.createRadialGradient(x - R * 0.25, y - R * 0.3, R * 0.05, x, y, R);
-      body.addColorStop(0, "#ffd3a1"); body.addColorStop(0.25, "#ff9a3c"); body.addColorStop(0.65, "#ff6a00"); body.addColorStop(1, "#8a2a00");
+      const body = ctx.createRadialGradient(x - R * 0.28, y - R * 0.32, R * 0.05, x, y, R);
+      body.addColorStop(0, "#f7d9c4"); body.addColorStop(0.28, "#e09a7c"); body.addColorStop(0.66, "#c26b4c"); body.addColorStop(1, "#5e2a1b");
       ctx.fillStyle = body; ctx.fill(); ctx.clip();
       ctx.globalCompositeOperation = "lighter";
-      for (const b of blobs) {
-        const a = b.a + t * b.s * (state === "thinking" ? 1.6 : 1);
+      if (!reduce) for (const b of blobs) {
+        const a = b.a + t * b.s * (state === "thinking" ? 1.8 : 0.6);
         const bx = x + Math.cos(a) * R * b.r * (1 + level * 0.4), by = y + Math.sin(a * 1.3) * R * b.r;
-        const br = R * b.size * (0.8 + cur[0] * 0.6 + level * 0.5);
+        const br = R * b.size * (0.85 + cur[0] * 0.5 + level * 0.4);
         const g = ctx.createRadialGradient(bx, by, 0, bx, by, br);
-        g.addColorStop(0, `hsla(${b.hue},100%,${62 + level * 18}%,${0.28 + cur[0] * 0.25})`);
-        g.addColorStop(1, "hsla(20,100%,50%,0)");
+        g.addColorStop(0, `rgba(242,196,170,${0.16 + cur[0] * 0.2 + level * 0.15})`);
+        g.addColorStop(1, "rgba(194,107,76,0)");
         ctx.fillStyle = g; ctx.fillRect(bx - br, by - br, br * 2, br * 2);
       }
-      ctx.restore();
-      if (state === "thinking" || state === "listening") {
-        ctx.strokeStyle = state === "listening" ? `rgba(255,150,70,${0.35 + level * 0.5})` : "rgba(255,150,70,0.45)";
-        ctx.lineWidth = 2 * dpr;
-        if (state === "thinking") {
-          const s = t * 2.5;
-          ctx.beginPath(); ctx.arc(x, y, R * 1.18, s, s + 1.9); ctx.stroke();
-          ctx.beginPath(); ctx.arc(x, y, R * 1.18, s + 3.14, s + 5.0); ctx.stroke();
-        } else {
-          ctx.beginPath(); ctx.arc(x, y, R * (1.15 + level * 0.12), 0, 6.283); ctx.stroke();
-        }
+      // Denken: ein Schimmer läuft im Kreis über die Oberfläche
+      if (state === "thinking" && !reduce) {
+        const s = t * 2.6, sx = x + Math.cos(s) * R * 0.55, sy = y + Math.sin(s) * R * 0.55;
+        const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, R * 0.7);
+        g.addColorStop(0, "rgba(255,236,222,0.45)"); g.addColorStop(1, "rgba(255,236,222,0)");
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
       }
+      ctx.restore();
+      ctx.lineWidth = 2 * dpr;
+      if (state === "thinking") {
+        const s = reduce ? 0 : t * 2.2;
+        ctx.strokeStyle = "rgba(212,132,102,0.55)";
+        ctx.beginPath(); ctx.arc(x, y, R * 1.2, s, s + 1.7); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, R * 1.2, s + 3.14, s + 4.84); ctx.stroke();
+      } else if (state === "listening") {
+        // Ring, der nach außen läuft und verblasst
+        const p = reduce ? 0.4 : (t % 1.1) / 1.1;
+        ctx.strokeStyle = `rgba(212,132,102,${0.55 * (1 - p) + level * 0.3})`;
+        ctx.beginPath(); ctx.arc(x, y, R * (1.08 + p * 0.35), 0, 6.283); ctx.stroke();
+      }
+    }
+    function frame(now) {
+      const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now;
+      if (W && H) zeichne(dt);
       requestAnimationFrame(frame);
     }
-    requestAnimationFrame(frame);
-    return { set(s) { if (STATES[s]) state = s; }, get state() { return state; }, level(v) { levelT = Math.max(levelT, Math.min(1, v)); } };
+    resize();
+    if (!reduce) { laeuft = true; requestAnimationFrame(frame); }
+    return {
+      set(s) { if (STATES[s] && s !== state) { state = s; if (reduce) zeichne(0); } },
+      get state() { return state; },
+      level(v) { levelT = Math.max(levelT, Math.min(1, v)); },
+      get animiert() { return laeuft; },
+    };
   })();
 
   /* ---------------- Speicher: Texte (Gedächtnis) ---------------- */
   // Privat: data/users/<id>/<name>. Team: team/<name>. Ohne Anmeldung: nur dieses Gerät.
   const FILES = ["fokus", "profil", "ziele", "notizen", "business", "gebuehren", "ernaehrung-ziele", "woerterbuch", "woerterbuch-ich"];
-  const SHARED = new Set(["business", "gebuehren", "woerterbuch"]);
+  const SHARED = new Set(["business", "gebuehren", "woerterbuch", "plattformen", "schema"]);
   const LABEL = {
     fokus: "Fokus der Woche", profil: "Über mich", ziele: "Ziele", aufgaben: "Aufgaben (alte Notizen)", notizen: "Notizen",
     business: "Business (Team)", gebuehren: "Plattform-Gebühren (Team)", "ernaehrung-ziele": "Ernährungsziele",
@@ -520,6 +604,26 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
     };
   }
 
+  /* ---------------- Plattform-Gebühren (Einstellungen, fürs ganze Team) ---------------- */
+  // Startwerte nur als Vorschlag (Stand Okt. 2026, öffentliche Angaben der Plattformen) – in ⚙ änderbar, gespeichert in team/plattformen.
+  // Vinted: Verkäufer zahlen nichts (Käufer zahlt Käuferschutz). eBay.de privat: kostenlos. StockX: 9 % Transaktion (Level 1) + 3 % Zahlung.
+  const START_PLATTFORMEN = [
+    { name: "Vinted", prozent: 0, fix_ct: 0 },
+    { name: "eBay", prozent: 0, fix_ct: 0 },
+    { name: "StockX", prozent: 12, fix_ct: 0 },
+  ];
+  let plattformen = START_PLATTFORMEN.map((x) => ({ ...x }));
+  async function ladePlattformen() {
+    const d = await store.get("plattformen");
+    if (Array.isArray(d?.liste) && d.liste.length) plattformen = d.liste.map((x) => ({ name: String(x.name), prozent: Number(x.prozent) || 0, fix_ct: Math.round(Number(x.fix_ct) || 0) }));
+  }
+  const findePlattform = (name) => {
+    const n = String(name || "").toLowerCase().trim();
+    return n ? plattformen.find((x) => x.name.toLowerCase() === n) || plattformen.find((x) => n.startsWith(x.name.toLowerCase())) : null;
+  };
+  const gebuehrText = (pf) => `${pf.name} ${pct(pf.prozent) || "0 %"} + ${eur(pf.fix_ct)}`;
+  const plattformGebuehr = (pf, vk_ct) => Math.round(glatt((vk_ct * pf.prozent) / 100)) + pf.fix_ct;
+
   /* ---------------- Lager, Kunden, Aufgaben, Ernährung ---------------- */
   const LAGER_STATUS = ["lager", "gelistet", "verkauft", "retoure"];
   const KUNDEN_STATUS = ["anfrage", "angebot", "auftrag", "fertig", "bezahlt", "verloren"];
@@ -527,7 +631,8 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
   const lagerView = (x) => ({
     id: x.id, name: x.name, groesse: x.groesse || undefined, zustand: x.zustand || undefined, status: x.status, plattform: x.plattform || undefined,
     einkauf: eur(x.einkauf_ct), einkauf_datum: x.einkauf_datum,
-    ...(x.status === "verkauft" ? { verkauf: eur(x.verkauf_ct), gebuehren: eur(x.gebuehren_ct ?? 0), versand: eur(x.versand_ct ?? 0), gewinn: eur(itemProfit(x)), verkauf_datum: x.verkauf_datum } : {}),
+    ...(x.status === "verkauft" ? { verkauf: eur(x.verkauf_ct), gebuehren: eur(x.gebuehren_ct ?? 0), versand: eur(x.versand_ct ?? 0),
+      netto: eur((x.verkauf_ct ?? 0) - (x.gebuehren_ct ?? 0) - (x.versand_ct ?? 0)), gewinn: eur(itemProfit(x)), verkauf_datum: x.verkauf_datum } : {}),
     notiz: x.notiz || undefined,
   });
 
@@ -598,9 +703,13 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
     },
     {
       name: "gewinn_berechnen",
-      description: "Reselling-Rechner: Gewinn, Marge, ROI und Mindestpreis ohne Verlust aus Einkauf, Verkauf, Plattformgebühr (% und fix) und Versand. Gebühren aus dem Gedächtnis „gebuehren“ nehmen, nie raten.",
-      inputSchema: { type: "object", properties: { einkauf: { type: "number" }, verkauf: { type: "number" }, gebuehr_prozent: { type: "number" }, gebuehr_fix: { type: "number" }, versand: { type: "number" } }, required: ["einkauf", "verkauf"] },
-      execute: (a) => gewinnRechnung(a),
+      description: "Reselling-Rechner: Gewinn, Marge, ROI und Mindestpreis ohne Verlust aus Einkauf, Verkauf, Plattform und Versand. Mit plattform werden die Gebühren aus den Einstellungen genommen; gebuehr_prozent/gebuehr_fix nur bei Abweichung.",
+      inputSchema: { type: "object", properties: { einkauf: { type: "number" }, verkauf: { type: "number" }, plattform: { type: "string", description: "z. B. Vinted, eBay, StockX" }, gebuehr_prozent: { type: "number" }, gebuehr_fix: { type: "number" }, versand: { type: "number" } }, required: ["einkauf", "verkauf"] },
+      execute(a) {
+        const pf = findePlattform(a.plattform);
+        if (pf && !gesetzt(a.gebuehr_prozent) && !gesetzt(a.gebuehr_fix)) return { ...gewinnRechnung({ ...a, gebuehr_prozent: pf.prozent, gebuehr_fix: pf.fix_ct / 100 }), hinweis: `Gebühren laut Einstellungen: ${gebuehrText(pf)}` };
+        return gewinnRechnung(a);
+      },
     },
     {
       name: "lager_hinzufuegen",
@@ -650,8 +759,12 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
         if (vs !== undefined) x.versand_ct = vs;
         if (ek !== undefined) x.einkauf_ct = ek;
         for (const k of ["plattform", "name", "groesse", "zustand", "notiz"]) if (gesetzt(a[k])) x[k] = String(a[k]).slice(0, 300);
+        let gebuehrHinweis = null;
         if (x.status === "verkauft") {
           if (x.verkauf_ct == null) throw new Error("Für „verkauft“ fehlt der Verkaufspreis (verkauf).");
+          // Gebühren automatisch aus den Plattform-Einstellungen, wenn keine eigenen genannt wurden.
+          const pf = findePlattform(x.plattform);
+          if (gb === undefined && x.gebuehren_ct == null && pf) { x.gebuehren_ct = plattformGebuehr(pf, x.verkauf_ct); gebuehrHinweis = `Gebühren laut Einstellungen: ${gebuehrText(pf)}`; }
           // Wiederverkauf nach Retoure zählt im neuen Monat – nur eine Korrektur behält das alte Datum.
           x.verkauf_datum = isDate(a.verkauf_datum) ? a.verkauf_datum : warVerkauft && x.verkauf_datum ? x.verkauf_datum : today();
           if (isDate(x.einkauf_datum) && x.verkauf_datum < x.einkauf_datum) throw new Error(`Verkaufsdatum ${x.verkauf_datum} liegt vor dem Einkauf (${x.einkauf_datum}).`);
@@ -659,7 +772,7 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
         x.geaendert = new Date().toISOString();
         await cols.put("lager", x);
         noteTool(`▤ Lager: ${x.name}${x.groesse ? " " + x.groesse : ""} → ${x.status}${x.status === "verkauft" ? `, Gewinn ${eur(itemProfit(x))}` : ""}`);
-        return { ...lagerView(x), ...(x.status === "verkauft" && x.gebuehren_ct == null ? { hinweis: "Keine Gebühren angegeben – mit 0 gerechnet. Nachfragen, falls Gebühren anfielen." } : {}) };
+        return { ...lagerView(x), ...(gebuehrHinweis ? { hinweis: gebuehrHinweis } : x.status === "verkauft" && x.gebuehren_ct == null ? { hinweis: "Keine Plattform und keine Gebühren angegeben – mit 0 gerechnet. Nachfragen, wo verkauft wurde." } : {}) };
       },
     },
     {
@@ -803,6 +916,16 @@ dialog h3 { margin: 18px 0 8px; font-size: 13px; font-family: var(--font-mono); 
       execute: (a) => ernaehrungTag(isDate(a.datum) ? a.datum : today()),
     },
   ];
+
+  /* ---------------- Laptop-Brücke (VORGEMERKT – noch nicht gebaut) ----------------
+     Spätere Verbindung zum eigenen Laptop. Regeln, die beim Bau gelten müssen:
+     1. Nur Befehlsnamen aus einer FESTEN Erlaubnisliste, die auf dem Laptop liegt (z. B. "musik_pause").
+        Die Seite schickt nur den Namen; unbekannte Namen werden verworfen und gemeldet.
+     2. NIE Code: keine Shell-Befehle, keine Skripte, keine frei formulierten Parameter, die ausgeführt werden.
+     3. Jeder Befehl hat Zeitstempel und einmalige ID und VERFÄLLT NACH 10 MINUTEN
+        (BRUECKE_GUELTIG_MS = 10 * 60 * 1000); Abgelaufenes oder schon Ausgeführtes wird ignoriert.
+     4. 🔴-Aktionen (senden, kaufen, löschen) gibt es über die Brücke nicht.
+     Siehe vertex/hand/README.md. Hier bewusst noch KEIN Werkzeug und keine Verbindung. */
 
   /* ---------------- Hände: Claude-Code-Aufträge, verbundene Apps, Dokumente, Handy-Aktionen ---------------- */
   // Alles läuft über die claude.ai-Verbindungen (Fähigkeit „mcp“) mit dem Konto des Nutzers – Schlüssel sieht die Seite nie.
@@ -2206,7 +2329,7 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
   setInterval(() => { if (Orb.state === "speaking") Orb.level(0.25 + Math.random() * 0.45); }, 90);
 
   /* ---------------- Einstellungen und Zustand ---------------- */
-  let settings = { anrede: "Master", tts: true, voice: "", rate: 0.9, pitch: 1.0, deep: false, autoSend: true, pause: 2.2, convo: false, auftragFrei: false };
+  let settings = { name: "", sparmodus: true, anrede: "Master", tts: true, voice: "", rate: 0.9, pitch: 1.0, deep: false, autoSend: true, pause: 2.2, convo: false, auftragFrei: false };
   let turns = []; // [{role, content}] – nur Text
   let lastBriefing = "";
 
@@ -2251,7 +2374,8 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
   // Kurzer Lagebericht aus den Listen – damit Vertex fürs Briefing keine Werkzeuge braucht.
   async function standSnapshot() {
     const t = today();
-    const [aufgaben, kunden, lager, ern, jobs] = await Promise.all([cols.list("aufgaben"), cols.list("kunden"), lagerAuswertung(), ernaehrungTag().catch(() => ({ kcal: "?", eiweiss_g: "?" })), cols.list("auftraege")]);
+    const [aufgaben, kunden, lager, ern, jobs, artikel] = await Promise.all([cols.list("aufgaben"), cols.list("kunden"), lagerAuswertung(), ernaehrungTag().catch(() => ({ kcal: "?", eiweiss_g: "?" })), cols.list("auftraege"), cols.list("lager")]);
+    const alt = artikel.filter((x) => (x.status === "lager" || x.status === "gelistet") && isDate(x.einkauf_datum)).sort((a, b) => a.einkauf_datum.localeCompare(b.einkauf_datum)).slice(0, 3);
     const jobsNeu = jobs.sort((a, b) => String(b.erstellt).localeCompare(String(a.erstellt))).slice(0, 5);
     const offen = aufgaben.filter((x) => !x.erledigt).sort((a, b) => (a.faellig || "9999").localeCompare(b.faellig || "9999"));
     const auf = offen.slice(0, 10).map((x) => `- ${x.text}${x.faellig ? ` (fällig ${x.faellig}${x.faellig < t ? ", ÜBERFÄLLIG" : x.faellig === t ? ", HEUTE" : ""})` : ""}${x.prioritaet === "hoch" ? " [hoch]" : ""}`);
@@ -2259,6 +2383,9 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
     return [
       `Offene Aufgaben (${offen.length}):`, ...(auf.length ? auf : ["- keine"]),
       `Lager: ${lager.im_bestand} Artikel im Bestand (Einkaufswert ${lager.lagerwert_einkauf}); diesen Monat ${lager.verkauft} verkauft, Gewinn ${lager.gewinn}.`,
+      ...(alt.length ? [`Am längsten im Lager: ${alt.map((x) => `${x.name}${x.groesse ? " " + x.groesse : ""} (${daysBetween(x.einkauf_datum, t)} Tage)`).join("; ")}.`] : []),
+      `Plattform-Gebühren (Einstellungen, werden beim Verkauf automatisch abgezogen): ${plattformen.map((pf) => `${pf.name} ${gebuehrText(pf)}`).join("; ") || "keine"}.`,
+      `Termine heute: ${termineHeute.length ? termineHeute.slice(0, 6).map((e) => `${e.start.includes("T") ? e.start.slice(11, 16) + " " : ""}${e.titel}`).join("; ") : mcp && nutzbar(KAL) ? "keine oder Kalender nicht gelesen" : "Kalender nicht verbunden"}.`,
       `Kunden/Projekte offen: ${offeneKunden.length ? offeneKunden.slice(0, 8).map((k) => `${k.name} (${k.status}${k.betrag_ct != null ? ", " + eur(k.betrag_ct) : ""}${k.faellig ? ", fällig " + k.faellig : ""})`).join("; ") : "keine"}.`,
       `Ernährung heute: ${ern.kcal} kcal, ${ern.eiweiss_g} g Eiweiß${ern.ziel_kcal ? ` (Ziel ${ern.ziel_kcal} kcal)` : ""}.`,
       `Claude-Code-Aufträge: ${jobsNeu.length ? jobsNeu.map((x) => `${x.titel} (${x.status}, id ${x.id})`).join("; ") : "keine"}.`,
@@ -2289,7 +2416,7 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
     return `Du bist VERTEX, der persönliche KI-Assistent und Stabschef des Nutzers. Du kennst sein Leben, sein Business und seine Ziele (siehe GEDÄCHTNIS und STAND), denkst mit, erinnerst dich und erledigst Dinge mit deinen Werkzeugen.
 
 PERSÖNLICHKEIT
-- Sprich ihn mit „${a}“ an (gelegentlich „Chef“ oder „Boss“, wenn er nichts anderes gewählt hat). Nicht in jedem Satz.
+- ${vorname ? `Er heißt ${vorname}. Sprich ihn mit „${vorname}“ oder „${a}“ an` : `Sprich ihn mit „${a}“ an`} (gelegentlich „Chef“ oder „Boss“, wenn er nichts anderes gewählt hat). Nicht in jedem Satz.
 - Trocken, selbstbewusst, effizient, leicht sarkastisch – aber immer hilfreich. Die Pointe kommt nach der Lösung.
 - Ergebnis zuerst. Standard: 1–3 Sätze. Länger nur, wenn er es will oder die Sache es braucht.
 - Bei Entscheidungen: eine klare Empfehlung mit dem wichtigsten Grund.
@@ -2306,7 +2433,7 @@ SO KLINGST DU – ruhig, kontrolliert, wie ein Mensch, nicht wie ein Chatbot
 - Beispiele für den Ton (die Inhalte sind erfunden – nie als Fakten übernehmen):
   Er: „Wie geht's dir?“ → Du: „Ausgezeichnet, ${a}. Die Listen sind sauber, der Kaffee ist Ihre Baustelle.“
   Er: „Was steht heute an?“ → Du: „Drei Dinge. Die Rechnung an Schmidt ist seit gestern fällig. Um zehn haben Sie den Kundentermin. Und die Jordans liegen seit fünfzig Tagen im Lager. Ich würde mit der Rechnung anfangen.“
-  Er: „Hab die Panda Dunks für 140 verkauft.“ → Du: „Eingetragen. 55 Euro Gewinn. Ordentlich.“
+  Er: „Hab die Panda Dunks für 140 auf StockX verkauft.“ → Du: „Verkauft für 140 €. Nach Gebühren bleiben 123,20 €, Gewinn 38,20 €. Ordentlich.“
   Er: „Soll ich das Billige nehmen?“ → Du: „Nein. Zwei Euro gespart, dafür ein Wochenende Ärger. Nehmen Sie das andere.“
 - Deine Antwort wird VORGELESEN: kein Markdown, keine Listenzeichen, keine Tabellen, keine Links, kurze Sätze. Beträge mit €-Zeichen, Daten als „19. Oktober“.
 - Beginnt seine Nachricht mit [Sprache], hat er gesprochen: dann besonders kurz (ein bis zwei Sätze), außer er will mehr.
@@ -2318,15 +2445,16 @@ PRÜFEN STATT RATEN – wichtiger als Schnelligkeit
 - Aktuelle Preise, Marktwerte, Öffnungszeiten, Gesetze, Nachrichten kannst du hier nicht nachsehen. Nie als sicher ausgeben – höchstens als grobe Schätzung mit Hinweis.
 - Unklar, was er meint, und eine falsche Annahme wäre teuer? Eine kurze Rückfrage statt raten.
 - Lieber „Weiß ich nicht sicher“ als eine selbstbewusste falsche Antwort.
+- Zahlen zu Bestand, Gewinn, Umsatz, Aufgaben und Kalorien NUR aus STAND oder aus Werkzeug-Ergebnissen DIESER Antwort – nie aus früheren Nachrichten im Verlauf. Der Verlauf kann veraltet sein (anderes Gerät, Teamkollege, Korrektur).
 
 ${toolsOk ? `WERKZEUGE – du kannst wirklich etwas tun
 - Rechne NIE im Kopf: jede Rechnung über „rechnen“, Reselling-Gewinne über „gewinn_berechnen“, Monatszahlen über „lager_auswertung“.
-- Reselling-Lager: Kauf → lager_hinzufuegen. Verkauf → lager_aktualisieren (verkauf, gebuehren, versand, plattform). Fragen zum Bestand → lager_liste. Gebühren aus dem Gedächtnis „gebuehren“ – steht dort nichts, frag nach oder rechne mit 0 und sag es.
+- Reselling-Lager: Kauf → lager_hinzufuegen. Verkauf → lager_aktualisieren (verkauf, plattform, versand). Die Gebühren zieht das Werkzeug automatisch aus den Plattform-Einstellungen ab (siehe STAND) – gebuehren nur angeben, wenn er einen abweichenden Betrag nennt. Plattform unbekannt? Kurz fragen. Fragen zum Bestand → lager_liste oder lager_auswertung, nie aus dem Gedächtnis.
 - Aufgaben: neue → aufgabe_hinzufuegen (relative Daten wie „Freitag“ vorher in JJJJ-MM-TT umrechnen; heute ist ${today()}), erledigt → aufgabe_erledigen, Überblick → aufgaben_liste.
 - Webdesign-Kunden und Projekte → kunde_speichern / kunden_liste.
 - Essen (auch Fotos) → ernaehrung_eintragen mit geschätzten Werten; die Tagessumme kommt exakt zurück.
 - Mehrdeutiger Treffer (das Werkzeug meldet „Mehrdeutig“)? Kurz nachfragen, welcher gemeint ist.
-- Nach dem Werkzeug: Ergebnis in einem Satz nennen. Was gespeichert wurde, sieht er im Chat – nicht vorlesen, nur „Eingetragen.“` : `WERKZEUGE sind in dieser Ansicht nicht verfügbar. Rechne sorgfältig, rechne jede Zahl zweimal nach und sag dazu, dass du nicht mit dem Rechner geprüft hast.`}
+- Nach dem Werkzeug: Ergebnis in einem Satz nennen. Nach einem VERKAUF immer als Text: Bestätigung, Netto nach Gebühren und Gewinn (exakt aus dem Werkzeug-Ergebnis) – nie nur „Eingetragen.“. Sonst reicht ein kurzer Satz; das „✓ Notiert.“ zeigt die Seite selbst.` : `WERKZEUGE sind in dieser Ansicht nicht verfügbar. Rechne sorgfältig, rechne jede Zahl zweimal nach und sag dazu, dass du nicht mit dem Rechner geprüft hast.`}
 
 JETZT: ${nowText()} (${TZ}). Heute ist ${today()}.
 
@@ -2393,7 +2521,7 @@ ${appsFuerPrompt()}
     let body = "", ohne = String(raw || "");
     for (const blk of memBlocks(ohne)) { body += ohne.slice(0, blk.start); ohne = ohne.slice(blk.start + blk.len); }
     body += ohne;
-    body = body.replace(/\[\[?[A-ZÄ/]*$/, ""); // halb geschriebene Markierung nicht zeigen
+    body = body.replace(/\[\[STARK\]\]/g, "").replace(/\[\[?[A-ZÄ/]*$/, ""); // Markierungen nicht zeigen
     const parts = [];
     let rest = body;
     while (rest) {
@@ -2438,6 +2566,7 @@ ${appsFuerPrompt()}
   }
 
   function addMsg(kind, text, img) {
+    $("app").classList.add("chatting");
     const el = document.createElement("div");
     el.className = "msg " + kind;
     if (img) { const i = document.createElement("img"); i.src = img; i.alt = "Dein Foto"; el.appendChild(i); }
@@ -2449,10 +2578,11 @@ ${appsFuerPrompt()}
     return span;
   }
 
-  function addActions(container, raw) {
+  function addActions(container, raw, tag = "") {
     const { parts, spoken } = parseAnswer(raw);
     const row = document.createElement("div");
     row.className = "msg-actions";
+    if (tag) { const t = document.createElement("span"); t.className = "route-tag"; t.textContent = tag; t.title = "Wer geantwortet hat"; row.appendChild(t); }
     if (synth && spoken) {
       const r = document.createElement("button"); r.type = "button"; r.textContent = "🔊 Vorlesen";
       r.onclick = () => { tts.stop(); tts.say(spoken, { force: true }); };
@@ -2472,6 +2602,7 @@ ${appsFuerPrompt()}
   let lastWasVoice = false;
   let answerMuted = false; // Orb angetippt: Rest dieser Antwort nicht mehr vorlesen
   let answerSpoke = false, sentAt = 0, verlaufGen = 0;
+  const SCHREIBEND = new Set(["lager_hinzufuegen", "lager_aktualisieren", "aufgabe_hinzufuegen", "aufgabe_erledigen", "kunde_speichern", "ernaehrung_eintragen", "ernaehrung_korrigieren"]);
   const mitFrist = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej({ code: "frist" }), ms))]);
   // Werkzeuge einer Runde laufen sonst gleichzeitig – zwei Mahlzeiten auf einmal würden sich überschreiben.
   let toolChain = Promise.resolve();
@@ -2489,7 +2620,105 @@ ${appsFuerPrompt()}
 
   // Gründlich (langsamer, klüger) bei Fotos und echten Denkfragen – Zahlen rechnen die Werkzeuge exakt.
   const NEEDS_DEPTH = /warum|wieso|erklär|lohnt|soll ich|sollte ich|empfiehl|empfehl|strategie|vergleich|vertrag|recht|gesetz|steuer|planen|plan für|konzept|analys|angebot schreib|angebot für|bewert|entscheid/i;
-  const needsCare = (text, image) => settings.deep || Boolean(image) || NEEDS_DEPTH.test(text);
+
+  /* ---------------- Spar-Routing: zwei Gehirne (wie bei Moritz) ---------------- */
+  // lokal:   Grüße, Danke, Ja/Nein, einfache Befehle – ohne Modell, sofort, kostenlos.
+  // schnell: Smalltalk und einfache Fragen → Haiku (günstig), nur kurzer Verlauf + kompaktes Gedächtnis, keine Werkzeuge.
+  // stark:   Fotos, Werkzeuge (eintragen, rechnen, Apps, Aufträge), Entscheidungen, Recherche, lange Texte.
+  // Merkt das schnelle Gehirn, dass es mehr braucht, antwortet es nur mit [[STARK]] – dann übernimmt das starke.
+  const HAIKU = "claude-haiku-5-5";
+  const STARK_RE = /recherch|marktwert|was kostet|preis (von|für|der|des)|aktuell|nachrichten|news|such(e|t)? (mir|nach)|finde heraus|gekauft|verkauft|retoure|lager|bestand|inventar|gewinn|marge|umsatz|rechne|rechnen|berechne|prozent|%|€|euro|\d\s*[x×*\/+\-]\s*\d|aufgabe|erinner|erledigt|to-?do|trag .*ein|eintragen|kunde|angebot|rechnung|projekt|kalorien|gegessen|frühstück|mittagessen|abendessen|ernährung|eiweiß|protein|termin|kalender|mail|drive|notion|auftrag|claude code|website|webseite|landingpage|repo|dokument|whatsapp|anrufen|ruf .* an|sms|route|vinted|ebay|stockx|anzeige|schreib|formulier|verfass|entwurf|caption|vergleich|lohnt|empfiehl|empfehl|entscheid|strategie|analys/i;
+  function waehleRoute(text, image) {
+    if (image || settings.deep || settings.sparmodus === false) return "stark";
+    if (text.length > 280 || STARK_RE.test(text) || NEEDS_DEPTH.test(text)) return "stark";
+    return "schnell";
+  }
+  const norm = (t) => String(t || "").toLowerCase().replace(/[.!?,;:„“"«»]/g, " ").replace(/(^|\s)(bitte|mal|hey vertex|vertex)(?=\s|$)/g, " ").replace(/\s+/g, " ").trim();
+  const zufall = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const letzteAntwort = () => [...turns].reverse().find((t) => t.role === "assistant")?.content || "";
+  function statusSatz() {
+    if (!heuteDaten) return "";
+    const t = [];
+    if (heuteDaten.faellig) t.push(`${heuteDaten.faellig === 1 ? "Eine Aufgabe ist" : heuteDaten.faellig + " Aufgaben sind"} heute fällig.`);
+    else if (heuteDaten.offen) t.push(`${heuteDaten.offen === 1 ? "Eine Aufgabe ist" : heuteDaten.offen + " Aufgaben sind"} offen.`);
+    if (termineHeute.length) t.push(`${termineHeute.length === 1 ? "Ein Termin steht" : termineHeute.length + " Termine stehen"} heute an.`);
+    return t.join(" ");
+  }
+  // Antwort ohne Modell: {text, aktion?, merken?} – oder null, dann denkt ein Modell.
+  // Reine Befehle (Stopp, Tempo, Sparmodus, Ansichten) gelten immer; Grüße, Danke, Ja/Nein nur im Sparmodus.
+  function lokaleAntwort(roh) {
+    const t = norm(roh);
+    if (!t || t.length > 40) return null;
+    const befehl = lokalerBefehl(t);
+    if (befehl || settings.sparmodus === false) return befehl;
+    const a = ansprache();
+    if (/^(hallo|hi|hey|servus|moin( moin)?|na|yo|huhu|guten (morgen|tag|abend)|morgen|abend)$/.test(t)) return { text: `${gruss()}, ${a}. ${statusSatz()}`.trim(), merken: true };
+    if (/^gute nacht$/.test(t)) return { text: `Gute Nacht, ${a}. Ich halte die Stellung.`, merken: true };
+    if (/^(danke( dir| schön| sehr| vielmals)?|dankeschön|vielen dank|merci|thx|thanks|top|super|perfekt|passt|klasse|nice)$/.test(t))
+      return { text: zufall([`Jederzeit, ${a}.`, "Selbstverständlich.", "Dafür werde ich bezahlt. Theoretisch."]), merken: true };
+    if (/^(ja|jo|jep|jup|klar|genau|richtig|nein|nö|nee|ne|nope|ok|okay|alles klar|verstanden)$/.test(t)) {
+      if (/\?\s*$/.test(letzteAntwort().trim())) return null; // beantwortet eine Frage → mit Zusammenhang ans Modell
+      return { text: /^(nein|nö|nee|ne|nope)$/.test(t) ? "In Ordnung." : "Verstanden.", merken: true };
+    }
+    if (/^(wie spät( ist es)?|uhrzeit|wie viel uhr( ist es)?)$/.test(t)) return { text: `Es ist ${nowTime()} Uhr.` };
+    if (/^(welcher tag( ist heute)?|welches datum( ist heute)?|datum|was ist heute für ein tag|der wievielte ist heute)$/.test(t))
+      return { text: `Heute ist ${new Intl.DateTimeFormat("de-DE", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" }).format(new Date())}.` };
+    if (/^(hilfe|was kannst du( alles)?|wie funktionierst du)$/.test(t))
+      return { text: "Ich führe das Lager, rechne Gewinne exakt, merke mir Aufgaben, Kunden und Kalorien, lese Fotos, recherchiere über Claude Code und arbeite mit Kalender, Gmail-Entwürfen, Drive und Notion. Sagen Sie einfach, was ansteht." };
+    return null;
+  }
+  function lokalerBefehl(t) {
+    if (/^(stopp?|halt|ruhe|still|sei still|psst?|schweig|hör auf|aufhören)$/.test(t)) return { text: "", aktion: () => tts.stop() };
+    if (/^((zeig|öffne|mach)( mir)? )?(die )?(heute|übersicht|tagesübersicht|heute übersicht)( an| auf)?$/.test(t)) return { text: "Der Überblick.", aktion: () => openToday() };
+    if (/^((zeig|öffne)( mir)? )?(die )?einstellungen$/.test(t)) return { text: "", aktion: () => $("btnSettings").click() };
+    if (/^((zeig|öffne)( mir)? )?(das |mein )?gedächtnis$/.test(t)) return { text: "", aktion: () => $("btnMemory").click() };
+    if (/^(wiederhol(e|en)?( das)?|nochmal|noch mal|was hast du gesagt)$/.test(t)) {
+      const l = parseAnswer(letzteAntwort()).spoken;
+      return l ? { text: "", aktion: () => tts.say(l, { force: true }) } : null;
+    }
+    if (/^(sprich |rede )?(langsamer|schneller)$/.test(t)) {
+      const langsamer = t.endsWith("langsamer");
+      const neu = Math.min(1.3, Math.max(0.8, Math.round((settings.rate + (langsamer ? -0.1 : 0.1)) * 100) / 100));
+      return { text: langsamer ? "Etwas langsamer." : "Etwas schneller.", vorher: async () => { settings.rate = neu; await store.set("einstellungen", settings); } };
+    }
+    if (/^sparmodus (an|ein|aus)$/.test(t)) {
+      const an = !t.endsWith("aus");
+      return { text: an ? "Sparmodus an." : "Sparmodus aus. Ab jetzt denkt immer das starke Modell.", vorher: async () => { settings.sparmodus = an; await store.set("einstellungen", settings); } };
+    }
+    return null;
+  }
+  const ROUTE_TAG = { lokal: "lokal", schnell: "Haiku", stark: "stark" };
+  function setzeModell(route, res) {
+    const tier = res?.modelTierApplied;
+    const text = route === "lokal" ? "Lokal · ohne Modell"
+      : res?.modelApplied === HAIKU ? "Haiku 5.5 · schnell"
+      : ({ quick: "Haiku-Klasse · schnell", default: "Sonnet-Klasse · stark", complex: "Opus-Klasse · sehr stark" })[tier] || (route === "schnell" ? "schnell" : "stark");
+    letztesModell = { text, route, zeit: nowTime() };
+    try { localStorage.setItem("vertex:modell", JSON.stringify(letztesModell)); } catch {}
+    return text;
+  }
+  // Kompaktes Gedächtnis fürs schnelle Gehirn: nur Fokus, Profil, Ziele, Business, Notizen – je ein kurzer Auszug.
+  function memoryKompakt(memory) {
+    return String(memory).split(/\n(?=## )/).filter((b) => /^## (fokus|profil|ziele|business|notizen)\b/.test(b))
+      .map((b) => (b.length > 520 ? b.slice(0, 520) + " …" : b)).join("\n");
+  }
+  function kurzPrompt(memory, stand, system) {
+    const a = settings.anrede || "Master";
+    return `Du bist VERTEX, der persönliche Assistent von ${vorname || "ihm"}. Trocken, ruhig, souverän, leicht sarkastisch – immer hilfreich.
+SO KLINGST DU: kurze Sätze, ein Gedanke pro Satz, Ergebnis zuerst, ein bis drei Sätze. Aussagen statt Fragen (höchstens eine). Keine Floskeln („Gerne“, „Danke der Nachfrage“, „Wenn Sie wollen“, „Ich bin für Sie da“). Wird vorgelesen: kein Markdown, keine Listen, keine Emojis. Sprich ihn mit ${vorname ? `„${vorname}“ oder ` : ""}„${a}“ an, nicht in jedem Satz.
+PRÜFEN STATT RATEN: Fakten über ihn nur aus GEDÄCHTNIS und STAND. Zahlen zu Bestand, Gewinn, Aufgaben, Terminen und Kalorien NUR aus STAND – nie aus früheren Nachrichten. Weißt du etwas nicht, sag es. Ergibt ein Wort keinen Sinn, ist es vermutlich ein Diktat-Hörfehler.
+${system ? "" : `DIESER MODUS HAT KEINE WERKZEUGE. Braucht die Anfrage etwas eintragen, ändern, rechnen, recherchieren, Termine, Mails, Dokumente, Aufträge oder eine echte Abwägung, antworte NUR mit [[STARK]] – sonst nichts.
+`}JETZT: ${nowText()} (${TZ}).
+STAND
+${stand}
+GEDÄCHTNIS (Auszug)
+${memory || "(noch leer)"}
+${system ? "" : `LERNEN: Sagt er etwas Dauerhaftes über sich (Vorlieben, Ziele, Business), hänge GANZ AM ENDE an:
+[[GEDAECHTNIS]]
+[{"datei":"profil","aktion":"anhaengen","text":"…"}]
+datei: fokus, profil, ziele, notizen oder business. Nur speichern, was er gesagt hat.`}
+BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfälliges, Termine, offener Bestand), eine klare Empfehlung.`;
+  }
 
   const MEM_AUF = /\[\[GED(?:AE|Ä)CHTNIS\]\]/i, MEM_ZU = /\[\[\/GED(?:AE|Ä)CHTNIS\]\]/i;
   // Alle Gedächtnis-Blöcke einer Antwort: [[GEDAECHTNIS]] … [[/GEDAECHTNIS]] (der letzte darf offen bleiben).
@@ -2529,6 +2758,24 @@ ${appsFuerPrompt()}
   async function ask(userText, { image, imageUrl, voice = false, system = false, merken = "" } = {}) {
     userText = String(userText || "").trim();
     if ((!userText && !image) || busy) return;
+    // Lokal beantworten, was kein Modell braucht (Grüße, Danke, Ja/Nein, einfache Befehle).
+    const lokal = !system && !image ? lokaleAntwort(userText) : null;
+    if (lokal) {
+      stopListening(false);
+      lastWasVoice = voice;
+      await lokal.vorher?.();
+      if (lokal.text) {
+        addMsg("user", userText);
+        const el = addMsg("vertex", lokal.text);
+        addActions(el, lokal.text, ROUTE_TAG.lokal);
+        if (settings.tts) { tts.stop(); tts.say(lokal.text); }
+        if (lokal.merken) { turns.push({ role: "user", content: (voice ? "[Sprache] " : "") + userText }, { role: "assistant", content: lokal.text }); saveVerlauf(); }
+      }
+      lokal.aktion?.();
+      setzeModell("lokal");
+      if (!tts.active) tts.idle();
+      return true;
+    }
     if (!sample) { stopListening(); addMsg("err", "Vertex kann Claude in dieser Ansicht nicht erreichen. Öffne die Seite in der Claude-App oder auf claude.ai."); return; }
     // Sofort sperren – sonst startet ein Doppeltipp zwei Anfragen. ■ wirkt ab jetzt.
     busy = true; ctl = new AbortController(); sentAt = Date.now(); setAction();
@@ -2549,12 +2796,13 @@ ${appsFuerPrompt()}
       if (korr.changes.length) addMsg("note", "↺ verstanden als: " + korr.changes.join(", "));
       out = addMsg("vertex", "Denkt nach …");
       out.classList.add("thinking");
-      const careful = needsCare(userText, image);
-      setStatus(careful ? "Prüft gründlich" : "Denkt nach", true);
+      let route = system ? "schnell" : waehleRoute(userText, image);
+      setStatus(route === "stark" ? "Prüft gründlich" : "Denkt nach", true);
 
       const [memory, stand] = await mitFrist(Promise.all([memorySnapshot(), standSnapshot()]), 15000);
       abgebrochen();
-      const history = turns.slice(-16).map((t) => ({ role: t.role, content: String(t.content).slice(0, 2000) }));
+      // Kurzer Verlauf statt kompletter Kontext: schnell 4, stark 8 Nachrichten (ohne Sparmodus 16).
+      const verlauf = (n, max) => turns.slice(-n).map((t) => ({ role: t.role, content: String(t.content).slice(0, max) }));
       const msg = system ? userText : (voice ? "[Sprache] " : "") + (image ? `[Foto] ${userText || "Was siehst du? Handle passend (siehe FOTOS)."}` : userText);
 
       let spokenUpTo = 0;
@@ -2567,44 +2815,78 @@ ${appsFuerPrompt()}
       while (e >= 0 && rest.slice(0, e).trim().length <= 14) { const r = satzEnde(rest.slice(e)); e = r < 0 ? -1 : e + r; }
       if (e > 0) { tts.say(rest.slice(0, e)); answerSpoke = true; spokenUpTo += e; speakNew(spoken, false); }
       };
-      const run = async (withTools) => {
-      const input = [{ role: "user", content: instructions(memory, stand, withTools) }, ...history, { role: "user", content: msg }];
-      const tools = withTools ? werkzeugeFuerJetzt().map(({ name, description, inputSchema, execute }) => ({
-        name, description, inputSchema,
-        execute: (args, ctx) => serial(() => { setStatus(`Arbeitet: ${name.replace(/_/g, " ")}`, true); return execute(args || {}, ctx); }, ctx?.signal),
-      })) : undefined;
-      return sample(input, {
-        cache: false,
-        signal: ctl.signal,
-        modelTier: careful ? "default" : "quick",
-        ...(image ? { images: [image] } : {}),
-        ...(tools ? { tools } : {}),
-        onText: ({ text }) => {
-          const { parts, spoken } = parseAnswer(text);
-          out.classList.remove("thinking");
-          renderParts(out, parts);
-          scrollDown();
-          if (Orb.state === "thinking") setStatus("");
-          speakNew(spoken, false);
-        },
-      });
+      const werkzeugLog = [];
+      const onText = ({ text }) => {
+        const { parts, spoken } = parseAnswer(text);
+        if (!parts.length) return; // z. B. nur [[STARK]] – nichts zeigen
+        out.classList.remove("thinking");
+        renderParts(out, parts);
+        scrollDown();
+        if (Orb.state === "thinking") setStatus("");
+        speakNew(spoken, false);
+      };
+      const run = async (r, withTools) => {
+        const schnell = r === "schnell";
+        const input = schnell
+          ? [{ role: "user", content: kurzPrompt(memoryKompakt(memory), stand, system) }, ...verlauf(4, 600), { role: "user", content: msg }]
+          : [{ role: "user", content: instructions(memory, stand, withTools) }, ...verlauf(settings.sparmodus === false ? 16 : 8, 1500), { role: "user", content: msg }];
+        const tools = !schnell && withTools ? werkzeugeFuerJetzt().map(({ name, description, inputSchema, execute }) => ({
+          name, description, inputSchema,
+          execute: (args, ctx) => serial(() => { setStatus(`Arbeitet: ${name.replace(/_/g, " ")}`, true); return execute(args || {}, ctx); }, ctx?.signal)
+            .then((ergebnisDesWerkzeugs) => { werkzeugLog.push({ name, r: ergebnisDesWerkzeugs }); return ergebnisDesWerkzeugs; }),
+        })) : undefined;
+        return sample(input, {
+          cache: false,
+          signal: ctl.signal,
+          ...(schnell ? { modelTier: "quick", model: HAIKU } : { modelTier: "default" }),
+          ...(image && !schnell ? { images: [image] } : {}),
+          ...(tools ? { tools } : {}),
+          onText,
+        });
+      };
+      // Automatische Meldungen laufen ohne Werkzeuge: fremder Text darf nichts auslösen.
+      const starkLaufen = async () => {
+        try { return await run("stark", system ? false : toolsOk); }
+        catch (e) { if (e?.code !== "tools_unavailable") throw e; toolsOk = false; return run("stark", false); }
       };
       let res;
-      // Automatische Meldungen laufen ohne Werkzeuge: fremder Text darf nichts auslösen.
-      try { res = await run(system ? false : toolsOk); }
-      catch (e) {
-        if (e?.code !== "tools_unavailable") throw e;
-        toolsOk = false; res = await run(false);
-      }
+      if (route === "schnell") {
+        res = await run("schnell", false);
+        // Das schnelle Gehirn gibt ab, wenn es Werkzeuge oder echtes Nachdenken braucht.
+        if (!system && (/\[\[STARK\]\]/.test(res.text) || !res.text.trim())) {
+          route = "stark"; spokenUpTo = 0;
+          out.textContent = "Prüft gründlich …"; out.classList.add("thinking");
+          Orb.set("thinking"); setStatus("Prüft gründlich", true);
+          abgebrochen();
+          res = await starkLaufen();
+        }
+      } else res = await starkLaufen();
       const full = res.text;
-      const { parts, spoken } = parseAnswer(full);
-      renderParts(out, parts.length ? parts : [{ type: "text", text: "Notiert." }]);
-      speakNew(spoken || "Notiert.", true);
-      addActions(out, full);
+      let { parts, spoken } = parseAnswer(full);
+      // Nach einem Verkauf immer ein Satz mit Netto und Gewinn – auch wenn das Modell nur „Eingetragen.“ sagt.
+      const verkauf = werkzeugLog.filter((w) => /^lager_(hinzufuegen|aktualisieren)$/.test(w.name) && w.r?.status === "verkauft").at(-1)?.r;
+      const zahlen = new Set(spoken.replace(/(\d)\.(\d{3})/g, "$1$2").match(/\d+(,\d+)?/g) || []);
+      const genannt = (betrag) => { const z = String(betrag || "").replace(/[^\d,]/g, ""); return zahlen.has(z) || (z.endsWith(",00") && zahlen.has(z.slice(0, -3))); };
+      if (verkauf && !(genannt(verkauf.gewinn) && genannt(verkauf.netto))) {
+        const satz = `Verkauft: ${verkauf.name}${verkauf.groesse ? " " + verkauf.groesse : ""} für ${verkauf.verkauf}${verkauf.plattform ? " auf " + verkauf.plattform : ""}. Netto nach Gebühren ${verkauf.netto}, Gewinn ${verkauf.gewinn}.`;
+        parts = [...parts, { type: "text", text: (parts.length ? "\n" : "") + satz }];
+        spoken = (spoken + " " + satz).trim();
+      }
+      if (!parts.length) parts = [{ type: "text", text: "Erledigt." }];
+      renderParts(out, parts);
+      speakNew(spoken || "Erledigt.", true);
+      addActions(out, full, ROUTE_TAG[route]);
+      setzeModell(route, res);
       zeigeKarten();
       if (res.truncated) addMsg("note", "Antwort wurde gekürzt.");
       for (const n of toolNotes) addMsg("note", n);
       const saved = system ? [] : await applyMemory(parseOps(full)); // fremder Text schreibt nie ins Gedächtnis
+      // Sichtbar bestätigen, dass etwas gespeichert wurde: Hinweis oben + Zeile in der Antwort.
+      if (werkzeugLog.some((w) => SCHREIBEND.has(w.name) && w.r && !w.r.fehler) || saved.some((x) => !x.failed)) {
+        zeigeToast("Notiert.");
+        const n = document.createElement("span"); n.className = "notiert"; n.textContent = "✓ Notiert.";
+        out.appendChild(n);
+      }
       if (saved.some((x) => x.failed) && settings.tts && (lastWasVoice || settings.convo)) tts.say("Achtung: Das konnte ich gerade nicht speichern. Sag es mir gleich nochmal.");
       for (const s of saved) {
         const name = LABEL[s.file] || s.file;
@@ -2647,6 +2929,7 @@ ${appsFuerPrompt()}
       setAction();
       if (!tts.active) tts.idle();
       setTimeout(naechsteMeldung, 400); // fertige Aufträge melden, sobald er frei ist
+      setTimeout(ladeHeuteKarte, 300); // Heute-Karte aus den gespeicherten Listen neu berechnen
     }
     return ergebnis; // true, Fehlercode oder false – für die Auftrags-Meldungen
   }
@@ -2786,8 +3069,39 @@ ${appsFuerPrompt()}
     $("outPause").textContent = Number($("setPause").value).toLocaleString("de-DE") + " s";
   };
   ["setRate", "setPitch", "setPause"].forEach((id) => $(id).addEventListener("input", showRange));
+  function zeigeGebuehren() {
+    const g = $("feeGrid");
+    g.replaceChildren();
+    for (const t of ["Plattform", "Prozent", "Fix €"]) { const l = document.createElement("span"); l.className = "label"; l.textContent = t; g.appendChild(l); }
+    plattformen.forEach((pf, i) => {
+      const n = document.createElement("span"); n.textContent = pf.name;
+      const pz = document.createElement("input"); pz.inputMode = "decimal"; pz.value = String(pf.prozent).replace(".", ","); pz.dataset.i = i; pz.dataset.k = "prozent"; pz.setAttribute("aria-label", `${pf.name}: Gebühr in Prozent`);
+      const fx = document.createElement("input"); fx.inputMode = "decimal"; fx.value = (pf.fix_ct / 100).toFixed(2).replace(".", ","); fx.dataset.i = i; fx.dataset.k = "fix"; fx.setAttribute("aria-label", `${pf.name}: feste Gebühr in Euro`);
+      g.append(n, pz, fx);
+    });
+  }
+  async function speichereGebuehren() {
+    const neu = plattformen.map((pf) => ({ ...pf }));
+    let geaendert = false;
+    for (const inp of $("feeGrid").querySelectorAll("input")) {
+      const pf = neu[Number(inp.dataset.i)];
+      const v = String(inp.value).trim().replace(",", ".");
+      const n = v === "" ? 0 : Number(v);
+      if (!Number.isFinite(n) || n < 0 || (inp.dataset.k === "prozent" && n > 60)) continue; // Unsinn nicht übernehmen
+      if (inp.dataset.k === "prozent" && n !== pf.prozent) { pf.prozent = n; geaendert = true; }
+      if (inp.dataset.k === "fix" && cent(n) !== pf.fix_ct) { pf.fix_ct = cent(n); geaendert = true; }
+    }
+    if (!geaendert) return;
+    if (await store.set("plattformen", { liste: neu, geaendert: new Date().toISOString() })) { plattformen = neu; zeigeToast("Gebühren gespeichert."); }
+  }
+
   $("btnSettings").addEventListener("click", async () => {
     if (!settingsGeladen) await loadSettings();
+    await ladePlattformen();
+    zeigeGebuehren();
+    $("setName").value = settings.name || "";
+    $("setSpar").checked = settings.sparmodus !== false;
+    $("modellInfo").textContent = letztesModell ? `Zuletzt: ${letztesModell.text} · ${letztesModell.zeit}` : "Zuletzt: noch keine Antwort";
     $("setAnrede").value = settings.anrede;
     $("setTts").checked = settings.tts;
     $("setDeep").checked = settings.deep;
@@ -2825,10 +3139,14 @@ ${appsFuerPrompt()}
       rate: Number($("setRate").value) || 1, pitch: Number($("setPitch").value) || 0.95, deep: $("setDeep").checked,
       autoSend: $("setAutoSend").checked, pause: Number($("setPause").value) || 2.2, convo: $("setConvo").checked,
       auftragFrei: $("setJobsFree").checked,
+      name: $("setName").value.trim().slice(0, 40), sparmodus: $("setSpar").checked,
     };
     await store.set("einstellungen", settings);
+    await speichereGebuehren();
     $("dlgSettings").close();
+    await ladeVorname();
     renderMode();
+    zeigeKopf();
   });
   // Apps-Liste in den Einstellungen: Status je Verbindung, „Erlauben“ fragt die Freigabe für Vertex ab.
   let appsGen = 0;
@@ -2870,6 +3188,7 @@ ${appsFuerPrompt()}
       return;
     }
     chat.innerHTML = "";
+    $("app").classList.remove("chatting");
     $("dlgSettings").close();
   });
 
@@ -3035,6 +3354,105 @@ ${appsFuerPrompt()}
     $("modeLabel").textContent = settings.deep ? "GRÜNDLICH" : "";
   }
 
+  /* ---------------- Kopf, Heute-Karte, „Notiert.“ ---------------- */
+  let vorname = "", letztesModell = null, heuteDaten = null, termineHeute = [];
+  try { letztesModell = JSON.parse(localStorage.getItem("vertex:modell") || "null"); } catch {}
+  async function ladeVorname() {
+    if (settings.name) { vorname = settings.name; return; }
+    const p = String((await store.get("profil"))?.text || "");
+    const m = /(?:Heißt|Name(?: ist)?:?)\s+([A-ZÄÖÜ][a-zäöüß]+)/.exec(p);
+    vorname = m ? m[1] : "";
+  }
+  const stunde = () => Number(new Intl.DateTimeFormat("de-DE", { timeZone: TZ, hour: "2-digit", hourCycle: "h23" }).format(new Date()));
+  const gruss = () => { const h = stunde(); return h < 5 ? "Gute Nacht" : h < 11 ? "Guten Morgen" : h < 18 ? "Guten Tag" : "Guten Abend"; };
+  const ansprache = () => vorname || settings.anrede || "Master";
+  function zeigeKopf() {
+    $("greeting").textContent = `${gruss()}, ${ansprache()}.`;
+    $("dateLabel").textContent = "Vertex · " + new Intl.DateTimeFormat("de-DE", { timeZone: TZ, weekday: "short", day: "numeric", month: "short" }).format(new Date());
+  }
+  let toastUhr = null;
+  function zeigeToast(text = "Notiert.") {
+    const t = $("toast");
+    t.textContent = text; t.hidden = false;
+    clearTimeout(toastUhr); toastUhr = setTimeout(() => (t.hidden = true), 1800);
+  }
+  const eurKurz = (ct) => (ct == null ? "–" : (Math.round(ct / 100)).toLocaleString("de-DE") + " €");
+  function setzeKachel(id, wert, sub, warn = false) {
+    const el = $(id);
+    el.querySelector("b").textContent = wert;
+    el.querySelector("small").textContent = sub;
+    el.classList.toggle("warn", warn);
+  }
+  // Immer aus den gespeicherten Listen berechnet – nie aus dem Gesprächsverlauf.
+  async function ladeHeuteKarte() {
+    try {
+      const t = today();
+      const [aufgaben, lager] = await Promise.all([cols.list("aufgaben"), lagerAuswertung()]);
+      const offen = aufgaben.filter((x) => !x.erledigt);
+      const faellig = offen.filter((x) => x.faellig && x.faellig <= t);
+      setzeKachel("tcAufgaben", String(offen.length), faellig.length ? `${faellig.length} heute fällig` : offen.length ? "offen" : "nichts offen", faellig.length > 0);
+      setzeKachel("tcReselling", eurKurz(lager.gewinn_ct), `Gewinn · ${lager.im_bestand} Stk.`);
+      heuteDaten = { offen: offen.length, faellig: faellig.length, gewinn: lager.gewinn, verkauft: lager.verkauft, bestand: lager.im_bestand };
+    } catch (e) { console.warn("Heute-Karte", e); }
+    ladeTermine();
+  }
+  const KAL = "Google Calendar";
+  function berlinOffset() {
+    try { return (new Intl.DateTimeFormat("en-US", { timeZone: TZ, timeZoneName: "longOffset" }).formatToParts(new Date()).find((p) => p.type === "timeZoneName")?.value || "").replace("GMT", "") || "+01:00"; }
+    catch { return "+01:00"; }
+  }
+  function termineAus(payload) {
+    const p = payload && typeof payload === "object" ? payload : {};
+    const liste = Array.isArray(p) ? p : p.events || p.items || p.data || p.results || [];
+    return (Array.isArray(liste) ? liste : []).map((e) => ({ titel: String(e.summary || e.title || "Termin"), start: String(e.start?.dateTime || e.start?.date || e.startTime || e.start || "") }));
+  }
+  async function ladeTermine() {
+    if (!mcp || !nutzbar(KAL)) { setzeKachel("tcTermine", "–", mcp ? "Kalender verbinden" : "nur in Claude"); return; }
+    const perms = await claude.use("permissions");
+    const frei = perms ? await perms.state("mcp:" + KAL).catch(() => "unavailable") : "unavailable";
+    if (frei !== "granted") { setzeKachel("tcTermine", "–", "Kalender erlauben"); return; } // kein Dialog beim Laden
+    try {
+      const props = schemas[`${KAL}/list_events`]?.schema?.properties || {};
+      const [von, bis] = "timeMin" in props && !("startTime" in props) ? ["timeMin", "timeMax"] : ["startTime", "endTime"];
+      const off = berlinOffset();
+      const r = await mcp.callTool(KAL, "list_events", { [von]: `${today()}T00:00:00${off}`, [bis]: `${today()}T23:59:59${off}` }, { cache: { staleTime: 120000 } });
+      termineHeute = termineAus(r.payload).sort((a, b) => a.start.localeCompare(b.start));
+      const naechster = termineHeute.find((e) => !e.start.includes("T") || Date.parse(e.start) > Date.now() - 15 * 60000);
+      const zeit = (e) => (e.start.includes("T") ? e.start.slice(11, 16) + " " : "");
+      setzeKachel("tcTermine", String(termineHeute.length), naechster ? zeit(naechster) + naechster.titel : termineHeute.length ? "alle vorbei" : "keine heute");
+    } catch { setzeKachel("tcTermine", "–", "gerade nicht lesbar"); }
+  }
+  $("btnBriefing").addEventListener("click", () => { tts.unlock(); ask("Briefing, bitte."); });
+  $("tcAufgaben").addEventListener("click", () => { tts.unlock(); openToday(); });
+  $("tcReselling").addEventListener("click", () => { tts.unlock(); openToday(); });
+  $("tcTermine").addEventListener("click", () => {
+    tts.unlock();
+    if (mcp && nutzbar(KAL)) ask("Was steht heute im Kalender?"); else $("btnSettings").click();
+  });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { zeigeKopf(); ladeHeuteKarte(); } });
+
+  /* ---------------- Daten-Schema (versioniert, Migration statt Reset) ---------------- */
+  // Eine Quelle der Wahrheit: die Vertex-Datenbank (geräteübergreifend, fürs Team; ohne Anmeldung der Speicher dieses Geräts).
+  // Jede Zahl zu Bestand, Gewinn und Aufgaben wird daraus berechnet – nie aus dem Chatverlauf.
+  const SCHEMA_VERSION = 2;
+  async function migriere() {
+    try {
+      const teamSchema = (await store.getStrict("schema")) || {};
+      if ((teamSchema.version || 1) < SCHEMA_VERSION) {
+        // v2: Plattform-Gebühren als Tabelle anlegen (falls noch keine), Lager-Einträge vereinheitlichen.
+        const pf = await store.getStrict("plattformen");
+        if (!Array.isArray(pf?.liste)) await store.set("plattformen", { liste: START_PLATTFORMEN, angelegt: new Date().toISOString() });
+        for (const x of await cols.list("lager", { streng: true })) {
+          const neu = { ...x };
+          if (!LAGER_STATUS.includes(neu.status)) neu.status = "lager";
+          for (const k of ["einkauf_ct", "verkauf_ct", "gebuehren_ct", "versand_ct"]) if (neu[k] != null && !Number.isInteger(neu[k])) neu[k] = Number.isFinite(Number(neu[k])) ? Math.round(Number(neu[k])) : null;
+          if (JSON.stringify(neu) !== JSON.stringify(x)) await cols.put("lager", neu);
+        }
+        await store.set("schema", { version: SCHEMA_VERSION, migriert: new Date().toISOString() });
+      }
+    } catch (e) { console.warn("Migration später nochmal", e); } // nichts verloren – beim nächsten Laden erneut
+  }
+
   /* ---------------- Start ---------------- */
   async function start() {
     const [s, db, user, dl, m] = await Promise.all([claude.use("sample"), claude.use("db"), claude.use("user"), claude.use("downloads"), claude.use("mcp")]);
@@ -3044,6 +3462,9 @@ ${appsFuerPrompt()}
     if (db && uid) { store.db = db; store.uid = uid; }
     else { store.local = true; $("memHint").textContent = "Ohne Anmeldung merkt sich Vertex alles nur auf diesem Gerät."; }
     await loadState();
+    await migriere();
+    await Promise.all([ladeVorname(), ladePlattformen()]);
+    zeigeKopf();
     renderMode();
     $("tip").hidden = turns.length > 6;
     for (const t of turns.slice(-12)) {
@@ -3058,6 +3479,7 @@ ${appsFuerPrompt()}
       toolMax = lim?.tools?.maxCount || 0;
     }
     if (mcp) { await ladeApps(); ladeSchemas(); planePruefung(4000); }
+    ladeHeuteKarte();
     $("camLabel").hidden = !imagesOk;
     document.querySelector('[data-action="anzeige"]').hidden = !imagesOk;
     if (!sample) { addMsg("err", "Vertex kann Claude hier nicht erreichen. Öffne die Seite in der Claude-App oder auf claude.ai."); return; }
@@ -3066,7 +3488,7 @@ ${appsFuerPrompt()}
       const perms = await claude.use("permissions");
       const st = perms ? await perms.state("sample").catch(() => "prompt") : "prompt";
       if (st === "granted") ask(turns.length ? "Briefing, bitte." : "Hallo Vertex. Stell dich kurz vor.");
-      else if (!turns.length) addMsg("vertex", `Guten Tag, ${settings.anrede}. Ich bin Vertex. Tippen Sie auf „Briefing“ oder auf 🎙 und sagen Sie mir, woran Sie gerade arbeiten.`);
+      else if (!turns.length) addMsg("vertex", `${gruss()}, ${ansprache()}. Ich bin Vertex. Tippen Sie auf „Briefing“ oder auf 🎙 und sagen Sie mir, woran Sie gerade arbeiten.`);
     }
   }
   setAction();

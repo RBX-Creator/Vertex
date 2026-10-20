@@ -26,3 +26,16 @@ Vertex-Server ──Auftrag──► Hand-Agent auf dem PC (verbindet sich ausge
                               └─ Apps öffnen, Dateien (Allowlist)
 ```
 Die Sicherheitsstufen 🟢/🟡/🔴 aus `core/rules.md` gelten dort genauso – 🔴 mit Bestätigung auf dem Handy.
+
+## Vorgemerkt: Laptop-Brücke für Pocket (noch nicht gebaut)
+Spätere Verbindung von der Vertex-Seite (Pocket) zum eigenen Laptop. Feste Regeln, bevor eine Zeile gebaut wird:
+
+- **Nur Befehlsnamen aus einer festen Erlaubnisliste** (z. B. `ordner_oeffnen:projekte`, `musik_pause`,
+  `bildschirm_sperren`). Die Liste liegt auf dem Laptop, nicht auf der Seite – die Seite kann nichts hinzufügen.
+- **Nie Code.** Keine Shell-Befehle, keine Skripte, keine Parameter, die als Code ausgeführt werden. Unbekannter
+  Name → wird verworfen und gemeldet.
+- **Befehle verfallen nach 10 Minuten.** Jeder Befehl trägt Zeitstempel und einmalige ID; was älter ist oder
+  schon ausgeführt wurde, wird ignoriert (kein Nachholen, kein doppeltes Ausführen).
+- 🔴-Aktionen (senden, kaufen, löschen) gibt es über die Brücke nicht.
+
+Die gleiche Notiz steht im Code der Seite (`pocket/vertex-pocket.html`, Abschnitt „Laptop-Brücke“).
