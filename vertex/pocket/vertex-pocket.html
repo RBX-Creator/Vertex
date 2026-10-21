@@ -567,7 +567,7 @@ dialog h3 { margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--
   /* ---------------- Speicher: Texte (Gedächtnis) ---------------- */
   // Privat: data/users/<id>/<name>. Team: team/<name>. Ohne Anmeldung: nur dieses Gerät.
   const FILES = ["fokus", "profil", "ziele", "notizen", "business", "gebuehren", "ernaehrung-ziele", "woerterbuch", "woerterbuch-ich"];
-  const SHARED = new Set(["business", "gebuehren", "woerterbuch", "plattformen", "schema"]);
+  const SHARED = new Set(["business", "gebuehren", "woerterbuch", "plattformen", "schema", "kennzahlen", "startwerte"]);
   const LABEL = {
     fokus: "Fokus der Woche", profil: "Über mich", ziele: "Ziele", aufgaben: "Aufgaben (alte Notizen)", notizen: "Notizen",
     business: "Business (Team)", gebuehren: "Alte Gebühren-Notiz (ersetzt durch ⚙ Plattform-Gebühren)", "ernaehrung-ziele": "Ernährungsziele",
@@ -603,7 +603,13 @@ dialog h3 { margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--
       if (!this.local) { const s = await this.ref(name).get(); return s.exists ? s.data() : null; }
       try { return JSON.parse(localStorage.getItem("vertex:" + name) || "null"); } catch { return null; }
     },
+    async del(name) {
+      await merkeVorher("doc", name);
+      if (!this.local) { await this.ref(name).delete(); return true; }
+      try { localStorage.removeItem("vertex:" + name); return true; } catch { return false; }
+    },
     async set(name, data) {
+      await merkeVorher("doc", name);
       if (!this.local) {
         try { await this.ref(name).set(data); return true; } catch (e) { console.warn("db set", name, e); return false; }
       }
@@ -625,8 +631,21 @@ dialog h3 { margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--
       }
       try { return Object.entries(JSON.parse(localStorage.getItem(this.localKey(name)) || "{}")).map(([id, v]) => ({ ...v, id })); } catch { return []; }
     },
+    async get(name, id) {
+      if (!store.local) { const s = await this.ref(name).doc(id).get(); return s.exists ? { ...s.data(), id } : null; }
+      const v = JSON.parse(localStorage.getItem(this.localKey(name)) || "{}")[id];
+      return v ? { ...v, id } : null;
+    },
+    async del(name, id) {
+      await merkeVorher("col", name, id);
+      if (!store.local) { await this.ref(name).doc(id).delete(); return; }
+      const all = JSON.parse(localStorage.getItem(this.localKey(name)) || "{}");
+      delete all[id];
+      localStorage.setItem(this.localKey(name), JSON.stringify(all));
+    },
     async put(name, item) {
       const { id, ...data } = item;
+      await merkeVorher("col", name, id);
       if (!store.local) { await this.ref(name).doc(id).set(data); return; }
       const all = JSON.parse(localStorage.getItem(this.localKey(name)) || "{}");
       all[id] = data;
@@ -782,16 +801,20 @@ dialog h3 { margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--
 
   async function lagerAuswertung(monat, { streng = false } = {}) {
     const m = /^\d{4}-\d{2}$/.test(monat || "") ? monat : thisMonth();
-    const items = await cols.list("lager", { streng });
+    const [items, kz] = await Promise.all([cols.list("lager", { streng }), korrekturen(streng)]);
     const sold = items.filter((x) => x.status === "verkauft" && (x.verkauf_datum || "").startsWith(m));
-    const umsatz = sold.reduce((s, x) => s + (x.verkauf_ct ?? 0), 0);
-    const gewinn = sold.reduce((s, x) => s + itemProfit(x), 0);
+    const umsatzV = sold.reduce((s, x) => s + (x.verkauf_ct ?? 0), 0);
+    const gewinnV = sold.reduce((s, x) => s + itemProfit(x), 0);
+    // Von Hand gesetzte Werte (werte_aendern) kommen als Korrektur dazu – die Verkäufe bleiben unverändert.
+    const kU = kz[m]?.umsatz_ct || 0, kG = kz[m]?.gewinn_ct || 0;
+    const umsatz = umsatzV + kU, gewinn = gewinnV + kG;
     const kosten = sold.reduce((s, x) => s + (x.einkauf_ct ?? 0), 0);
     const bestand = items.filter((x) => x.status === "lager" || x.status === "gelistet");
     const standzeiten = sold.filter((x) => isDate(x.einkauf_datum) && isDate(x.verkauf_datum)).map((x) => daysBetween(x.einkauf_datum, x.verkauf_datum));
     return {
       monat: m,
-      verkauft: sold.length, umsatz: eur(umsatz), gewinn: eur(gewinn), gewinn_ct: gewinn,
+      verkauft: sold.length, umsatz: eur(umsatz), gewinn: eur(gewinn), gewinn_ct: gewinn, gewinn_verkaeufe_ct: gewinnV, umsatz_verkaeufe_ct: umsatzV,
+      ...(kU || kG ? { korrektur: [kG && `Gewinn ${kG > 0 ? "+" : ""}${eur(kG)}`, kU && `Umsatz ${kU > 0 ? "+" : ""}${eur(kU)}`].filter(Boolean).join(", ") + " von Hand gesetzt" } : {}),
       marge: umsatz ? pct((gewinn / umsatz) * 100) : null, roi: kosten ? pct((gewinn / kosten) * 100) : null,
       im_bestand: bestand.length, lagerwert_einkauf: eur(bestand.reduce((s, x) => s + (x.einkauf_ct ?? 0), 0)),
       durchschnittliche_standzeit_tage: standzeiten.length ? Math.round(standzeiten.reduce((a, b) => a + b, 0) / standzeiten.length) : null,
@@ -946,7 +969,7 @@ dialog h3 { margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--
       name: "lager_auswertung",
       description: "Exakte Auswertung des Resellings für einen Monat (JJJJ-MM, Standard aktueller Monat): Umsatz, Gewinn, Marge, ROI, Anzahl verkauft, Bestand und Lagerwert, Standzeit, Top-Artikel.",
       inputSchema: { type: "object", properties: { monat: { type: "string", description: "JJJJ-MM" } } },
-      execute: async (a) => { const r = await lagerAuswertung(a.monat, { streng: true }).catch(() => { throw new Error("Lager gerade nicht lesbar – keine Zahlen nennen, später nochmal."); }); delete r.gewinn_ct; return r; },
+      execute: async (a) => { const r = await lagerAuswertung(a.monat, { streng: true }).catch(() => { throw new Error("Lager gerade nicht lesbar – keine Zahlen nennen, später nochmal."); }); delete r.gewinn_ct; delete r.gewinn_verkaeufe_ct; delete r.umsatz_verkaeufe_ct; return r; },
     },
     {
       name: "aufgabe_hinzufuegen",
@@ -1071,6 +1094,369 @@ dialog h3 { margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--
       execute: (a) => ernaehrungTag(isDate(a.datum) ? a.datum : today()),
     },
   ];
+
+
+  /* ---------------- Werte ändern: setzen, korrigieren, zurücksetzen, löschen – mit Rückgängig ----------------
+     Alles, was Vertex speichert, kann er per Chat oder Sprache ändern. Das sind seine eigenen Zahlen in Vertex,
+     kein Bezahlen. Große oder unumkehrbare Schritte fragen vorher „Sicher? Ja/Nein“. Jede Änderung merkt sich
+     den vorherigen Stand der berührten Einträge (Änderungsprotokoll) – „rückgängig“ stellt ihn wieder her. */
+  let aenderungsLog = null, aktuelleGruppe = "";
+  const journalKey = () => `vertex:journal:${store.uid || "lokal"}`;
+  let journal = [];
+  function ladeJournal() { try { journal = JSON.parse(localStorage.getItem(journalKey()) || "[]"); } catch { journal = []; } }
+  function speichereJournal() { journal = journal.slice(-20); try { localStorage.setItem(journalKey(), JSON.stringify(journal)); } catch {} }
+  async function merkeVorher(art, name, id) {
+    if (!aenderungsLog) return;
+    const key = `${art}:${name}:${id || ""}`;
+    if (aenderungsLog.some((x) => x.key === key)) return;
+    let vorher;
+    try { vorher = art === "col" ? await cols.get(name, id) : await store.getStrict(name); } catch { vorher = undefined; } // unbekannt → nicht zurückholbar
+    aenderungsLog.push({ key, art, name, id, vorher });
+  }
+  async function macheRueckgaengig(eintraege) {
+    let ok = 0, fehl = 0;
+    const namen = new Set();
+    for (const e of [...eintraege].reverse()) {
+      for (const a of [...e.aenderungen].reverse()) {
+        if (a.vorher === undefined) { fehl++; continue; }
+        try {
+          if (a.art === "col") { if (a.vorher) await cols.put(a.name, a.vorher); else await cols.del(a.name, a.id); }
+          else if (a.vorher) { if (!(await store.set(a.name, a.vorher))) throw new Error("nicht gespeichert"); }
+          else await store.del(a.name);
+          namen.add(a.name); ok++;
+        } catch (err) { console.warn("Rückgängig", a.key, err); fehl++; }
+      }
+      e.rueckgaengig = true;
+    }
+    journal = journal.filter((x) => !x.rueckgaengig);
+    speichereJournal();
+    if (namen.has("einstellungen")) { settings = { ...SETTINGS_DEFAULT }; settingsGeladen = false; await loadSettings(); setzeAussehen(settings.aussehen); await ladeVorname(); zeigeKopf(); }
+    if (namen.has("plattformen")) await ladePlattformen();
+    ladeHeuteKarte();
+    return { ok, fehl, was: eintraege.map((e) => e.beschreibung).join("; ") };
+  }
+  const letzteGruppe = () => { const g = journal.filter((e) => !e.rueckgaengig).at(-1)?.gruppe; return g ? journal.filter((e) => e.gruppe === g && !e.rueckgaengig) : []; };
+  const rueckgaengigText = (r) => (r.ok ? `Rückgängig gemacht: ${r.was}.` : "Da gab es nichts zurückzuholen.") + (r.fehl ? ` ${r.fehl === 1 ? "Ein Eintrag ließ" : r.fehl + " Einträge ließen"} sich nicht zurückholen.` : "");
+
+  // „Sicher? Ja/Nein“ – auch per Sprache oder Text beantwortbar, solange die Karte offen ist.
+  let offeneBestaetigung = null;
+  function jaNein(text) {
+    const t = norm(text);
+    if (/^(ja|jo|jep|jup|klar|sicher|genau|ja bitte|ja mach|ja klar|ja sicher|mach( das| es)?|ok|okay|ausführen|bestätigt?|ja ausführen)$/.test(t)) return true;
+    if (/^(nein|nö|nee|ne|nope|abbrechen|stopp?|lieber nicht|doch nicht|nicht|nein danke)$/.test(t)) return false;
+    return null;
+  }
+
+  // Monats-Korrekturen für Gewinn und Umsatz (von Hand gesetzte Werte) – die Verkäufe selbst bleiben unverändert.
+  async function korrekturen(streng = false) { return ((streng ? await store.getStrict("kennzahlen") : await store.get("kennzahlen"))?.korrekturen) || {}; }
+  const FELDER_ARTIKEL = { einkauf: "einkauf_ct", verkauf: "verkauf_ct", gebuehren: "gebuehren_ct", versand: "versand_ct" };
+  const WAS = ["artikel", "gewinn", "umsatz", "startwert", "gebuehr", "aufgabe", "kunde", "ganzes_lager", "alle_aufgaben", "alle_kunden", "alle_korrekturen"];
+  const DATEN_TOOLS = [
+    {
+      name: "werte_aendern",
+      description: "Ändert gespeicherte Werte in Vertex: setzen, korrigieren, zurücksetzen oder löschen. was = artikel (Felder wie einkauf, verkauf, gebuehren, versand, status, name …), gewinn oder umsatz (eines Monats, z. B. „Gewinn auf 0 setzen“ – wird als Korrektur gespeichert, Verkäufe bleiben), startwert (z. B. kontostand, kasse, startkapital), gebuehr (Plattform: prozent und/oder wert = fester Betrag), aufgabe, kunde, ganzes_lager / alle_aufgaben / alle_kunden / alle_korrekturen. Beträge in Euro, 0 ist erlaubt. Große Schritte (löschen, zurücksetzen, Gewinn/Umsatz setzen) fragt das Werkzeug selbst „Sicher? Ja/Nein“. Das Ergebnis nennt genau, was geändert wurde; „rückgängig“ holt den alten Stand zurück.",
+      inputSchema: { type: "object", properties: {
+        aktion: { type: "string", enum: ["setzen", "loeschen", "zuruecksetzen"] },
+        was: { type: "string", enum: WAS },
+        id: { type: "string" }, suche: { type: "string", description: "Name/Text zum Finden (Artikel, Aufgabe, Kunde)" },
+        monat: { type: "string", description: "JJJJ-MM für gewinn/umsatz, Standard aktueller Monat" },
+        name: { type: "string", description: "Name des Startwerts (z. B. kontostand) oder der Plattform" },
+        wert: { type: "number", description: "Euro (bei gebuehr: fester Betrag)" },
+        prozent: { type: "number", description: "nur bei gebuehr" },
+        felder: { type: "object", description: "bei artikel/aufgabe/kunde: zu setzende Felder, z. B. {\"verkauf\": 0, \"status\": \"lager\"}" },
+      }, required: ["aktion", "was"] },
+      async execute(a, ctx) {
+        const aktion = a.aktion, was = a.was;
+        if (!["setzen", "loeschen", "zuruecksetzen"].includes(aktion) || !WAS.includes(was)) throw new Error("aktion oder was ungültig");
+        const sicher = async (titel, details) => {
+          if (!(await bestaetigen(titel, details, ctx?.signal))) throw Object.assign(new Error("Nicht ausgeführt – er hat Nein gesagt. Nichts geändert."), { nein: true });
+        };
+        const euro = (v, feld) => { const c = toCents(v, feld); if (c == null) throw new Error(`${feld} fehlt`); if (c < 0 && feld !== "Wert") throw new Error(`${feld} darf nicht negativ sein`); return c; };
+        // ---- Gewinn / Umsatz eines Monats ----
+        if (was === "gewinn" || was === "umsatz") {
+          const m = /^\d{4}-\d{2}$/.test(a.monat || "") ? a.monat : thisMonth();
+          const r = await lagerAuswertung(m, { streng: true });
+          const k = await korrekturen(true);
+          const feld = was === "gewinn" ? "gewinn_ct" : "umsatz_ct";
+          const ausVerkaeufen = was === "gewinn" ? r.gewinn_verkaeufe_ct : r.umsatz_verkaeufe_ct;
+          const alt = ausVerkaeufen + (k[m]?.[feld] || 0);
+          const name = `${was === "gewinn" ? "Gewinn" : "Umsatz"} ${monatName(m)}`;
+          if (aktion === "setzen") {
+            const ziel = euro(a.wert, "Wert");
+            await sicher(`${name} auf ${eur(ziel)} setzen`, `Jetzt: ${eur(alt)} (aus Verkäufen ${eur(ausVerkaeufen)}).\nDie Verkäufe bleiben erhalten; gespeichert wird eine Korrektur von ${eur(ziel - ausVerkaeufen)}.`);
+            const neu = { ...k, [m]: { ...(k[m] || {}), [feld]: ziel - ausVerkaeufen } };
+            if (!(await store.set("kennzahlen", { korrekturen: neu, geaendert: new Date().toISOString() }))) throw new Error("Speichern ging nicht");
+            return { ausgefuehrt: true, geaendert: `${name}: ${eur(alt)} → ${eur(ziel)}` };
+          }
+          await sicher(`${name} zurücksetzen`, `Jetzt: ${eur(alt)}. Danach zählt wieder nur, was aus den Verkäufen kommt: ${eur(ausVerkaeufen)}.`);
+          const neu = { ...k }; if (neu[m]) { delete neu[m][feld]; if (!Object.keys(neu[m]).length) delete neu[m]; }
+          if (!(await store.set("kennzahlen", { korrekturen: neu, geaendert: new Date().toISOString() }))) throw new Error("Speichern ging nicht");
+          return { ausgefuehrt: true, geaendert: `${name}: ${eur(alt)} → ${eur(ausVerkaeufen)} (nur Verkäufe)` };
+        }
+        if (was === "alle_korrekturen") {
+          const k = await korrekturen(true);
+          await sicher("Alle von Hand gesetzten Gewinn- und Umsatzwerte zurücksetzen", `${Object.keys(k).length} Monat(e) betroffen. Danach zählen nur noch die Verkäufe.`);
+          if (!(await store.set("kennzahlen", { korrekturen: {}, geaendert: new Date().toISOString() }))) throw new Error("Speichern ging nicht");
+          return { ausgefuehrt: true, geaendert: "Alle Korrekturen entfernt – Gewinn und Umsatz kommen wieder nur aus den Verkäufen" };
+        }
+        // ---- Startwerte (Kontostand, Kasse, Startkapital …) ----
+        if (was === "startwert") {
+          const key = String(a.name || "kontostand").toLowerCase().trim().replace(/\s+/g, "_").slice(0, 40);
+          const d = (await store.getStrict("startwerte")) || {};
+          const werte = { ...(d.werte || {}) };
+          const alt = werte[key];
+          if (aktion === "setzen") {
+            const ziel = euro(a.wert, "Wert");
+            werte[key] = { ct: ziel, datum: today() };
+            if (!(await store.set("startwerte", { werte, geaendert: new Date().toISOString() }))) throw new Error("Speichern ging nicht");
+            return { ausgefuehrt: true, geaendert: `${key}: ${alt ? eur(alt.ct) : "–"} → ${eur(ziel)}` };
+          }
+          if (!alt) throw new Error(`Es gibt keinen Startwert „${key}“. Vorhanden: ${Object.keys(werte).join(", ") || "keine"}.`);
+          await sicher(`Startwert „${key}“ ${aktion === "loeschen" ? "löschen" : "zurücksetzen"}`, `Jetzt: ${eur(alt.ct)} (gesetzt ${alt.datum}).`);
+          delete werte[key];
+          if (!(await store.set("startwerte", { werte, geaendert: new Date().toISOString() }))) throw new Error("Speichern ging nicht");
+          return { ausgefuehrt: true, geaendert: `${key} gelöscht (war ${eur(alt.ct)})` };
+        }
+        // ---- Plattform-Gebühren ----
+        if (was === "gebuehr") {
+          const d = await store.getStrict("plattformen");
+          let liste = Array.isArray(d?.liste) && d.liste.length ? pfListe(d.liste) : START_PLATTFORMEN.map((x) => ({ ...x }));
+          if (aktion !== "setzen") {
+            await sicher("Plattform-Gebühren auf die Startwerte zurücksetzen", liste.map(gebuehrText).join("\n") + "\n→ " + START_PLATTFORMEN.map(gebuehrText).join(", "));
+            liste = START_PLATTFORMEN.map((x) => ({ ...x }));
+            if (!(await store.set("plattformen", { liste, geaendert: new Date().toISOString() }))) throw new Error("Speichern ging nicht");
+            plattformen = liste; plattformenGeladen = true;
+            return { ausgefuehrt: true, geaendert: "Gebühren zurückgesetzt: " + liste.map(gebuehrText).join("; ") };
+          }
+          if (!gesetzt(a.name)) throw new Error("name (Plattform) fehlt");
+          let pf = liste.find((x) => pfKey(x.name) === pfKey(a.name));
+          const vorher = pf ? gebuehrText(pf) : "neu";
+          if (!pf) { pf = { name: String(a.name).trim().slice(0, 40), prozent: 0, fix_ct: 0 }; liste.push(pf); }
+          if (gesetzt(a.prozent)) { const p = num(a.prozent, "prozent"); if (p < 0 || p > 60) throw new Error("prozent muss zwischen 0 und 60 liegen"); pf.prozent = p; }
+          if (gesetzt(a.wert)) pf.fix_ct = euro(a.wert, "Fester Betrag");
+          if (!gesetzt(a.prozent) && !gesetzt(a.wert)) throw new Error("prozent oder wert angeben");
+          if (!(await store.set("plattformen", { liste, geaendert: new Date().toISOString() }))) throw new Error("Speichern ging nicht");
+          plattformen = liste; plattformenGeladen = true;
+          return { ausgefuehrt: true, geaendert: `Gebühr ${pf.name}: ${vorher} → ${gebuehrText(pf)}` };
+        }
+        // ---- Ganze Listen ----
+        if (was === "ganzes_lager" || was === "alle_aufgaben" || was === "alle_kunden") {
+          const col = { ganzes_lager: "lager", alle_aufgaben: "aufgaben", alle_kunden: "kunden" }[was];
+          const items = await cols.list(col, { streng: true });
+          if (!items.length) return { ausgefuehrt: false, hinweis: "Da ist nichts drin – nichts geändert." };
+          const titel = { lager: "Das ganze Lager löschen", aufgaben: "Alle Aufgaben löschen", kunden: "Alle Kunden und Projekte löschen" }[col];
+          await sicher(titel, `${items.length} Einträge, z. B. ${items.slice(0, 3).map((x) => x.name || x.text).join(", ")}.\nRückgängig geht danach mit „rückgängig“.`);
+          for (const x of items) await cols.del(col, x.id);
+          return { ausgefuehrt: true, geaendert: `${items.length} Einträge aus ${col} gelöscht` };
+        }
+        // ---- Einzelne Einträge: Artikel, Aufgabe, Kunde ----
+        const col = { artikel: "lager", aufgabe: "aufgaben", kunde: "kunden" }[was];
+        const items = await cols.list(col, { streng: true });
+        const x = findOne(items, a, { artikel: "Artikel", aufgabe: "Aufgabe", kunde: "Kunde" }[was]);
+        const titelVon = (y) => `${y.name || y.text}${y.groesse ? " " + y.groesse : ""}`;
+        if (aktion === "loeschen") {
+          await sicher(`${{ artikel: "Artikel", aufgabe: "Aufgabe", kunde: "Kunde" }[was]} löschen: ${titelVon(x)}`, eingabeText(was === "artikel" ? lagerView(x) : x));
+          await cols.del(col, x.id);
+          return { ausgefuehrt: true, geaendert: `${titelVon(x)} gelöscht` };
+        }
+        const f = a.felder && typeof a.felder === "object" ? a.felder : {};
+        if (aktion === "zuruecksetzen" && was === "artikel") {
+          // Verkauf zurücksetzen: wieder ins Lager, Verkaufsdaten weg
+          await sicher(`Verkauf zurücksetzen: ${titelVon(x)}`, `Status ${x.status} → lager; Verkauf, Gebühren, Versand und Verkaufsdatum werden entfernt.`);
+          const neu = { ...x, status: "lager", geaendert: new Date().toISOString() };
+          for (const k of ["verkauf_ct", "gebuehren_ct", "gebuehren_auto", "versand_ct", "verkauf_datum"]) delete neu[k];
+          await cols.put(col, neu);
+          return { ausgefuehrt: true, geaendert: `${titelVon(x)}: zurück im Lager (Verkauf entfernt)` };
+        }
+        if (!Object.keys(f).length) throw new Error("felder fehlen – was soll gesetzt werden?");
+        const neu = { ...x }, teile = [];
+        for (const [k, v] of Object.entries(f)) {
+          if (was === "artikel" && FELDER_ARTIKEL[k]) {
+            const c = v === null || v === "" ? undefined : euro(v, k);
+            const alt = x[FELDER_ARTIKEL[k]];
+            if (c === undefined) delete neu[FELDER_ARTIKEL[k]]; else neu[FELDER_ARTIKEL[k]] = c;
+            if (k === "gebuehren") delete neu.gebuehren_auto;
+            teile.push(`${k} ${alt == null ? "–" : eur(alt)} → ${c === undefined ? "–" : eur(c)}`);
+          } else if (was === "kunde" && k === "betrag") {
+            const c = euro(v, "betrag"); teile.push(`betrag ${x.betrag_ct == null ? "–" : eur(x.betrag_ct)} → ${eur(c)}`); neu.betrag_ct = c;
+          } else if (k === "status") {
+            const erlaubt = was === "artikel" ? LAGER_STATUS : was === "kunde" ? KUNDEN_STATUS : null;
+            if (!erlaubt) throw new Error("status gibt es hier nicht");
+            if (!erlaubt.includes(v)) throw new Error(`status muss einer von ${erlaubt.join(", ")} sein`);
+            teile.push(`status ${x.status} → ${v}`); neu.status = v;
+          } else if (/datum$|^faellig$/.test(k)) {
+            if (v && !isDate(v)) throw new Error(`${k} muss JJJJ-MM-TT sein`);
+            teile.push(`${k} ${x[k] || "–"} → ${v || "–"}`); if (v) neu[k] = v; else delete neu[k];
+          } else if (k === "erledigt") { neu.erledigt = Boolean(v); teile.push(`erledigt → ${v ? "ja" : "nein"}`); }
+          else if (["name", "groesse", "zustand", "plattform", "notiz", "text", "projekt", "prioritaet"].includes(k)) {
+            teile.push(`${k} „${x[k] || ""}“ → „${String(v ?? "").slice(0, 60)}“`); neu[k] = String(v ?? "").slice(0, 300);
+          } else throw new Error(`Feld „${k}“ kenne ich hier nicht`);
+        }
+        if (was === "artikel" && neu.status === "verkauft" && neu.verkauf_ct == null) throw new Error("Für „verkauft“ fehlt der Verkaufspreis (verkauf)");
+        if (was === "artikel" && neu.status === "verkauft" && !isDate(neu.verkauf_datum)) neu.verkauf_datum = today();
+        if (was === "artikel" && neu.status !== "verkauft") for (const k of ["verkauf_ct", "gebuehren_ct", "gebuehren_auto", "versand_ct", "verkauf_datum"]) if (f[k.replace(/_ct$/, "")] === undefined && x.status === "verkauft") delete neu[k];
+        neu.geaendert = new Date().toISOString();
+        await cols.put(col, neu);
+        const r = { ausgefuehrt: true, geaendert: `${titelVon(x)}: ${teile.join(", ")}` };
+        if (was === "artikel" && neu.status === "verkauft") Object.assign(r, { netto: eur((neu.verkauf_ct ?? 0) - (neu.gebuehren_ct ?? 0) - (neu.versand_ct ?? 0)), gewinn: eur(itemProfit(neu)) });
+        return r;
+      },
+    },
+    {
+      name: "aenderung_rueckgaengig",
+      description: "Macht die letzte Änderung (oder die letzte Gruppe von Änderungen) rückgängig – stellt den vorherigen Stand der Einträge wieder her.",
+      inputSchema: { type: "object", properties: {} },
+      async execute() {
+        const g = letzteGruppe();
+        if (!g.length) return { ausgefuehrt: false, hinweis: "Es gibt nichts zum Rückgängigmachen." };
+        const r = await macheRueckgaengig(g);
+        return { ausgefuehrt: r.ok > 0, geaendert: rueckgaengigText(r) };
+      },
+    },
+    {
+      name: "einstellung_aendern",
+      description: "Ändert seine Einstellungen per Sprache: name, anrede, sparmodus, gruendlich (immer starkes Modell), vorlesen, tempo (0,8–1,3), aussehen (folie/nacht), gespraechsmodus, auto_senden. Gebühren über werte_aendern (was = gebuehr).",
+      inputSchema: { type: "object", properties: { name: { type: "string" }, anrede: { type: "string" }, sparmodus: { type: "boolean" }, gruendlich: { type: "boolean" }, vorlesen: { type: "boolean" }, tempo: { type: "number" }, aussehen: { type: "string", enum: ["folie", "nacht"] }, gespraechsmodus: { type: "boolean" }, auto_senden: { type: "boolean" } } },
+      async execute(a) {
+        if (!settingsGeladen) await loadSettings();
+        if (!settingsGeladen) throw new Error("Einstellungen gerade nicht lesbar – nichts geändert.");
+        const MAP = { name: "name", anrede: "anrede", sparmodus: "sparmodus", gruendlich: "deep", vorlesen: "tts", tempo: "rate", aussehen: "aussehen", gespraechsmodus: "convo", auto_senden: "autoSend" };
+        const neu = { ...settings }, teile = [];
+        for (const [k, s] of Object.entries(MAP)) {
+          if (a[k] === undefined || a[k] === null) continue;
+          let v = a[k];
+          if (k === "tempo") { v = num(v, "tempo"); if (v < 0.8 || v > 1.3) throw new Error("tempo zwischen 0,8 und 1,3"); }
+          if (k === "name" || k === "anrede") v = String(v).trim().slice(0, k === "name" ? 40 : 30);
+          if (k === "aussehen" && !["folie", "nacht"].includes(v)) throw new Error("aussehen: folie oder nacht");
+          teile.push(`${k}: ${String(settings[s])} → ${String(v)}`); neu[s] = v;
+        }
+        if (!teile.length) throw new Error("Keine Einstellung angegeben");
+        if (!(await store.set("einstellungen", neu))) throw new Error("Speichern ging nicht");
+        settings = neu;
+        setzeAussehen(settings.aussehen); await ladeVorname(); zeigeKopf();
+        return { ausgefuehrt: true, geaendert: teile.join(", ") };
+      },
+    },
+    {
+      name: "timer_stellen",
+      description: "Stellt einen Timer (minuten/sekunden) oder Wecker (uhrzeit HH:MM, heute oder morgen) mit kurzem Text. Klingelt mit Ansage, solange Vertex geöffnet ist. Auch zum Löschen (loeschen: true, mit suche oder alle) und Auflisten (liste: true).",
+      inputSchema: { type: "object", properties: { minuten: { type: "number" }, sekunden: { type: "number" }, uhrzeit: { type: "string", description: "HH:MM (Berlin)" }, text: { type: "string" }, liste: { type: "boolean" }, loeschen: { type: "boolean" }, suche: { type: "string" }, alle: { type: "boolean" } } },
+      execute(a) {
+        if (a.liste) return { timer: timerListe().map((t) => ({ id: t.id, text: t.text, klingelt: zeitText(t.ende), in_minuten: Math.max(0, Math.round((t.ende - Date.now()) / 60000)) })) };
+        if (a.loeschen) {
+          const q = String(a.suche || "").toLowerCase();
+          const weg = timerListe().filter((t) => a.alle || (q && (t.text.toLowerCase().includes(q) || t.id === q)));
+          if (!weg.length) return { ausgefuehrt: false, hinweis: "Kein passender Timer." };
+          for (const t of weg) timerWeg(t.id);
+          return { ausgefuehrt: true, geaendert: `${weg.length === 1 ? "Timer" : weg.length + " Timer"} gelöscht: ${weg.map((t) => t.text).join(", ")}` };
+        }
+        let ende;
+        if (gesetzt(a.uhrzeit)) {
+          const m = /^(\d{1,2})[:.](\d{2})$/.exec(String(a.uhrzeit).trim());
+          if (!m || +m[1] > 23 || +m[2] > 59) throw new Error("uhrzeit als HH:MM");
+          ende = berlinZeitpunkt(+m[1], +m[2]);
+        } else {
+          const s = (Number(a.minuten) || 0) * 60 + (Number(a.sekunden) || 0);
+          if (!(s >= 5 && s <= 24 * 3600)) throw new Error("Dauer zwischen 5 Sekunden und 24 Stunden");
+          ende = Date.now() + s * 1000;
+        }
+        const t = { id: newId(), ende, text: String(a.text || (gesetzt(a.uhrzeit) ? "Wecker" : "Timer")).slice(0, 80) };
+        timerNeu(t);
+        return { ausgefuehrt: true, geaendert: `${gesetzt(a.uhrzeit) ? "Wecker" : "Timer"} „${t.text}“ klingelt um ${zeitText(ende)}`, hinweis: "Klingelt nur, solange Vertex geöffnet ist." };
+      },
+    },
+    {
+      name: "umrechnen",
+      description: "Rechnet Einheiten exakt um: kg, g, lb, oz, km, m, cm, mm, mi, ft, in, l, ml, c (°C), f (°F) und Sneaker-Größen Herren eu, us, uk (Nike/Jordan-Tabelle). Keine Währungen (keine Live-Kurse).",
+      inputSchema: { type: "object", properties: { wert: { type: "number" }, von: { type: "string" }, nach: { type: "string" } }, required: ["wert", "von", "nach"] },
+      execute(a) { return umrechnen(num(a.wert, "wert"), String(a.von), String(a.nach)); },
+    },
+    {
+      name: "bericht_erstellen",
+      description: "Erstellt einen Monatsbericht (Reselling-Zahlen, Verkäufe, Lager, offene Aufgaben und Projekte) exakt aus den Daten und zeigt ihn als Dokument-Karte (speichern, als Claude-Dokument anlegen, kopieren). export: lager oder kunden zeigt zusätzlich einen CSV-Knopf.",
+      inputSchema: { type: "object", properties: { monat: { type: "string", description: "JJJJ-MM" }, export: { type: "string", enum: ["lager", "kunden"] } } },
+      async execute(a) {
+        const m = /^\d{4}-\d{2}$/.test(a.monat || "") ? a.monat : thisMonth();
+        const [r, items, aufgaben, kunden] = await Promise.all([lagerAuswertung(m, { streng: true }), cols.list("lager", { streng: true }), cols.list("aufgaben", { streng: true }), cols.list("kunden", { streng: true })]);
+        const sold = items.filter((x) => x.status === "verkauft" && (x.verkauf_datum || "").startsWith(m)).sort((x, y) => String(x.verkauf_datum).localeCompare(String(y.verkauf_datum)));
+        const md = [`# Bericht ${monatName(m)}`, "", `Stand: ${nowText()}`, "", "## Reselling", "",
+          `- Umsatz: **${r.umsatz}**`, `- Gewinn: **${r.gewinn}**${r.korrektur ? ` (${r.korrektur})` : ""}`, `- Verkauft: ${r.verkauft}`, `- Marge: ${r.marge ?? "–"} · ROI: ${r.roi ?? "–"}`,
+          `- Im Lager: ${r.im_bestand} Artikel, Einkaufswert ${r.lagerwert_einkauf}`, "", "## Verkäufe", "",
+          ...(sold.length ? sold.map((x) => `- ${x.verkauf_datum} · ${x.name}${x.groesse ? " " + x.groesse : ""} · ${eur(x.verkauf_ct)}${x.plattform ? " · " + x.plattform : ""} · Gewinn ${eur(itemProfit(x))}`) : ["- keine"]),
+          "", "## Offene Aufgaben", "", ...(aufgaben.filter((x) => !x.erledigt).slice(0, 30).map((x) => `- ${x.text}${x.faellig ? ` (fällig ${x.faellig})` : ""}`)), ...(aufgaben.some((x) => !x.erledigt) ? [] : ["- keine"]),
+          "", "## Kunden & Projekte", "", ...(kunden.filter((k) => ["anfrage", "angebot", "auftrag", "fertig"].includes(k.status)).map((k) => `- ${k.name}: ${k.status}${k.betrag_ct != null ? ", " + eur(k.betrag_ct) : ""}`)), ...(kunden.some((k) => ["anfrage", "angebot", "auftrag", "fertig"].includes(k.status)) ? [] : ["- keine"])].join("\n");
+        karten.push(dokumentKarte(`Bericht ${monatName(m)}`, md));
+        if (a.export === "lager" || a.export === "kunden") karten.push(exportKarte(a.export));
+        return { ausgefuehrt: true, hinweis: "Die Karte erscheint unter deiner Antwort.", umsatz: r.umsatz, gewinn: r.gewinn, verkauft: r.verkauft };
+      },
+    },
+  ];
+
+  /* Timer und Wecker – im Gerät gespeichert, klingeln mit Ansage, solange die Seite offen ist. */
+  const timerUhren = new Map();
+  const timerListe = () => { try { return JSON.parse(localStorage.getItem("vertex:timer") || "[]"); } catch { return []; } };
+  const timerSpeichern = (l) => { try { localStorage.setItem("vertex:timer", JSON.stringify(l)); } catch {} };
+  const zeitText = (ms) => new Intl.DateTimeFormat("de-DE", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }).format(new Date(ms)) + " Uhr";
+  function berlinZeitpunkt(h, min) {
+    // nächster Zeitpunkt h:min in Berlin (heute oder morgen)
+    const jetzt = Date.now();
+    for (let tag = 0; tag < 2; tag++) {
+      const d = new Date(jetzt + tag * 86400000);
+      const datum = new Intl.DateTimeFormat("sv-SE", { timeZone: TZ }).format(d);
+      const off = new Intl.DateTimeFormat("en-US", { timeZone: TZ, timeZoneName: "longOffset" }).formatToParts(d).find((p) => p.type === "timeZoneName")?.value.replace("GMT", "") || "+00:00";
+      const t = Date.parse(`${datum}T${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}:00${off === "" ? "+00:00" : off}`);
+      if (t > jetzt + 1000) return t;
+    }
+    throw new Error("Zeit nicht bestimmbar");
+  }
+  function timerNeu(t) { timerSpeichern([...timerListe(), t]); timerScharf(t); }
+  function timerWeg(id) { clearTimeout(timerUhren.get(id)); timerUhren.delete(id); timerSpeichern(timerListe().filter((x) => x.id !== id)); }
+  function timerScharf(t) {
+    clearTimeout(timerUhren.get(t.id));
+    const rest = t.ende - Date.now();
+    timerUhren.set(t.id, setTimeout(() => timerKlingelt(t), Math.max(0, Math.min(rest, 2147483000))));
+  }
+  function timerKlingelt(t, verpasst = false) {
+    timerWeg(t.id);
+    const satz = verpasst ? `Verpasst, während Vertex zu war: ${t.text} (${zeitText(t.ende)}).` : `${t.text} – es ist ${nowTime()} Uhr.`;
+    zeigeToast(`⏰ ${t.text}`);
+    addMsg("note", "⏰ " + satz);
+    try { navigator.vibrate?.([300, 150, 300]); } catch {}
+    if (!verpasst) { Orb.level(1); tts.say(`${t.text}.`, { force: true }); }
+  }
+  function timerStart() {
+    for (const t of timerListe()) {
+      if (t.ende <= Date.now()) timerKlingelt(t, Date.now() - t.ende > 60000);
+      else timerScharf(t);
+    }
+  }
+
+  /* Umrechnen: Einheiten über Basiswerte, Sneaker-Größen über die Nike/Jordan-Herrentabelle. */
+  const EINHEIT = {
+    kg: ["masse", 1000], g: ["masse", 1], lb: ["masse", 453.59237], oz: ["masse", 28.349523125],
+    km: ["laenge", 1000], m: ["laenge", 1], cm: ["laenge", 0.01], mm: ["laenge", 0.001], mi: ["laenge", 1609.344], ft: ["laenge", 0.3048], in: ["laenge", 0.0254],
+    l: ["volumen", 1], ml: ["volumen", 0.001],
+  };
+  const GROESSEN = [[7, 6, 40], [7.5, 6.5, 40.5], [8, 7, 41], [8.5, 7.5, 42], [9, 8, 42.5], [9.5, 8.5, 43], [10, 9, 44], [10.5, 9.5, 44.5], [11, 10, 45], [11.5, 10.5, 45.5], [12, 11, 46], [12.5, 11.5, 47], [13, 12, 47.5], [14, 13, 48.5]];
+  function umrechnen(w, von, nach) {
+    const v = von.toLowerCase().replace(/[°\s.]/g, "").replace(/^celsius$/, "c").replace(/^fahrenheit$/, "f").replace(/^zoll$|^inch$/, "in").replace(/^meilen?$/, "mi").replace(/^liter$/, "l"),
+      n = nach.toLowerCase().replace(/[°\s.]/g, "").replace(/^celsius$/, "c").replace(/^fahrenheit$/, "f").replace(/^zoll$|^inch$/, "in").replace(/^meilen?$/, "mi").replace(/^liter$/, "l");
+    const fmt = (x) => (Math.round(x * 100) / 100).toLocaleString("de-DE");
+    if ((v === "c" || v === "f") && (n === "c" || n === "f")) {
+      const r = v === n ? w : v === "c" ? w * 9 / 5 + 32 : (w - 32) * 5 / 9;
+      return { ergebnis: Math.round(r * 100) / 100, deutsch: `${fmt(w)} °${v.toUpperCase()} = ${fmt(r)} °${n.toUpperCase()}` };
+    }
+    const sp = { us: 0, uk: 1, eu: 2 };
+    if (v in sp && n in sp) {
+      const z = GROESSEN.find((g) => g[sp[v]] === w);
+      if (!z) throw new Error(`Größe ${fmt(w)} ${v.toUpperCase()} steht nicht in der Tabelle (US 7–14 Herren)`);
+      return { ergebnis: z[sp[n]], deutsch: `${v.toUpperCase()} ${fmt(w)} = ${n.toUpperCase()} ${fmt(z[sp[n]])}`, hinweis: "Nike/Jordan Herren; andere Marken weichen teils ab." };
+    }
+    const a = EINHEIT[v], b = EINHEIT[n];
+    if (!a || !b || a[0] !== b[0]) throw new Error(`Von ${von} nach ${nach} kann ich nicht umrechnen`);
+    const r = (w * a[1]) / b[1];
+    return { ergebnis: Math.round(r * 10000) / 10000, deutsch: `${fmt(w)} ${v} = ${fmt(r)} ${n}` };
+  }
 
   /* ---------------- Laptop-Brücke (VORGEMERKT – noch nicht gebaut) ----------------
      In der Warteschlange steht niemals Code. Die Seite klickt nichts auf dem Laptop – sie schreibt nur eine Zeile:
@@ -1204,12 +1590,12 @@ dialog h3 { margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--
     return new Promise((resolve) => {
       const card = document.createElement("div");
       card.className = "msg confirm";
-      const h = document.createElement("div"); h.className = "card-head"; h.textContent = "Bestätigen";
+      const h = document.createElement("div"); h.className = "card-head"; h.textContent = "Sicher?";
       const t = document.createElement("div"); t.className = "confirm-title"; t.textContent = titel;
       const d = document.createElement("div"); d.className = "confirm-details"; d.textContent = details;
       const row = document.createElement("div"); row.className = "actions";
-      const nein = document.createElement("button"); nein.type = "button"; nein.className = "btn"; nein.textContent = "Abbrechen";
-      const ja = document.createElement("button"); ja.type = "button"; ja.className = "btn primary"; ja.textContent = "Ausführen";
+      const nein = document.createElement("button"); nein.type = "button"; nein.className = "btn"; nein.textContent = "Nein";
+      const ja = document.createElement("button"); ja.type = "button"; ja.className = "btn primary"; ja.textContent = "Ja";
       row.append(nein, ja);
       card.append(h, t, d, row);
       chat.appendChild(card); scrollDown();
@@ -1217,6 +1603,7 @@ dialog h3 { margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--
       const ende = (ok) => {
         if (fertig) return;
         fertig = true; clearTimeout(uhr); signal?.removeEventListener("abort", abbruch);
+        if (offeneBestaetigung === ende) offeneBestaetigung = null;
         ja.disabled = nein.disabled = true;
         h.textContent = ok ? "Bestätigt" : "Nicht ausgeführt";
         card.classList.add(ok ? "ok" : "no");
@@ -1227,8 +1614,10 @@ dialog h3 { margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--
       const uhr = setTimeout(abbruch, 120000);
       signal?.addEventListener("abort", abbruch, { once: true });
       ja.onclick = () => ende(true); nein.onclick = () => ende(false);
-      setStatus("Wartet auf deine Bestätigung", true);
-      if (settings.tts && !answerMuted) tts.say(`${titel}? Bitte bestätigen.`);
+      offeneBestaetigung = ende; // „ja“ / „nein“ per Text oder Sprache beantwortet die Karte
+      setStatus("Sicher? Ja oder Nein", true);
+      setAction();
+      if (settings.tts && !answerMuted) tts.say(`${titel}. Sicher? Ja oder nein.`);
     });
   }
   // Was bestätigt wird, muss vollständig zu sehen sein: Empfänger, Gäste, IDs und Zeiten zuerst, nichts still gekürzt.
@@ -1468,7 +1857,7 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
     card.append(h, t, vor, row, info);
     return card;
   }
-  const AKTIONEN = ["whatsapp", "sms", "anruf", "mail", "karte", "link", "kurzbefehl", "vinted", "ebay_verkauft", "stockx"];
+  const AKTIONEN = ["whatsapp", "sms", "anruf", "mail", "karte", "link", "kurzbefehl", "vinted", "ebay_verkauft", "stockx", "websuche", "wetter"];
   const nummer = (n) => { let d = String(n || "").replace(/[^\d+]/g, ""); if (d.startsWith("+")) d = d.slice(1); else if (d.startsWith("00")) d = d.slice(2); else if (d.startsWith("0")) d = "49" + d.slice(1); return d; };
   function aktionsLink({ typ, ziel, text, titel }) {
     const z = String(ziel || "").trim(), tx = String(text || "").trim(), e = encodeURIComponent;
@@ -1487,6 +1876,8 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
       case "vinted": return { href: `https://www.vinted.de/catalog?search_text=${e(z)}`, label: `Vinted: ${z}` };
       case "ebay_verkauft": return { href: `https://www.ebay.de/sch/i.html?_nkw=${e(z)}&LH_Sold=1&LH_Complete=1`, label: `eBay verkauft: ${z}` };
       case "stockx": return { href: `https://stockx.com/search?s=${e(z)}`, label: `StockX: ${z}` };
+      case "websuche": if (!z) throw new Error("ziel (Suchbegriff) fehlt"); return { href: `https://www.google.com/search?q=${e(z)}`, label: `Suchen: ${z}` };
+      case "wetter": return { href: `https://www.google.com/search?q=${e("Wetter " + (z || "Berlin"))}`, label: `Wetter: ${z || "Berlin"}` };
       default: throw new Error(`typ muss einer von ${AKTIONEN.join(", ")} sein`);
     }
   }
@@ -1665,14 +2056,25 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
     },
   ];
   // Welche Werkzeuge Claude bekommt (Reihenfolge = Wichtigkeit, falls die Ansicht nur wenige erlaubt).
-  const TOOL_ORDER = ["rechnen", "gewinn_berechnen", "lager_hinzufuegen", "lager_aktualisieren", "lager_auswertung", "aufgabe_hinzufuegen", "aufgabe_erledigen",
-    "kunde_speichern", "ernaehrung_eintragen", "auftrag_starten", "app_ausfuehren", "dokument_vorbereiten", "aktion_vorbereiten", "auftrag_status", "marktwert_recherche",
-    "auftrag_nachricht", "app_werkzeug_info", "ernaehrung_korrigieren", "lager_liste", "aufgaben_liste", "kunden_liste", "ernaehrung_tag", "repos_liste"];
-  function werkzeugeFuerJetzt() {
+  const TOOL_ORDER = ["rechnen", "gewinn_berechnen", "lager_hinzufuegen", "lager_aktualisieren", "werte_aendern", "aenderung_rueckgaengig", "lager_auswertung", "aufgabe_hinzufuegen", "aufgabe_erledigen",
+    "kunde_speichern", "ernaehrung_eintragen", "einstellung_aendern", "timer_stellen", "app_ausfuehren", "auftrag_starten", "dokument_vorbereiten", "aktion_vorbereiten", "umrechnen", "bericht_erstellen",
+    "lager_liste", "aufgaben_liste", "auftrag_status", "marktwert_recherche", "auftrag_nachricht", "app_werkzeug_info", "ernaehrung_korrigieren", "kunden_liste", "ernaehrung_tag", "repos_liste"];
+  // Passt ein Werkzeug zur Nachricht, kommt es nach vorn – so fällt bei begrenzter Werkzeugzahl nie das Gebrauchte weg.
+  const TOOL_HINT = {
+    marktwert_recherche: /marktwert|was (ist|sind) .* wert|preis|recherch/i, auftrag_starten: /recherch|auftrag|claude code|website|webseite|internet|such|finde heraus/i,
+    auftrag_status: /auftrag|agent|fertig|status/i, auftrag_nachricht: /auftrag|agent|folge/i, repos_liste: /repo|website|webseite/i,
+    app_ausfuehren: /termin|kalender|mail|gmail|drive|notion|datei|event|entwurf/i, app_werkzeug_info: /termin|kalender|mail|drive|notion/i,
+    timer_stellen: /timer|wecker|erinner|in \d+ minuten|um \d{1,2}[:.]\d{2}/i, umrechnen: /umrechn|größe|groesse|\b(us|eu|uk)\b|kg|lb|pfund|zoll|inch|meile|fahrenheit|celsius|°/i,
+    bericht_erstellen: /bericht|export|csv/i, einstellung_aendern: /einstell|tempo|langsam|schneller|mein name|anrede|dunkel|hell|aussehen|sparmodus|vorlesen|gesprächsmodus/i,
+    ernaehrung_korrigieren: /essen|kalorien|mahlzeit|gegessen/i, ernaehrung_tag: /kalorien|eiweiß|gegessen/i, kunden_liste: /kunde|projekt/i, aufgaben_liste: /aufgabe|to-?do/i,
+    lager_liste: /lager|bestand|artikel/i, dokument_vorbereiten: /angebot|rechnung|dokument|konzept|vorlage/i,
+    aktion_vorbereiten: /whatsapp|sms|anruf|ruf .* an|route|vinted|ebay|stockx|google|wetter|link|knopf/i,
+  };
+  function werkzeugeFuerJetzt(nachricht = "") {
     const ccrOk = ccrNutzbar();
     const appsOk = Boolean(mcp) && APPS.some((x) => nutzbar(x.server));
-    const alle = [...TOOLS, ...HAENDE_TOOLS].filter((t) => !t.gruppe || t.gruppe === "immer" || (t.gruppe === "ccr" && ccrOk) || (t.gruppe === "apps" && appsOk));
-    const rang = (t) => { const i = TOOL_ORDER.indexOf(t.name); return i < 0 ? 999 : i; };
+    const alle = [...TOOLS, ...DATEN_TOOLS, ...HAENDE_TOOLS].filter((t) => !t.gruppe || t.gruppe === "immer" || (t.gruppe === "ccr" && ccrOk) || (t.gruppe === "apps" && appsOk));
+    const rang = (t) => { const i = TOOL_ORDER.indexOf(t.name); return (i < 0 ? 999 : i) - (TOOL_HINT[t.name]?.test(nachricht) ? 1000 : 0); };
     return alle.sort((a, b) => rang(a) - rang(b)).slice(0, toolMax || alle.length);
   }
 
@@ -2491,7 +2893,8 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
   setInterval(() => { if (Orb.state === "speaking") Orb.level(0.25 + Math.random() * 0.45); }, 90);
 
   /* ---------------- Einstellungen und Zustand ---------------- */
-  let settings = { name: "", aussehen: "folie", sparmodus: true, anrede: "Master", tts: true, voice: "", rate: 0.9, pitch: 1.0, deep: false, autoSend: true, pause: 2.2, convo: false, auftragFrei: false };
+  const SETTINGS_DEFAULT = { name: "", aussehen: "folie", sparmodus: true, anrede: "Master", tts: true, voice: "", rate: 0.9, pitch: 1.0, deep: false, autoSend: true, pause: 2.2, convo: false, auftragFrei: false };
+  let settings = { ...SETTINGS_DEFAULT };
   let turns = []; // [{role, content}] – nur Text
   let lastBriefing = "";
 
@@ -2541,6 +2944,7 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
     if (termineLaden && termineAbwarten) await mitFrist(termineLaden, 4000).catch(() => {}); // nur fürs Briefing warten
     const termine = termineGueltig();
     const aufgaben = aufgaben0 || [], kunden = kunden0 || [];
+    const startwerte = Object.entries((await store.get("startwerte"))?.werte || {});
     const alt = artikel.filter((x) => (x.status === "lager" || x.status === "gelistet") && isDate(x.einkauf_datum)).sort((a, b) => a.einkauf_datum.localeCompare(b.einkauf_datum)).slice(0, 3);
     const jobsNeu = jobs.sort((a, b) => String(b.erstellt).localeCompare(String(a.erstellt))).slice(0, 5);
     const offen = aufgaben.filter((x) => !x.erledigt).sort((a, b) => (a.faellig || "9999").localeCompare(b.faellig || "9999"));
@@ -2548,7 +2952,8 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
     const offeneKunden = kunden.filter((k) => ["anfrage", "angebot", "auftrag", "fertig"].includes(k.status));
     return [
       ...(aufgaben0 ? [`Offene Aufgaben (${offen.length}):`, ...(auf.length ? auf : ["- keine"])] : ["Offene Aufgaben: gerade nicht lesbar – nichts behaupten, über aufgaben_liste holen."]),
-      lager ? `Lager: ${lager.im_bestand} Artikel im Bestand (Einkaufswert ${lager.lagerwert_einkauf}); diesen Monat ${lager.verkauft} verkauft, Gewinn ${lager.gewinn}.` : "Lager: gerade nicht lesbar – Zahlen nur über lager_auswertung holen, nichts schätzen.",
+      lager ? `Lager: ${lager.im_bestand} Artikel im Bestand (Einkaufswert ${lager.lagerwert_einkauf}); diesen Monat ${lager.verkauft} verkauft, Umsatz ${lager.umsatz}, Gewinn ${lager.gewinn}${lager.korrektur ? ` (${lager.korrektur})` : ""}.` : "Lager: gerade nicht lesbar – Zahlen nur über lager_auswertung holen, nichts schätzen.",
+      ...(startwerte.length ? [`Startwerte (von ihm gesetzt): ${startwerte.map(([k, v]) => `${k} ${eur(v.ct)} (seit ${v.datum})`).join("; ")}.`] : []),
       ...(alt.length ? [`Am längsten im Lager: ${alt.map((x) => `${x.name}${x.groesse ? " " + x.groesse : ""} (${daysBetween(x.einkauf_datum, t)} Tage)`).join("; ")}.`] : []),
       plattformenGeladen ? `Plattform-Gebühren (Einstellungen, werden beim Verkauf automatisch abgezogen): ${plattformen.map(gebuehrText).join("; ") || "keine"}.` : "Plattform-Gebühren: gerade nicht lesbar – beim Verkauf nachfragen.",
       `Termine heute: ${termine.length ? `${termine.length}, siehe KALENDER-DATEN unten` : !mcp || !nutzbar(KAL) ? "Kalender nicht verbunden" : termineStand === today() ? "keine" : "nicht gelesen (Kalender noch nicht erlaubt oder gerade nicht lesbar)"}.`,
@@ -2627,6 +3032,8 @@ AUFBAU – Werkzeuge rechnen, du entscheidest
 ${toolsOk ? `WERKZEUGE – du kannst wirklich etwas tun
 - Rechne NIE im Kopf: jede Rechnung über „rechnen“, Reselling-Gewinne über „gewinn_berechnen“, Monatszahlen über „lager_auswertung“.
 - Reselling-Lager: Kauf → lager_hinzufuegen. Verkauf → lager_aktualisieren (verkauf, plattform, versand). Die Gebühren zieht das Werkzeug automatisch aus den Plattform-Einstellungen ab (siehe STAND) – gebuehren nur angeben, wenn er einen abweichenden Betrag nennt. Plattform unbekannt? Kurz fragen. Fragen zum Bestand → lager_liste oder lager_auswertung, nie aus dem Gedächtnis.
+- WERTE ÄNDERN: Gewinn, Umsatz, Preise, Gebühren, Startwerte (Kontostand, Kasse), Artikel, Aufgaben, Kunden setzen, korrigieren, zurücksetzen oder löschen → werte_aendern. Das sind seine eigenen Zahlen in Vertex, kein Bezahlen – sag NIE, du könntest Geld oder Werte nicht ändern. Große Schritte fragt das Werkzeug selbst („Sicher? Ja/Nein“) – nicht zusätzlich im Text fragen. Danach genau nennen, was geändert wurde (aus „geaendert“), und dass er „rückgängig“ sagen kann. Sagt er „rückgängig“ → aenderung_rueckgaengig.
+- Einstellungen per Sprache (Name, Anrede, Sparmodus, Tempo, Aussehen, Vorlesen) → einstellung_aendern. Timer und Wecker → timer_stellen. Einheiten und Schuhgrößen → umrechnen. Monatsbericht, Export → bericht_erstellen.
 - Aufgaben: neue → aufgabe_hinzufuegen (relative Daten wie „Freitag“ vorher in JJJJ-MM-TT umrechnen; heute ist ${today()}), erledigt → aufgabe_erledigen, Überblick → aufgaben_liste.
 - Webdesign-Kunden und Projekte → kunde_speichern / kunden_liste.
 - Essen (auch Fotos) → ernaehrung_eintragen mit geschätzten Werten; die Tagessumme kommt exakt zurück.
@@ -2671,7 +3078,7 @@ FOTOS (seine „Augen“)
 ${haendePrompt(toolsOk)}
 
 GRENZEN
-${toolsOk && ccrNutzbar() ? "Selbst im Internet suchen kannst du hier nicht – dafür startest du einen Claude-Code-Auftrag (dauert Minuten). Kaufen, bezahlen und Nachrichten senden tust du nie; senden tut er selbst über die Knöpfe." : "Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen oder senden. Sag das offen und biete an, was du stattdessen tun kannst."}`;
+${toolsOk && ccrNutzbar() ? "Selbst im Internet suchen kannst du hier nicht – dafür startest du einen Claude-Code-Auftrag (dauert Minuten); für schnelle Suche oder Wetter gibst du ihm einen Knopf (aktion_vorbereiten: websuche oder wetter). Kaufen, bezahlen und Nachrichten senden tust du nie; senden tut er selbst über die Knöpfe. Werte in Vertex ändern ist kein Bezahlen – das tust du." : "Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen oder senden. Sag das offen und biete an, was du stattdessen tun kannst."}`;
   }
   function haendePrompt(toolsOk) {
     if (!toolsOk) return "";
@@ -2772,6 +3179,34 @@ ${appsFuerPrompt()}
       row.appendChild(c);
     }
     if (row.children.length) container.parentElement.appendChild(row);
+    return row;
+  }
+  // Kurzbeschreibung einer Änderung fürs Rückgängig
+  function beschreibe(name, a = {}) {
+    if (name === "werte_aendern") return `${({ ganzes_lager: "ganzes Lager", alle_aufgaben: "alle Aufgaben", alle_kunden: "alle Kunden", alle_korrekturen: "alle Korrekturen", gebuehr: "Gebühr" })[a.was] || String(a.was || "").replace(/^./, (c) => c.toUpperCase())}${a.name ? " " + a.name : ""}${a.suche ? " „" + a.suche + "“" : ""} ${a.aktion === "loeschen" ? "gelöscht" : a.aktion === "zuruecksetzen" ? "zurückgesetzt" : "geändert"}`;
+    return ({ lager_hinzufuegen: "Artikel eingetragen", lager_aktualisieren: "Artikel geändert", aufgabe_hinzufuegen: "Aufgabe angelegt", aufgabe_erledigen: "Aufgabe erledigt",
+      kunde_speichern: "Kunde gespeichert", ernaehrung_eintragen: "Essen eingetragen", ernaehrung_korrigieren: "Essen korrigiert", einstellung_aendern: "Einstellung geändert" })[name] || name.replace(/_/g, " ");
+  }
+  function rueckgaengigKnopf(zeile, eintraege) {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = "↶ Rückgängig";
+    b.onclick = async () => {
+      b.disabled = true;
+      const r = await macheRueckgaengig(eintraege.filter((e) => !e.rueckgaengig));
+      b.textContent = r.ok ? "↶ Zurückgeholt" : "↶ Nichts zurückzuholen";
+      addMsg("note", "↶ " + rueckgaengigText(r));
+      zeigeToast(r.ok ? "Rückgängig." : "Nichts geändert.");
+    };
+    zeile.appendChild(b);
+  }
+  // Export-Karte: CSV per Tipp speichern (Download braucht einen Tipp des Nutzers)
+  function exportKarte(bereich) {
+    if (!downloads) throw new Error("Speichern als Datei geht in dieser Ansicht nicht.");
+    const card = document.createElement("div"); card.className = "msg doc";
+    const b = document.createElement("button"); b.type = "button"; b.className = "btn primary aktion";
+    b.textContent = bereich === "kunden" ? "Kunden als CSV speichern" : "Lager als CSV speichern";
+    b.onclick = () => $(bereich === "kunden" ? "btnCsvClients" : "btnCsvStock").click();
+    card.appendChild(b);
+    return card;
   }
 
   /* ---------------- Gespräch ---------------- */
@@ -2796,7 +3231,7 @@ ${appsFuerPrompt()}
   }
 
   // Gründlich (langsamer, klüger) bei Fotos und echten Denkfragen – Zahlen rechnen die Werkzeuge exakt.
-  const NEEDS_DEPTH = /warum|wieso|erklär|lohnt|soll ich|sollte ich|empfiehl|empfehl|strategie|vergleich|vertrag|recht|gesetz|steuer|planen|plan für|konzept|analys|angebot schreib|angebot für|bewert|entscheid/i;
+  const NEEDS_DEPTH = /warum|wieso|erklär|lohnt|soll ich|sollte ich|empfiehl|empfehl|strategie|vergleich|vertrag|recht|gesetz|steuer|planen|plan für|konzept|analys|angebot schreib|angebot für|bewert|entscheid|setz|zurücksetz|lösch|korrigier|änder|auf null|startwert|kontostand|kasse|timer|wecker|umrechn|bericht|export|einstellung|tempo|sparmodus/i;
 
   /* ---------------- Spar-Routing: zwei Gehirne ---------------- */
   // lokal:   Grüße, Danke, Ja/Nein, einfache Befehle – ohne Modell, sofort, kostenlos.
@@ -2888,6 +3323,8 @@ ${appsFuerPrompt()}
   }
   function lokalerBefehl(t) {
     if (/^(stopp?|halt|ruhe|still|sei still|psst?|schweig|hör auf|aufhören)$/.test(t)) return { text: "", aktion: () => tts.stop() };
+    if (/^((mach )?(das |es )?rückgängig( machen)?|undo|nimm (das|es) zurück|zurücknehmen)$/.test(t))
+      return { text: "", vorher: async () => { const g = letzteGruppe(); return g.length ? rueckgaengigText(await macheRueckgaengig(g)) : "Es gibt nichts zum Rückgängigmachen."; } };
     if (/^(wiederhol(e|en)?( das)?|nochmal|was hast du gesagt)$/.test(t)) {
       const l = parseAnswer(letzteAntwort()).spoken;
       return l ? { text: "", aktion: () => tts.say(l, { force: true }) } : null;
@@ -2922,7 +3359,7 @@ ${appsFuerPrompt()}
   const monatName = (ym) => new Intl.DateTimeFormat("de-DE", { month: "long", year: ym.slice(0, 4) === thisMonth().slice(0, 4) ? undefined : "numeric", timeZone: "UTC" }).format(new Date(ym + "-15T12:00:00Z"));
   const woerter = (t) => t.split(" ").filter(Boolean).length;
   // Wörter, die eine Handlung, Bedingung oder Abwägung anzeigen – dann entscheidet das Gehirn.
-  const HANDLUNG = /(^|\s)(trag|eintrag|hinzu|neue?[nrs]?|lösch|änder|korrigier|gekauft|verkauft|kauf|verkauf|retour|gelistet|list|erledigt|abhak|erinner|verschieb|wenn|falls|würde|könnte|soll|sollte|lohnt|vergleich|warum|wieso|plan|ziel|steiger|erhöh|senk|schreib|bis|für|bei|pro|je)(\s|$)/;
+  const HANDLUNG = /(^|\s)((lösch|änder|korrigier|setz|zurück|reset|erinner|verschieb|eintrag|steiger|erhöh|senk|schreib|vergleich|gekauft|verkauft|retour|gelistet|erledigt|abhak|hinzu|lohnt|plan|leer|ideen?|tipps?|export|bericht)\S*|trag|neu|neue[nrs]?|kauf|verkauf|list|wenn|falls|würde|könnte|soll|sollte|warum|wieso|ziel|bis|für|bei|pro|je|auf|null|mehr)(?=\s|$)/;
   const SCHNELLE = [
     {
       name: "gewinn",
@@ -2931,9 +3368,10 @@ ${appsFuerPrompt()}
         const m = monatAus(t);
         const r = await werkzeug("lager_auswertung").execute({ monat: m });
         const name = monatName(m), jetzt = m === thisMonth();
-        const satz = r.verkauft ? `${name}: ${r.gewinn} Gewinn bei ${r.umsatz} Umsatz, ${r.verkauft} verkauft, Marge ${r.marge}.` : `${name}: noch nichts verkauft.`;
+        const satz = r.verkauft || r.korrektur ? `${name}: ${r.gewinn} Gewinn bei ${r.umsatz} Umsatz, ${r.verkauft} verkauft${r.marge ? `, Marge ${r.marge}` : ""}.` : `${name}: noch nichts verkauft.`;
         const fehlt = r.fehlende_gebuehren ? ` ${r.fehlende_gebuehren === 1 ? "Ein Verkauf hat" : r.fehlende_gebuehren + " Verkäufe haben"} keine Gebühren eingetragen.` : "";
-        return `${satz}${fehlt} ${jetzt ? "Im Lager" : "Jetzt im Lager"}: ${r.im_bestand} Artikel, Einkaufswert ${r.lagerwert_einkauf}.`;
+        const korr = r.korrektur ? ` Darin ist eine Korrektur: ${r.korrektur}.` : "";
+        return `${satz}${korr}${fehlt} ${jetzt ? "Im Lager" : "Jetzt im Lager"}: ${r.im_bestand} Artikel, Einkaufswert ${r.lagerwert_einkauf}.`;
       },
     },
     {
@@ -3112,13 +3550,18 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
     const btn = $("btnAction");
     const hasText = $("input").value.trim().length > 0;
     btn.classList.remove("go", "stop", "mic");
-    if (busy) { btn.textContent = "■"; btn.classList.add("stop"); btn.setAttribute("aria-label", "Stopp"); }
+    if (busy && !(offeneBestaetigung && hasText)) { btn.textContent = "■"; btn.classList.add("stop"); btn.setAttribute("aria-label", "Stopp"); }
     else if (hasText) { btn.textContent = "➤"; btn.classList.add("go"); btn.setAttribute("aria-label", "Senden"); }
     else { btn.textContent = "🎙"; btn.classList.add("mic"); btn.setAttribute("aria-label", "Sprechen"); }
   }
 
   async function ask(userText, { image, imageUrl, voice = false, system = false, merken = "", auto = false } = {}) {
     userText = String(userText || "").trim();
+    // Offene „Sicher?“-Karte: ein „ja“/„nein“ (getippt oder gesprochen) beantwortet sie.
+    if (offeneBestaetigung && !system && userText) {
+      const jn = jaNein(userText);
+      if (jn !== null) { offeneBestaetigung(jn); return true; }
+    }
     if ((!userText && !image) || busy) return;
     if (!system) zeigeSeite("gespraech");
     // Lokal beantworten, was kein Modell braucht (Grüße, Danke, Ja/Nein, einfache Befehle).
@@ -3164,6 +3607,7 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
     if (!sample) { stopListening(); addMsg("err", "Vertex kann Claude in dieser Ansicht nicht erreichen. Öffne die Seite in der Claude-App oder auf claude.ai."); return; }
     // Sofort sperren – sonst startet ein Doppeltipp zwei Anfragen. ■ wirkt ab jetzt.
     busy = true; ctl = new AbortController(); sentAt = Date.now(); setAction();
+    const gruppe = aktuelleGruppe = newId(); // alle Änderungen dieser Antwort gehören zusammen (Rückgängig)
     const signal = ctl.signal;
     const abgebrochen = () => { if (signal.aborted) throw { code: "cancelled" }; };
     stopListening(false);
@@ -3219,9 +3663,19 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
         const input = schnell
           ? [{ role: "user", content: kurzPrompt(memoryKompakt(memory), stand, system) }, ...verlauf(4, 600), { role: "user", content: msg }]
           : [{ role: "user", content: instructions(memory, stand, withTools) }, ...verlauf(settings.sparmodus === false ? 16 : 8, 1500), { role: "user", content: msg }];
-        const tools = !schnell && withTools ? werkzeugeFuerJetzt().map(({ name, description, inputSchema, execute }) => ({
+        const tools = !schnell && withTools ? werkzeugeFuerJetzt(msg).map(({ name, description, inputSchema, execute }) => ({
           name, description, inputSchema,
-          execute: (args, ctx) => serial(() => { setStatus(`Arbeitet: ${name.replace(/_/g, " ")}`, true); return execute(args || {}, ctx); }, ctx?.signal)
+          execute: (args, ctx) => serial(async () => {
+            setStatus(`Arbeitet: ${name.replace(/_/g, " ")}`, true);
+            aenderungsLog = [];
+            let erg;
+            try { erg = await execute(args || {}, ctx); return erg; }
+            finally {
+              const log = aenderungsLog; aenderungsLog = null;
+              // Rückgängig nur für Vertex' eigene Daten – Aufträge, Apps und das Rückgängig selbst wirken nach außen bzw. sind schon die Umkehr.
+              if (log.length && !HAENDE_TOOLS.some((t) => t.name === name) && name !== "aenderung_rueckgaengig") { journal.push({ gruppe, zeit: Date.now(), werkzeug: name, beschreibung: erg?.geaendert || beschreibe(name, args), aenderungen: log }); speichereJournal(); }
+            }
+          }, ctx?.signal)
             .then((ergebnisDesWerkzeugs) => { werkzeugLog.push({ name, r: ergebnisDesWerkzeugs }); return ergebnisDesWerkzeugs; }),
         })) : undefined;
         return sample(input, {
@@ -3283,7 +3737,9 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
       renderParts(out, parts);
       speakNew(spoken, true);
       const shown = parts.map((p) => (p.type === "card" ? `[[TEXT]]${p.text}[[/TEXT]]` : p.text)).join("").trim();
-      addActions(out, shown, ROUTE_TAG[route]);
+      const zeile = addActions(out, shown, ROUTE_TAG[route]);
+      const meine = journal.filter((e) => e.gruppe === gruppe);
+      if (meine.length) rueckgaengigKnopf(zeile || out.parentElement, meine);
       setzeModell(route, res);
       zeigeKarten();
       if (res.truncated) addMsg("note", "Antwort wurde gekürzt.");
@@ -3397,7 +3853,7 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
     }
   }
   function startListening() {
-    if (busy) return;
+    if (busy && !offeneBestaetigung) return; // bei „Sicher? Ja/Nein“ darf er antworten
     listening = true;
     $("composer").classList.add("listening");
     Orb.set("listening");
@@ -3423,7 +3879,7 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
     setStatus("Ich höre …", true);
     sendTimer = setTimeout(() => {
       const t = $("input").value;
-      if (!t.trim() || busy) return;
+      if (!t.trim() || (busy && !offeneBestaetigung)) return;
       $("input").value = ""; setAction();
       ask(t, { voice: true });
     }, settings.pause * 1000);
@@ -3434,6 +3890,7 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
   $("composer").addEventListener("submit", (e) => {
     e.preventDefault();
     tts.unlock();
+    if (busy && offeneBestaetigung && $("input").value.trim()) { const a = $("input").value; $("input").value = ""; setAction(); ask(a, { voice: listening }); return; }
     if (busy) { if (Date.now() - sentAt > 600) ctl?.abort(); return; } // Doppeltipp auf ➤ bricht nicht gleich ab
     const t = $("input").value;
     if (!t.trim()) { listening ? stopListening() : startListening(); return; }
@@ -3821,7 +4278,7 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
   function zeigeBauplan() {
     const appsDa = [...APPS.map((x) => x.server), CCR, DOCS].filter((x) => mcp && nutzbar(x)).length;
     const karten = [
-      { b: String(TOOLS.length), code: "werkzeuge", p: "Echte Funktionen: rechnen, Gewinn, Lager, Gebühren, Aufgaben, Kunden, Kalorien. Jede Zahl kommt von hier." },
+      { b: String(TOOLS.length + DATEN_TOOLS.length), code: "werkzeuge", p: "Echte Funktionen: rechnen, umrechnen, Gewinn, Lager, Werte ändern mit Rückgängig, Gebühren, Aufgaben, Kunden, Kalorien, Timer, Berichte. Jede Zahl kommt von hier." },
       { b: String(SCHNELLE.length), code: "schnelle_antworten", p: "Gewinn, Bestand, Aufgaben, Kalorien, Rechnen, Gebühren, Termine – sofort aus den Werkzeugen, ohne Modell." },
       { b: "2", code: "gehirn", herz: true, p: `Entscheidet, was passiert: Haiku für Kleines, das starke Modell mit Werkzeugen für alles andere.${letztesModell ? ` Zuletzt: ${letztesModell.text}.` : ""}` },
       { b: String(appsDa), code: "hände", p: "Verbundene Apps und Claude-Code-Aufträge. Löschen und Benachrichtigen nur nach deinem Tipp." },
@@ -3982,6 +4439,8 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
     if (db && uid) { store.db = db; store.uid = uid; }
     else { store.local = true; $("memHint").textContent = "Ohne Anmeldung merkt sich Vertex alles nur auf diesem Gerät."; }
     await loadState();
+    ladeJournal();
+    timerStart();
     if (settingsGeladen) setzeAussehen(settings.aussehen);
     await migriere();
     await Promise.all([ladeVorname(), ladePlattformen()]);
