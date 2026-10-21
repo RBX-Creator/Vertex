@@ -335,9 +335,28 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
 .welle i { height: 6px; border-radius: 1px; }
 .anruf-text { grid-column: 1 / -1; align-self: end; margin-top: 18px; }
 .anruf-text p { margin: 4px 0 0; font-size: 17px; line-height: 1.45; max-height: 9.5em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; }
+/* Feinschliff wie Moritz: große matte Kugel, luftige Blasen, Outline-Icons, eine Akzentfarbe */
+.app[data-ansicht="sprache"] .stage, .app.chatting[data-ansicht="sprache"] .stage { height: 230px; }
+.msg { max-width: 76%; padding: 10px 14px; border-radius: 14px; font-size: 15px; line-height: 1.45; }
+.msg.user { background: #c9775a; color: #fff; border-bottom-right-radius: 14px; }
+.msg.vertex { background: #fff; color: #1c1b1a; border-bottom-left-radius: 14px; box-shadow: 0 1px 2px rgba(28, 27, 26, 0.05); }
+:root[data-theme="nacht"] .msg.vertex { background: var(--vertex-bg); color: var(--fg); }
+.msg-actions { margin-top: 0; }
+.icon-btn { width: 34px; height: 34px; padding: 0; }
+.icon-btn svg, .mic-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.mic-btn svg { width: 22px; height: 22px; }
+.greet { position: relative; }
+.home-zahnrad { position: absolute; top: 0; right: 0; }
+.app[data-ansicht="sprache"] .composer input::placeholder { color: transparent; }
+.steuerung .composer { flex-basis: 56px; }
+.steuerung .composer input[type="text"] { box-shadow: none; }
+.tab[aria-current="page"] { background: none; color: var(--accent-2); }
+.tab[aria-current="page"] svg { box-sizing: content-box; padding: 8px; border-radius: 50%; background: rgba(201, 119, 90, 0.16); }
+.tabs { padding: 4px 6px; border-radius: 26px; box-shadow: 0 6px 24px rgba(28, 27, 26, 0.1), 0 1px 3px rgba(28, 27, 26, 0.06); }
+:root[data-theme="nacht"] .tabs { box-shadow: var(--tab-shadow); }
 /* Wenig Höhe: Kugel klein */
 @media (max-height: 700px) {
-  .stage { height: min(24vh, 150px); }
+  .stage, .app[data-ansicht="sprache"] .stage, .app.chatting[data-ansicht="sprache"] .stage { height: min(24vh, 160px); }
   .app.chatting .stage { height: 96px; }
   .steuerung { padding: 4px 0 2px; }
   .mic-btn { width: 48px; height: 48px; }
@@ -345,7 +364,7 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
   .tab { height: 38px; }
 }
 @media (max-height: 600px) {
-  .stage, .app.chatting .stage { height: 72px; }
+  .stage, .app.chatting .stage, .app[data-ansicht="sprache"] .stage, .app.chatting[data-ansicht="sprache"] .stage { height: 110px; }
   :root[data-theme="nacht"] .anruf-info { display: none; }
 }
 .app.kbd .buehne, .app.kbd .tip, .app.kbd .tabs, .app.kbd .steuerung { display: none; }
@@ -361,9 +380,8 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
     </div>
     <div class="kopf-rechts">
       <span class="verbunden aus" id="verbindung">offline</span>
-      <button class="icon-btn" id="btnNeu" title="Neues Gespräch" aria-label="Neues Gespräch">↺</button>
-      <label class="icon-btn" title="Foto" aria-label="Foto aufnehmen oder wählen" id="camLabel">📷<input type="file" id="camInput" accept="image/*" hidden></label>
-      <button class="icon-btn" id="btnSettings" title="Einstellungen" aria-label="Einstellungen">⚙</button>
+      <button class="icon-btn" id="btnNeu" title="Neues Gespräch" aria-label="Neues Gespräch"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg></button>
+      <label class="icon-btn" title="Foto" aria-label="Foto aufnehmen oder wählen" id="camLabel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.4"/></svg><input type="file" id="camInput" accept="image/*" hidden></label>
     </div>
   </header>
 
@@ -391,6 +409,7 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
 
   <section class="seite blatt" id="seiteHeute" aria-label="Heute" hidden>
     <div class="greet">
+      <button class="icon-btn home-zahnrad" id="btnSettings" title="Einstellungen" aria-label="Einstellungen"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/></svg></button>
       <p class="label" id="dateLabel">Jarvis</p>
       <h1 id="greeting">Guten Tag<span class="punkt">.</span></h1>
       <p class="lead" id="lead"></p>
@@ -490,9 +509,9 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
 
   <div class="steuerung">
     <button type="button" class="auflegen" id="btnAuflegen">Auflegen</button>
-    <button type="submit" form="composer" class="mic-btn mic" id="btnAction" aria-label="Sprechen">🎙</button>
+    <button type="submit" form="composer" class="mic-btn mic" id="btnAction" aria-label="Sprechen"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button>
     <form class="composer" id="composer" autocomplete="off">
-      <input type="text" id="input" placeholder="Schreiben …" enterkeyhint="send" autocapitalize="sentences" aria-label="Nachricht an Jarvis">
+      <input type="text" id="input" placeholder="Nachricht an Jarvis" enterkeyhint="send" autocapitalize="sentences" aria-label="Nachricht an Jarvis">
     </form>
   </div>
 
@@ -640,7 +659,7 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
       if (++frameNr % 2 === 0) welle();
     }
     function matt() {
-      const x = W / 2, R = Math.min(W, H) * 0.34 * (1 + puls), y = H / 2 - R * 0.06;
+      const x = W / 2, R = Math.min(W / 2.4, H / 2.9, 75 * dpr) * (1 + puls), y = H / 2 - R * 0.12; // ca. 150 px
       // weicher Schatten unter der Kugel
       ctx.save(); ctx.translate(x, y + R * 1.02); ctx.scale(1, 0.2);
       const sg = ctx.createRadialGradient(0, 0, 0, 0, 0, R * 0.95);
@@ -653,14 +672,14 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
         ctx.beginPath(); ctx.arc(x, y, R * (1.06 + p * 0.3), 0, 6.2832); ctx.stroke();
       }
       // Körper: matter Verlauf
-      const g = ctx.createRadialGradient(x - R * 0.34, y - R * 0.42, R * 0.05, x, y, R);
-      g.addColorStop(0, "#eaa98d"); g.addColorStop(0.38, "#d68a6c"); g.addColorStop(0.72, "#c9775a"); g.addColorStop(1, "#ad6045");
+      const g = ctx.createRadialGradient(x - R * 0.38, y - R * 0.42, R * 0.1, x, y, R * 1.05);
+      g.addColorStop(0, "#d58a6e"); g.addColorStop(0.5, "#c9775a"); g.addColorStop(1, "#b9694d");
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, 6.2832); ctx.fill();
       // Denken: ein ruhiger Glanz wandert über die Oberfläche
       if (state === "thinking" && !reduce) {
         const s = t * 1.6, sx = x + Math.cos(s) * R * 0.45, sy = y + Math.sin(s) * R * 0.3;
         const h = ctx.createRadialGradient(sx, sy, 0, sx, sy, R * 0.6);
-        h.addColorStop(0, "rgba(255,240,230,0.22)"); h.addColorStop(1, "rgba(255,240,230,0)");
+        h.addColorStop(0, "rgba(255,240,230,0.1)"); h.addColorStop(1, "rgba(255,240,230,0)");
         ctx.save(); ctx.beginPath(); ctx.arc(x, y, R, 0, 6.2832); ctx.clip(); ctx.fillStyle = h; ctx.fillRect(0, 0, W, H); ctx.restore();
       }
     }
@@ -3706,13 +3725,19 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
   }
   const parseOps = (text) => memBlocks(text).flatMap((b) => parseJsonOps(b.raw));
 
+  const ICON = {
+    mikro: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>',
+    senden: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
+    stopp: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>',
+  };
   function setAction() {
     const btn = $("btnAction");
     const hasText = $("input").value.trim().length > 0;
+    $("composer").classList.toggle("hat-text", hasText); // leeres Pill bleibt schmal, sobald der Text weg ist
     btn.classList.remove("go", "stop", "mic");
-    if (busy && !(offeneBestaetigung && hasText)) { btn.textContent = "■"; btn.classList.add("stop"); btn.setAttribute("aria-label", "Stopp"); }
-    else if (hasText) { btn.textContent = "➤"; btn.classList.add("go"); btn.setAttribute("aria-label", "Senden"); }
-    else { btn.textContent = "🎙"; btn.classList.add("mic"); btn.setAttribute("aria-label", "Sprechen"); }
+    if (busy && !(offeneBestaetigung && hasText)) { btn.innerHTML = ICON.stopp; btn.classList.add("stop"); btn.setAttribute("aria-label", "Stopp"); }
+    else if (hasText) { btn.innerHTML = ICON.senden; btn.classList.add("go"); btn.setAttribute("aria-label", "Senden"); }
+    else { btn.innerHTML = ICON.mikro; btn.classList.add("mic"); btn.setAttribute("aria-label", "Sprechen"); }
   }
 
   async function ask(userText, { image, imageUrl, voice = false, system = false, merken = "", auto = false } = {}) {
