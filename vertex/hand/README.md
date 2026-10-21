@@ -28,14 +28,25 @@ Vertex-Server ──Auftrag──► Hand-Agent auf dem PC (verbindet sich ausge
 Die Sicherheitsstufen 🟢/🟡/🔴 aus `core/rules.md` gelten dort genauso – 🔴 mit Bestätigung auf dem Handy.
 
 ## Vorgemerkt: Laptop-Brücke für Pocket (noch nicht gebaut)
-Spätere Verbindung von der Vertex-Seite (Pocket) zum eigenen Laptop. Feste Regeln, bevor eine Zeile gebaut wird:
+**In der Warteschlange steht niemals Code.** Die Vertex-Seite klickt nichts auf dem Laptop. Sie schreibt nur eine Zeile:
 
-- **Nur Befehlsnamen aus einer festen Erlaubnisliste** (z. B. `ordner_oeffnen:projekte`, `musik_pause`,
-  `bildschirm_sperren`). Die Liste liegt auf dem Laptop, nicht auf der Seite – die Seite kann nichts hinzufügen.
-- **Nie Code.** Keine Shell-Befehle, keine Skripte, keine Parameter, die als Code ausgeführt werden. Unbekannter
-  Name → wird verworfen und gemeldet.
-- **Befehle verfallen nach 10 Minuten.** Jeder Befehl trägt Zeitstempel und einmalige ID; was älter ist oder
-  schon ausgeführt wurde, wird ignoriert (kein Nachholen, kein doppeltes Ausführen).
-- 🔴-Aktionen (senden, kaufen, löschen) gibt es über die Brücke nicht.
+```json
+{ "cmd": "musik_pause", "arg": "", "ts": 1785236351, "status": "offen" }
+```
 
-Die gleiche Notiz steht im Code der Seite (`pocket/vertex-pocket.html`, Abschnitt „Laptop-Brücke“).
+Auf dem Laptop fragt ein kleines Programm alle zwei Sekunden nach, ob etwas anliegt. Regeln, bevor eine Zeile gebaut wird:
+
+| | Regel | kurz |
+|---|---|---|
+| 01 | Nur Namen aus einer festen Liste (z. B. `warenkorb`, `musik_aus`, `tabs_zu`). Die Liste liegt auf dem Laptop; unbekannte Namen werden verworfen und gemeldet. | kein Code |
+| 02 | Ein Skript im Browser ist eine Konstante im Programm, nicht in der Zeile. | fest |
+| 03 | Programme nur aus einer Erlaubnisliste. | allowlist |
+| 04 | **Befehle verfallen nach zehn Minuten.** Zeitstempel und einmalige ID; Abgelaufenes oder schon Ausgeführtes wird ignoriert, nichts wird nachgeholt. | 600 s |
+
+🔴-Aktionen (senden, kaufen, löschen) gibt es über die Brücke nicht.
+
+Die bequeme Variante wäre, beliebigen Code zuzulassen – ein Nachmittag Arbeit. Es wäre auch die Hintertür in den
+Rechner, in dem man bei seiner Bank eingeloggt ist. Deshalb nicht.
+
+Die gleiche Notiz steht im Code der Seite (`pocket/vertex-pocket.html`, Abschnitt „Laptop-Brücke“) und auf der Seite
+„Bauplan“ der App.

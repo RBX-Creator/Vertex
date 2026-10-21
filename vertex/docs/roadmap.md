@@ -12,6 +12,7 @@
 | 4e | **Pocket v4 (ohne Server):** Sprechmodus mit Auto-Senden, Sprechtext, Werkzeuge für Reselling/Kunden/Aufgaben/Ernährung, Heute-Übersicht, CSV | ✅ |
 | 4f | **Vertex Pocket – Hände:** Claude-Code-Aufträge (Recherche, Marktwert, Webseiten) mit Rückmeldung, verbundene Apps (Kalender, Gmail-Entwürfe, Drive, Notion) mit Bestätigung für 🔴, Dokumente (Claude Docs), Handy-Knöpfe | ✅ |
 | 4g | **Pocket im Jarvis-Stil:** Terrakotta-Design mit Heute-Karte und Briefing, Spar-Routing (lokal / Haiku / stark), Plattform-Gebühren in den Einstellungen, Verkaufsantwort mit Netto und Gewinn, „Notiert.“, versioniertes Datenschema | ✅ |
+| 4i | **Pocket: Aufbau und Folien-Stil:** schnelle Werkzeuge ohne Modell, Zahlen-Wächter, Bauplan-Seite, helle Karte auf Blau mit Punkt-Navigation (Nacht als Option) | ✅ |
 | 4h | **Laptop-Brücke für Pocket:** nur Befehlsnamen aus fester Erlaubnisliste, nie Code, Befehle verfallen nach 10 Minuten | vorgemerkt |
 | 4d | **Hände (PC):** Agent auf dem eigenen Rechner (Apps, eingeloggte Konten), Computer Use | als Nächstes |
 | 5 | **Proaktivität:** Push-Nachrichten (Auftrag fertig, Briefing zur festen Uhrzeit), Tagesabschluss, Wochenrückblick, Wake-Word | |
