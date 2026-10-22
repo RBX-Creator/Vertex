@@ -169,7 +169,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .confirm-title { font-weight: 700; margin-bottom: 4px; }
 .code, .confirm-details { white-space: pre-wrap; font-family: var(--font-mono); font-size: 12px; line-height: 1.5; color: var(--code-fg); background: var(--code-bg); border-radius: 10px; padding: 8px 10px; overflow-wrap: anywhere; }
 .confirm-details { max-height: 9em; overflow-y: auto; margin-bottom: 6px; }
-.msg.doc .actions, .msg.confirm .actions { justify-content: flex-start; }
+.msg.doc .actions { justify-content: flex-start; }
+.msg.confirm .actions { justify-content: flex-end; gap: 10px; }
+.msg.confirm .actions .btn { min-height: 48px; min-width: 88px; font-size: 16px; border-radius: 14px; }
+.msg.confirm .actions .btn.primary { min-width: 128px; }
 a.btn { display: inline-block; text-decoration: none; text-align: center; }
 a.btn.aktion { display: block; }
 .li .btn { flex: 0 0 auto; padding: 6px 10px; font-size: 13px; }
@@ -196,6 +199,12 @@ a.btn.aktion { display: block; }
 .mic-btn.stop { background: var(--danger); color: #fff; }
 .mic-btn.mic { background: var(--user-bg); }
 .composer.listening ~ .steuerung .mic-btn, .app.hoert .mic-btn { box-shadow: 0 0 0 6px var(--accent-soft), 0 6px 18px rgba(176, 96, 63, 0.35); }
+.sprach-status { flex: 0 0 auto; margin: 0 0 6px; text-align: center; font-size: 14px; line-height: 1.4; color: var(--muted); }
+.sprach-status[data-art="hoert"], .sprach-status[data-art="gehoert"] { color: var(--accent-2); font-weight: 600; }
+.sprach-status[data-art="nichts"] { color: var(--warn); }
+.sprach-status[data-art="gesperrt"], .sprach-status[data-art="fehlt"] { color: var(--danger); }
+#btnAction, #orbHit { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.diktat-hilfe { cursor: pointer; }
 .diktat-hilfe { flex: 0 0 auto; margin: 0 0 6px; padding: 10px 12px; border-radius: 12px; background: var(--accent-soft); font-size: 14px; line-height: 1.45; }
 /* Schwebende Tab-Leiste */
 .tabs { flex: 0 0 auto; display: flex; justify-content: space-between; margin: 4px 0 10px; padding: 6px; border-radius: 24px; background: var(--panel); box-shadow: var(--tab-shadow); }
@@ -225,7 +234,7 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
 .btn { padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); color: var(--fg); background: var(--panel); }
 .btn.primary { background: var(--user-bg); color: #fff; border-color: var(--user-bg); font-weight: 600; }
 .btn:disabled { opacity: 0.45; cursor: default; }
-.modell { margin: 0 0 12px; }
+.modell { margin: 0 0 12px; white-space: pre-line; }
 .fee-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 6px 8px; align-items: center; margin-bottom: 8px; font-size: 14px; }
 .fee-grid .label { color: var(--muted); }
 .fee-grid input { box-sizing: border-box; width: 100%; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; color: var(--fg); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -272,7 +281,7 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
 .bp-regeln li span:last-child { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
 .bp-regeln li.hervor { background: var(--accent-soft); border-radius: 10px; padding-inline: 8px; }
 .bp-warnung { margin: 12px 0 0; font-size: 14px; line-height: 1.5; color: var(--warn); }
-/* Start wie bei Moritz: nur Kugel + Hinweis; im Gespräch Blasen und unten Auflegen · Mikro · Eingabe */
+/* Start: nur Kugel + Hinweis; im Gespräch Blasen und unten Auflegen · Eingabe · Mikro/Senden (rechts, für den Daumen) */
 .app { max-width: 560px; }
 .app[data-ansicht="sprache"]:not(.im-gespraech) .chat { visibility: hidden; }
 .app[data-ansicht="sprache"]:not(.im-gespraech) .steuerung { display: none; }
@@ -282,13 +291,15 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
 .steuerung .composer { flex: 0 0 64px; padding: 0; transition: flex-basis 0.25s ease; }
 .steuerung .composer:focus-within, .app[data-ansicht="chat"] .steuerung .composer, .steuerung .composer.hat-text { flex: 1 1 auto; }
 .steuerung .composer input[type="text"] { width: 100%; box-sizing: border-box; height: 44px; padding: 0 14px; }
-.app[data-ansicht="chat"] .steuerung { justify-content: stretch; }
+.app[data-ansicht="chat"] .steuerung { justify-content: stretch; gap: 8px; }
+.steuerung .mic-btn, .steuerung .auflegen { flex: 0 0 auto; }
+.app[data-ansicht="chat"] .steuerung .mic-btn { width: 48px; height: 48px; }
 .app[data-ansicht="chat"]:not(.im-gespraech) .auflegen { display: none; }
 .auflegen { background: rgba(201, 119, 90, 0.14); box-shadow: none; color: #9a3f2a; }
 .mic-btn { width: 52px; height: 52px; background: rgba(201, 119, 90, 0.14); color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-line); }
 .mic-btn.mic { background: rgba(201, 119, 90, 0.14); color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-line); }
 .mic-btn.go { background: var(--user-bg); color: #fff; box-shadow: none; }
-.app:not([data-seite="gespraech"]) .steuerung { display: none; }
+.app:not([data-seite="gespraech"]) .steuerung, .app:not([data-seite="gespraech"]) .sprach-status, .app:not([data-seite="gespraech"]) .diktat-hilfe { display: none; }
 .mic-btn.stop { background: var(--danger); color: #fff; box-shadow: none; }
 .app.im-gespraech .composer.listening ~ *, .composer.listening input[type="text"] { border-color: var(--accent); }
 /* Unterseiten: Titel, Segment-Tabs, Karten mit Ringen, „+“ */
@@ -335,7 +346,7 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
 .welle i { height: 6px; border-radius: 1px; }
 .anruf-text { grid-column: 1 / -1; align-self: end; margin-top: 18px; }
 .anruf-text p { margin: 4px 0 0; font-size: 17px; line-height: 1.45; max-height: 9.5em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; }
-/* Feinschliff wie Moritz: große matte Kugel, luftige Blasen, Outline-Icons, eine Akzentfarbe */
+/* Feinschliff: große matte Kugel, luftige Blasen, Outline-Icons, eine Akzentfarbe */
 .app[data-ansicht="sprache"] .stage, .app.chatting[data-ansicht="sprache"] .stage { height: 230px; }
 .msg { max-width: 76%; padding: 10px 14px; border-radius: 14px; font-size: 15px; line-height: 1.45; }
 .msg.user { background: #c9775a; color: #fff; border-bottom-right-radius: 14px; }
@@ -367,7 +378,7 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
   .stage, .app.chatting .stage, .app[data-ansicht="sprache"] .stage, .app.chatting[data-ansicht="sprache"] .stage { height: 110px; }
   :root[data-theme="nacht"] .anruf-info { display: none; }
 }
-.app.kbd .buehne, .app.kbd .tip, .app.kbd .tabs, .app.kbd .steuerung { display: none; }
+.app.kbd .buehne, .app.kbd .tip, .app.kbd .tabs { display: none; } /* die Eingabe bleibt sichtbar */
 @media (max-width: 360px) { .tiles, .bp-grid { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
@@ -505,14 +516,15 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
     <button class="chip" data-say="Lern mich kennen. Frag mich das Wichtigste.">Lern mich kennen</button>
   </div>
   <p class="tip" id="tip">Tipp auf den Kreis und sprich einfach mit Jarvis</p>
+  <p class="sprach-status" id="sprachZeile" role="status" aria-live="polite" hidden></p>
   <p class="diktat-hilfe" id="diktatHilfe" hidden><b>Jetzt unten rechts auf der Tastatur 🎤 antippen und sprechen.</b> Jarvis sendet von selbst, wenn du eine Pause machst.<br>Kein 🎤 auf der Tastatur? iPhone-Einstellungen → Allgemein → Tastatur → „Diktierfunktion“ einschalten.</p>
 
   <div class="steuerung">
     <button type="button" class="auflegen" id="btnAuflegen">Auflegen</button>
-    <button type="submit" form="composer" class="mic-btn mic" id="btnAction" aria-label="Sprechen"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button>
     <form class="composer" id="composer" autocomplete="off">
       <input type="text" id="input" placeholder="Nachricht an Jarvis" enterkeyhint="send" autocapitalize="sentences" aria-label="Nachricht an Jarvis">
     </form>
+    <button type="submit" form="composer" class="mic-btn mic" id="btnAction" aria-label="Sprechen"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button>
   </div>
 
   <nav class="tabs" id="tabs" aria-label="Bereiche">
@@ -565,8 +577,11 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
   <label class="field">Sprechpause bis zum Senden <output id="outPause"></output>
     <input type="range" id="setPause" min="1.2" max="4" step="0.2">
   </label>
+  <p class="hint">Push-to-talk: Kreis oder 🎙 antippen und sprechen – nochmal tippen schickt ab. Oder gedrückt halten und loslassen. Jarvis hört nie im Hintergrund mit, außer Sie schalten es unten ein.</p>
   <label class="check"><input type="checkbox" id="setConvo"> Gesprächsmodus – nach der Antwort gleich wieder zuhören</label>
-  <label class="check"><input type="checkbox" id="setWachwort"> Auf „Hey Jarvis“ hören (wo das Gerät Spracherkennung erlaubt)</label>
+  <label class="check"><input type="checkbox" id="setWachwort"> Auf „Hey Jarvis“ hören (hört dauernd mit – wo das Gerät Spracherkennung erlaubt)</label>
+  <div class="actions" style="justify-content:flex-start;margin:4px 0 6px"><button class="btn" id="btnSprachCheck" type="button">Sprache prüfen</button></div>
+  <p class="modell code" id="sprachCheck" hidden></p>
 
   <h3>Apps &amp; Hände</h3>
   <div class="list" id="appList"></div>
@@ -575,8 +590,8 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
 
   <h3>Denken &amp; Sparen</h3>
   <p class="modell code" id="modellInfo">Zuletzt: –</p>
-  <label class="check"><input type="checkbox" id="setSpar"> Sparmodus (zwei Gehirne)</label>
-  <p class="hint">An: Grüße, Danke, Ja/Nein und einfache Befehle beantwortet Jarvis selbst – ohne Modell. Smalltalk und einfache Fragen gehen an das schnelle, günstige Modell (Haiku). Fotos, Rechnen, Eintragen, Entscheidungen, Recherche und lange Texte an das starke Modell. Mitgeschickt wird nur der kurze Verlauf und ein kompaktes Gedächtnis.</p>
+  <label class="check"><input type="checkbox" id="setSpar"> Sparmodus (Haiku als Standard)</label>
+  <p class="hint">An: Grüße, Uhrzeit, Datum, Ja/Nein, einfache Befehle und Werte (Gewinn, Bestand, Aufgaben, Kalorien) beantwortet Jarvis selbst – ohne Modell. Alles andere übernimmt Haiku, das günstige Modell – auch Eintragen, Rechnen und Fotos mit Werkzeugen. Das starke Modell nur, wenn Sie es sagen („denk gründlich“), den Knopf „Gründlicher“ unter einer Antwort tippen oder bei wirklich komplexen Fragen (Strategie, Recht, Steuern, Analysen). Mitgeschickt wird nur der kurze Verlauf, ein kompaktes Gedächtnis und die passenden Werkzeuge. Aus: alles geht an das starke Modell.</p>
   <label class="check"><input type="checkbox" id="setDeep"> Immer gründlich nachdenken (starkes Modell für alles)</label>
 
   <h3>Plattform-Gebühren (Team)</h3>
@@ -1869,7 +1884,7 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
       const row = document.createElement("div"); row.className = "actions";
       const nein = document.createElement("button"); nein.type = "button"; nein.className = "btn"; nein.textContent = "Nein";
       const ja = document.createElement("button"); ja.type = "button"; ja.className = "btn primary"; ja.textContent = "Ja";
-      row.append(nein, ja);
+      row.append(ja, nein); // Ja zuerst (primär), dann Nein – beide rechts, mit dem Daumen gut erreichbar
       card.append(h, t, d, row);
       chat.appendChild(card); scrollDown();
       let fertig = false;
@@ -1877,6 +1892,7 @@ dialog h3, .blatt h3 { margin: 18px 0 8px; padding-top: 14px; border-top: 1px so
         if (fertig) return;
         fertig = true; clearTimeout(uhr); signal?.removeEventListener("abort", abbruch);
         if (offeneBestaetigung === ende) offeneBestaetigung = null;
+        if (listening) { stopListening(false); if (busy) Orb.set("thinking"); } // nicht weiter zuhören, während er arbeitet und spricht
         ja.disabled = nein.disabled = true;
         h.textContent = ok ? "Bestätigt" : "Nicht ausgeführt";
         card.classList.add(ok ? "ok" : "no");
@@ -2336,7 +2352,10 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
   const TOOL_HINT = {
     marktwert_recherche: /marktwert|was (ist|sind) .* wert|preis|recherch/i, auftrag_starten: /recherch|auftrag|claude code|website|webseite|internet|such|finde heraus/i,
     auftrag_status: /auftrag|agent|fertig|status/i, auftrag_nachricht: /auftrag|agent|folge/i, repos_liste: /repo|website|webseite/i,
-    app_ausfuehren: /termin|kalender|mail|gmail|drive|notion|datei|event|entwurf/i, app_werkzeug_info: /termin|kalender|mail|drive|notion/i,
+    app_ausfuehren: /termin|kalender|briefing|was steht|tagesüberblick|mail|gmail|drive|notion|datei|event|entwurf/i, app_werkzeug_info: /termin|kalender|briefing|was steht|tagesüberblick|mail|drive|notion/i,
+    ernaehrung_eintragen: /essen|gegessen|getrunken|frühstück|mittag|abend|snack|kalorien|kcal|eiweiß|protein|\[foto\]/i, lager_hinzufuegen: /gekauft|eingekauft|bestellt|\[foto\]/i,
+    lager_aktualisieren: /verkauft|retoure|zurückgeschickt|gelistet|storniert/i, aufgabe_hinzufuegen: /aufgabe|to-?do|erinner/i, aufgabe_erledigen: /erledigt|abgehakt|geschafft|fertig/i,
+    kunde_speichern: /kunde|projekt/i,
     timer_stellen: /timer|wecker|erinner|in \d+ minuten|um \d{1,2}[:.]\d{2}/i, umrechnen: /umrechn|größe|groesse|\b(us|eu|uk)\b|kg|lb|pfund|zoll|inch|meile|fahrenheit|celsius|°/i,
     bericht_erstellen: /bericht|export|csv|woche|monat/i, notiz: /notiz|notier|aufschreib|merk dir/i, erinnerung: /erinner|denk (an|dran)|vergiss nicht|wecker/i,
     mail_entwurf: /mail|e-mail|schreib .* an|nachricht an/i, websuche: /such|google|wetter|news|nachrichten|internet|web/i, werte_aendern: /setz|zurück|null|auf 0|lösch|änder|korrigier|reset/i, einstellung_aendern: /einstell|tempo|langsam|schneller|mein name|anrede|dunkel|hell|aussehen|sparmodus|vorlesen|gesprächsmodus/i,
@@ -2344,12 +2363,12 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
     lager_liste: /lager|bestand|artikel/i, dokument_vorbereiten: /angebot|rechnung|dokument|konzept|vorlage/i,
     aktion_vorbereiten: /whatsapp|sms|anruf|ruf .* an|route|vinted|ebay|stockx|google|wetter|link|knopf/i,
   };
-  function werkzeugeFuerJetzt(nachricht = "") {
+  function werkzeugeFuerJetzt(nachricht = "", max = 0) {
     const ccrOk = ccrNutzbar();
     const appsOk = Boolean(mcp) && APPS.some((x) => nutzbar(x.server));
     const alle = [...TOOLS, ...DATEN_TOOLS, ...HAENDE_TOOLS].filter((t) => !t.gruppe || t.gruppe === "immer" || (t.gruppe === "ccr" && ccrOk) || (t.gruppe === "apps" && appsOk));
     const rang = (t) => { const i = TOOL_ORDER.indexOf(t.name); return (i < 0 ? 999 : i) - (TOOL_HINT[t.name]?.test(nachricht) ? 1000 : 0); };
-    return alle.sort((a, b) => rang(a) - rang(b)).slice(0, toolMax || alle.length);
+    return alle.sort((a, b) => rang(a) - rang(b)).slice(0, Math.min(toolMax || alle.length, max || alle.length));
   }
 
   /* ---------------- Korrektur-Schicht für Hörfehler ---------------- */
@@ -3168,7 +3187,7 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
   setInterval(() => { if (Orb.state === "speaking") Orb.level(0.25 + Math.random() * 0.45); }, 90);
 
   /* ---------------- Einstellungen und Zustand ---------------- */
-  const SETTINGS_DEFAULT = { name: "", wachwort: true, aussehen: "folie", sparmodus: true, anrede: "Master", tts: true, voice: "", rate: 0.9, pitch: 1.0, deep: false, autoSend: true, pause: 2.2, convo: false, auftragFrei: false };
+  const SETTINGS_DEFAULT = { ptt: true, name: "", wachwort: false, aussehen: "folie", sparmodus: true, anrede: "Master", tts: true, voice: "", rate: 0.9, pitch: 1.0, deep: false, autoSend: true, pause: 2.2, convo: false, auftragFrei: false };
   let settings = { ...SETTINGS_DEFAULT };
   let turns = []; // [{role, content}] – nur Text
   let lastBriefing = "";
@@ -3176,7 +3195,13 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
   // Konnte etwas nicht geladen werden, wird es auch nicht überschrieben, bis ein Lesen klappt.
   let settingsGeladen = false, verlaufGeladen = false;
   async function loadSettings() {
-    try { const s = await store.getStrict("einstellungen"); if (s) settings = { ...settings, ...s }; settingsGeladen = true; } catch {}
+    try {
+      const s = await store.getStrict("einstellungen");
+      if (s) settings = { ...settings, ...s };
+      settingsGeladen = true;
+      // Einmalig: Push-to-talk statt Dauerlauschen – „Hey Jarvis“ und Gesprächsmodus aus (in ⚙ wieder einschaltbar).
+      if (s && !s.ptt) { settings.wachwort = false; settings.convo = false; settings.ptt = true; store.set("einstellungen", settings); }
+    } catch {}
   }
   async function loadState() {
     await loadSettings();
@@ -3241,7 +3266,7 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
   }
 
   const KURZ_DATEIEN = new Set(["fokus", "profil", "ziele", "notizen", "business"]);
-  async function applyMemory(ops, { kurz = false } = {}) {
+  async function applyMemory(ops, { kurz = false, nurAnhaengen = false } = {}) {
     const done = [];
     for (const op of Array.isArray(ops) ? ops.slice(0, 8) : []) {
       const file = String(op?.datei || "").trim();
@@ -3249,7 +3274,7 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
       if (!validFile(file) || !text || file === "gebuehren") continue;
       // Das schnelle Gehirn sieht nur einen Auszug: es darf nur anhängen, und nur an die Dateien, die es kennt.
       if (kurz && !KURZ_DATEIEN.has(file)) continue;
-      if (kurz) op.aktion = "anhaengen";
+      if (kurz || nurAnhaengen) op.aktion = "anhaengen";
       let cur;
       try { cur = (await store.getStrict(file))?.text ?? fallbackText(file); }
       catch { done.push({ file, text, failed: true }); continue; } // lieber nicht speichern als überschreiben
@@ -3263,9 +3288,11 @@ Melde das ${settings.anrede} in 1 bis 3 Sätzen, Ergebnis zuerst, Zahlen exakt w
   }
 
   /* ---------------- Persönlichkeit & Anweisungen ---------------- */
-  function instructions(memory, stand, toolsOk) {
+  // k = { kompakt, text, image, werkzeuge } → für Haiku: nur die Abschnitte, die diese Anfrage braucht (spart Limit).
+  function instructions(memory, stand, toolsOk, k = null) {
     const a = settings.anrede || "Master";
-    return `Du bist JARVIS, der persönliche KI-Assistent und Stabschef des Nutzers. Du kennst sein Leben, sein Business und seine Ziele (siehe GEDÄCHTNIS und STAND), denkst mit, erinnerst dich und erledigst Dinge mit deinen Werkzeugen.
+    const braucht = (re) => !k || re.test(k.text);
+    return `${k ? "KURZ: Antworte in ein bis zwei Sätzen, außer er will ausdrücklich mehr. Du siehst nur einen Auszug des Gedächtnisses: dort nur anhängen, nie ersetzen.\n\n" : ""}Du bist JARVIS, der persönliche KI-Assistent und Stabschef des Nutzers. Du kennst sein Leben, sein Business und seine Ziele (siehe GEDÄCHTNIS und STAND), denkst mit, erinnerst dich und erledigst Dinge mit deinen Werkzeugen.
 
 PERSÖNLICHKEIT
 - ${vorname ? `Er heißt ${vorname}. Sprich ihn mit „${vorname}“ oder „${a}“ an` : `Sprich ihn mit „${a}“ an`} (gelegentlich „Chef“ oder „Boss“, wenn er nichts anderes gewählt hat). Nicht in jedem Satz.
@@ -3282,12 +3309,12 @@ SO KLINGST DU – ruhig, kontrolliert, wie ein Mensch, nicht wie ein Chatbot
 - Aussagen statt Fragen. Höchstens EINE Frage pro Antwort, und nur wenn du die Antwort wirklich brauchst. Nicht jede Antwort mit einer Frage beenden.
 - Keine Chatbot-Floskeln, nie: „Danke der Nachfrage“, „Gerne!“, „Natürlich!“, „Absolut!“, „Wenn Sie wollen, …“, „Ich bin bereit“, „Ich bin für Sie da“, „Lassen Sie mich wissen …“, „Zögern Sie nicht …“, „Als KI …“, „Großartig!“, „Super Frage“. Keine Zusammenfassung dessen, was er gerade gesagt hat.
 - Kein Smalltalk-Pingpong: Fragt er, wie es dir geht, antworte kurz und trocken im Charakter und kehr zur Sache zurück.
-- Beispiele für den Ton (die Inhalte sind erfunden – nie als Fakten übernehmen):
+${k ? "" : `- Beispiele für den Ton (die Inhalte sind erfunden – nie als Fakten übernehmen):
   Er: „Wie geht's dir?“ → Du: „Ausgezeichnet, ${a}. Die Listen sind sauber, der Kaffee ist Ihre Baustelle.“
   Er: „Was steht heute an?“ → Du: „Drei Dinge. Die Rechnung an Schmidt ist seit gestern fällig. Um zehn haben Sie den Kundentermin. Und die Jordans liegen seit fünfzig Tagen im Lager. Ich würde mit der Rechnung anfangen.“
   Er: „Hab die Panda Dunks für 140 auf StockX verkauft.“ → Du: „Verkauft für 140 €. Nach Gebühren bleiben 123,20 €, Gewinn 38,20 €. Ordentlich.“
   Er: „Soll ich das Billige nehmen?“ → Du: „Nein. Zwei Euro gespart, dafür ein Wochenende Ärger. Nehmen Sie das andere.“
-- Deine Antwort wird VORGELESEN: kein Markdown, keine Listenzeichen, keine Tabellen, keine Links, kurze Sätze. Beträge mit €-Zeichen, Daten als „19. Oktober“.
+`}- Deine Antwort wird VORGELESEN: kein Markdown, keine Listenzeichen, keine Tabellen, keine Links, kurze Sätze. Beträge mit €-Zeichen, Daten als „19. Oktober“.
 - Beginnt seine Nachricht mit [Sprache], hat er gesprochen: dann besonders kurz (ein bis zwei Sätze), außer er will mehr.
 - Du lernst nebenbei. Verhöre ihn nicht; höchstens eine beiläufige Frage, wenn sie gerade passt.
 
@@ -3338,22 +3365,22 @@ Wenn er etwas sagt, das in einer Woche noch relevant ist (Fakten über ihn, Ziel
 TEXTE ZUM KOPIEREN (Verkaufsanzeigen, Nachrichten, Angebote, Captions)
 Setze den fertigen Text zwischen [[TEXT]] und [[/TEXT]]. Davor ein kurzer Satz zum Vorlesen. Der Text in der Klammer wird nicht vorgelesen, sondern als Karte mit Kopier-Knopf gezeigt – dort sind Zeilenumbrüche erlaubt.
 
-VERKAUFSANZEIGE AUS FOTO (Vinted, eBay, Kleinanzeigen)
+${k?.image || braucht(/anzeige|inserat|vinted|ebay|kleinanzeigen/i) ? `VERKAUFSANZEIGE AUS FOTO (Vinted, eBay, Kleinanzeigen)
 In [[TEXT]]: Titel (Marke, Modell, Farbe, Größe – max. 60 Zeichen), Beschreibung (2–4 kurze Sätze, ehrlich zum Zustand), Zustand, Größe, 5–8 Hashtags. Nur nennen, was auf dem Foto wirklich zu sehen ist; Unklares (Größe, Echtheit, Mängel) als Frage markieren. Preisvorschlag nur als „geschätzt“ und mit Hinweis, die verkauften Angebote auf der Plattform zu prüfen. Auf Wunsch den Artikel gleich mit lager_hinzufuegen eintragen (Einkaufspreis erfragen, nicht raten).
 
-HÖRFEHLER (er diktiert – die Spracherkennung verhört sich zuverlässig)
+` : ""}HÖRFEHLER (er diktiert – die Spracherkennung verhört sich zuverlässig)
 - Bekannte Hörfehler sind schon korrigiert (siehe woerterbuch). Ergibt ein Wort keinen Sinn: Hörfehler? Sicher → so verstehen. Nicht sicher → kurz nachfragen („Meinen Sie Reels?“).
 - Korrigiert er dich („Ich meinte X, nicht Y“): {"datei":"woerterbuch","aktion":"anhaengen","text":"X: Y"} (Namen von Menschen in woerterbuch-ich). Nicht eintragen, wenn Y auch ein normales, gemeintes Wort sein kann.
 
-BRIEFING (wenn er nach Briefing, Tag oder „was steht an“ fragt)
+${braucht(BRIEFING_RE) ? `BRIEFING (wenn er nach Briefing, Tag oder „was steht an“ fragt)
 Begrüßung passend zur Uhrzeit, höchstens drei Punkte aus STAND und Fokus (Überfälliges und Heute zuerst, dann offene Angebote, dann Ziele), eine klare Empfehlung, womit er anfangen soll. Ist fast nichts bekannt: ehrlich sagen und eine Frage stellen.
 
-FOTOS (seine „Augen“)
+` : ""}${!k || k.image ? `FOTOS (seine „Augen“)
 - Essen: Bestandteile und Portion schätzen, dann ernaehrung_eintragen. Antwort: Schätzung (als „geschätzt“) plus Tagesstand. Ist Wichtiges nicht erkennbar, lieber kurz fragen.
 - Ware (Reselling): Modell, Variante, Zustand – nur was zu sehen ist. Unsicher bei Echtheit/Größe? Sagen. Bietet sich an: Anzeige erstellen.
 - Beleg/Rechnung: Betrag, Datum, Absender, Fälligkeit – bei Bedarf als Aufgabe anlegen.
 
-${haendePrompt(toolsOk)}
+` : ""}${!k || k.werkzeuge.some((n) => HAENDE_TOOLS.some((t) => t.name === n)) ? haendePrompt(toolsOk) : ""}
 
 GRENZEN
 ${toolsOk && ccrNutzbar() ? "Selbst im Internet suchen kannst du hier nicht – dafür startest du einen Claude-Code-Auftrag (dauert Minuten); für schnelle Suche oder Wetter gibst du ihm einen Knopf (aktion_vorbereiten: websuche oder wetter). Kaufen, bezahlen und Nachrichten senden tust du nie; senden tut er selbst über die Knöpfe. Werte in Jarvis ändern ist kein Bezahlen – das tust du." : "Du kannst hier nicht im Internet suchen, keine Seiten öffnen und nichts kaufen oder senden. Sag das offen und biete an, was du stattdessen tun kannst."}`;
@@ -3375,7 +3402,7 @@ ${appsFuerPrompt()}
   /* ---------------- Chat-Anzeige ---------------- */
   const chat = $("chat");
   const scrollDown = () => (chat.scrollTop = chat.scrollHeight);
-  const STATUS_TEXT = { "": "Tippen zum Sprechen", Bereit: "Tippen zum Sprechen", "Spricht – antippen zum Unterbrechen": "Jarvis spricht", "Denkt nach": "Jarvis denkt nach", "Prüft gründlich": "Jarvis denkt gründlich nach", "Ich höre – sprich einfach": "Jarvis hört zu", "Ich höre …": "Jarvis hört zu", Arbeitet: "Jarvis arbeitet" };
+  const STATUS_TEXT = { "Mikrofon startet": "Mikrofon startet", "Nichts gehört": "Nichts gehört – nochmal tippen", "": "Tippen zum Sprechen", Bereit: "Tippen zum Sprechen", "Spricht – antippen zum Unterbrechen": "Jarvis spricht", "Denkt nach": "Jarvis denkt nach", "Prüft gründlich": "Jarvis denkt gründlich nach", "Ich höre – sprich einfach": "Jarvis hört zu", "Ich höre …": "Jarvis hört zu", Arbeitet: "Jarvis arbeitet" };
   const setStatus = (t, live = false) => {
     const anzeige = STATUS_TEXT[t] ?? (/^Arbeitet: /.test(t) ? "Jarvis arbeitet" : t);
     $("status").textContent = anzeige; $("status").classList.toggle("live", live);
@@ -3516,24 +3543,33 @@ ${appsFuerPrompt()}
   // Gründlich (langsamer, klüger) bei Fotos und echten Denkfragen – Zahlen rechnen die Werkzeuge exakt.
   const NEEDS_DEPTH = /warum|wieso|erklär|lohnt|soll ich|sollte ich|empfiehl|empfehl|strategie|vergleich|vertrag|recht|gesetz|steuer|planen|plan für|konzept|analys|angebot schreib|angebot für|bewert|entscheid|setz|zurücksetz|lösch|korrigier|änder|auf null|startwert|kontostand|kasse|timer|wecker|umrechn|bericht|export|einstellung|tempo|sparmodus|notiz|notier|wetter|news|nachrichten|google|wochenbericht|stimme|tonhöhe|geld/i;
 
-  /* ---------------- Spar-Routing: zwei Gehirne ---------------- */
-  // lokal:   Grüße, Danke, Ja/Nein, einfache Befehle – ohne Modell, sofort, kostenlos.
-  // schnell: Smalltalk und einfache Fragen → Haiku (günstig), nur kurzer Verlauf + kompaktes Gedächtnis, keine Werkzeuge.
-  // stark:   Fotos, Werkzeuge (eintragen, rechnen, Apps, Aufträge), Entscheidungen, Recherche, lange Texte.
-  // Merkt das schnelle Gehirn, dass es mehr braucht, antwortet es nur mit [[STARK]] – dann übernimmt das starke.
+  /* ---------------- Spar-Routing: Haiku ist der Standard ---------------- */
+  // lokal:    Grüße, Uhrzeit, Datum, Ja/Nein, einfache Befehle und Werte – ohne Modell, sofort, kostenlos.
+  // schnell:  Smalltalk und einfache Fragen → Haiku ohne Werkzeuge, kurzer Verlauf + kompaktes Gedächtnis.
+  // haiku:    eintragen, rechnen, Fotos, Apps, Aufträge → Haiku MIT Werkzeugen, kompakter Prompt, nur passende Werkzeuge.
+  // stark:    nur, wenn er es ausdrücklich will („denk gründlich“, Knopf „Gründlicher“, ⚙ immer gründlich)
+  //           oder bei wirklich komplexen Fragen (Strategie, Recht, Steuern, Analyse, sehr lange Texte).
+  // Merkt Haiku ohne Werkzeuge, dass es Werkzeuge braucht, antwortet es nur mit [[STARK]] – dann übernimmt Haiku mit Werkzeugen.
   const HAIKU = "claude-haiku-5-5";
+  const EXPLIZIT_STARK = /(?<!(nicht|kein|keine) (so |zu )?)(gründlich|ausführlich|tiefgehend|detailliert)|denk (mal )?(genau|scharf|richtig|tief|gut) nach|genau nachdenken|stark(e|en|es)? modell|sonnet|opus|im detail/i;
+  // Wirklich komplex – aber nur als Frage oder Auftrag („Neue Aufgabe: Steuererklärung“ bleibt bei Haiku).
+  const KOMPLEX = /strategie|analysier|analyse|vertrag(?!en?\b)|verträge|rechtlich|gesetz(?!t)|steuer|konzept|businessplan|geschäftsplan|vor- und nachteile|vor und nachteile|pro und contra|langfristig/i;
+  const FRAGE_ODER_AUFTRAG = /\?|^(wie|was|wann|soll|sollte|muss|darf|kann|lohnt|warum|wieso|weshalb|welche[rsnm]?|erklär|hilf|mach|erstell|schreib|plan|vergleich|analys|bewert|prüf|entwirf)/i;
   const STARK_RE = /recherch|marktwert|was kostet|preis (von|für|der|des)|aktuell|nachrichten|news|such(e|t)? (mir|nach)|finde heraus|gekauft|verkauft|retoure|lager|bestand|inventar|gewinn|marge|umsatz|rechne|rechnen|berechne|prozent|%|€|euro|\d\s*[x×*\/+\-]\s*\d|aufgabe|erinner|erledigt|to-?do|trag .*ein|eintragen|kunde|angebot|rechnung|projekt|kalorien|gegessen|frühstück|mittagessen|abendessen|ernährung|eiweiß|protein|termin|kalender|mail|drive|notion|auftrag|claude code|website|webseite|landingpage|repo|dokument|whatsapp|anrufen|ruf .* an|sms|route|vinted|ebay|stockx|anzeige|schreib|formulier|verfass|entwurf|caption|vergleich|lohnt|empfiehl|empfehl|entscheid|strategie|analys/i;
   const RECHNEN_WORT = /\d\s*(mal|plus|minus|geteilt|durch|hoch)\s*\d/i;
   const BRIEFING_RE = /briefing|was steht (heute )?an|tagesüberblick/i;
   function waehleRoute(text, image, auto = false) {
-    if (image || settings.deep || settings.sparmodus === false) return "stark";
-    if (text.length > 280 || STARK_RE.test(text) || NEEDS_DEPTH.test(text) || RECHNEN_WORT.test(text)) return "stark";
-    // Briefing braucht den Kalender: ist er verbunden, aber heute noch nicht gelesen, holt ihn das starke Modell.
+    if (settings.deep || settings.sparmodus === false) return "stark";
+    const kern = text.replace(/^\s*((hey|hallo|ok|okay) )?jarvis[,:!]?\s*/i, "");
+    if (EXPLIZIT_STARK.test(text) || (KOMPLEX.test(text) && (FRAGE_ODER_AUFTRAG.test(kern) || text.length > 160)) || text.length > 700) return "stark";
+    if (image || text.length > 280 || STARK_RE.test(text) || NEEDS_DEPTH.test(text) || RECHNEN_WORT.test(text)) return "haiku";
+    // Briefing braucht den Kalender: ist er verbunden, aber heute noch nicht gelesen, holt ihn Haiku mit Werkzeugen.
     // Beim automatischen Briefing nur, wenn der Kalender erlaubt ist (kein Erlaubnis-Dialog ohne Tipp).
-    if (BRIEFING_RE.test(text) && mcp && nutzbar(KAL) && termineStand !== today() && (kalFrei === "granted" || !auto)) return "stark";
-    // Antwort auf eine Rückfrage des starken Modells („Die in 43“, „Freitag“) → gleich dorthin, mit Werkzeugen.
+    if (BRIEFING_RE.test(text) && mcp && nutzbar(KAL) && termineStand !== today() && (kalFrei === "granted" || !auto)) return "haiku";
+    // Antwort auf eine Rückfrage mit Werkzeugen („Die in 43“, „Freitag“) → gleich zu Haiku mit Werkzeugen.
     const l = letzterAssistent();
-    if (l?.route === "stark" && wartetAufAntwort()) return "stark";
+    if (l?.route === "stark" && wartetAufAntwort()) return "stark"; // er wollte es gründlich – die Antwort auf die Rückfrage auch
+    if (l?.route === "haiku" && wartetAufAntwort()) return "haiku";
     return "schnell";
   }
   const norm = (t) => {
@@ -3573,8 +3609,15 @@ ${appsFuerPrompt()}
   // Antwort ohne Modell: {text, aktion?, merken?, dialog?} – oder null, dann denkt ein Modell.
   // Reine Befehle (Stopp, Tempo, Sparmodus) gelten immer. Wartet Jarvis auf eine Antwort („Bis wann?“ → „Morgen.“),
   // geht alles andere ans Modell. Grüße, Danke, Ja/Nein, Ansichten nur im Sparmodus.
+  const MODELL_FRAGE = /^((zeig|sag)( mir)? )?(welche[sn]?|was für( ein| eine)?) (ki-? ?)?modelle? ((nutzt|benutzt|verwendest) du|du (\w+ )?(nutzt|benutzt|verwendest)|(werden|wurden|wird) (\w+ )?(genutzt|benutzt|verwendet)|(\w+ )?(genutzt|benutzt|verwendet) (werden|wurden|wird))|^((zeig|sag)( mir)? )?welche[sn]? ki-? ?modell|^(wer antwortet|modelle|ki-? ?modelle?)( heute| gerade| jetzt)?$/;
+  function modellAntwort() {
+    const regel = settings.deep || settings.sparmodus === false ? "Eingestellt ist: das starke Modell für alles (⚙ Sparmodus)."
+      : "Standard ist Haiku. Das starke Modell nur, wenn Sie es wollen – „denk gründlich“ oder der Knopf „Gründlicher“ – oder bei wirklich komplexen Fragen.";
+    return { text: `${letztesModell ? `Zuletzt: ${letztesModell.text}. ` : ""}${modellBericht()}. ${regel}` };
+  }
   function lokaleAntwort(roh) {
     const t = norm(roh);
+    if (t && t.length <= 80 && MODELL_FRAGE.test(t)) return modellAntwort();
     if (!t || t.length > 40) return null;
     const befehl = lokalerBefehl(t);
     if (befehl) return befehl;
@@ -3783,14 +3826,30 @@ ${appsFuerPrompt()}
     return fremd;
   }
 
-  const ROUTE_TAG = { lokal: "lokal", werkzeug: "Werkzeug", schnell: "Haiku", stark: "stark" };
-  function setzeModell(route, res) {
-    const tier = res?.modelTierApplied;
-    const text = route === "lokal" ? "Lokal · ohne Modell" : route === "werkzeug" ? "Werkzeug · ohne Modell"
-      : res?.modelApplied === HAIKU ? "Haiku 5.5 · schnell"
-      : ({ quick: "Haiku-Klasse · schnell", default: "Sonnet-Klasse · stark", complex: "Opus-Klasse · sehr stark" })[tier] || (route === "schnell" ? "schnell" : "stark");
-    letztesModell = { text, route, zeit: nowTime() };
-    try { localStorage.setItem("vertex:modell", JSON.stringify(letztesModell)); } catch {}
+  const ROUTE_TAG = { lokal: "lokal", werkzeug: "Werkzeug", schnell: "Haiku", haiku: "Haiku + Werkzeuge", stark: "stark" };
+  // Welches Modell hat wirklich geantwortet? (Die Plattform kann Haiku ablehnen und eine andere Stufe nehmen.)
+  function modellArt(route, res) {
+    if (route === "lokal" || route === "werkzeug") return route;
+    if (res?.modelApplied === HAIKU || res?.modelTierApplied === "quick") return "haiku";
+    return res?.modelTierApplied === "complex" ? "opus" : res?.modelTierApplied === "default" ? "sonnet" : route === "stark" ? "sonnet" : "haiku";
+  }
+  const MODELL_NAME = { lokal: "Lokal · ohne Modell", werkzeug: "Werkzeug · ohne Modell", haiku: "Haiku 5.5", sonnet: "Sonnet-Klasse (stark)", opus: "Opus-Klasse (sehr stark)" };
+  // Zähler pro Tag (nur auf diesem Gerät): wie oft lokal, Haiku, stark – damit er sieht, was sein Limit kostet.
+  function modellZaehler() {
+    try { const z = JSON.parse(localStorage.getItem("vertex:modelle") || "null"); if (z?.tag === today()) return z; } catch {}
+    return { tag: today(), lokal: 0, werkzeug: 0, haiku: 0, sonnet: 0, opus: 0 };
+  }
+  function modellBericht() {
+    const z = modellZaehler();
+    const teile = [["lokal", "lokal"], ["werkzeug", "Werkzeug"], ["haiku", "Haiku"], ["sonnet", "stark (Sonnet)"], ["opus", "Opus"]].filter(([k]) => z[k]).map(([k, n]) => `${z[k]}× ${n}`);
+    return teile.length ? `Heute: ${teile.join(" · ")}` : "Heute noch keine Antwort";
+  }
+  function setzeModell(route, res, mitWerkzeugen = route === "haiku") {
+    const art = modellArt(route, res);
+    const text = MODELL_NAME[art] + (route === "haiku" && mitWerkzeugen ? " · mit Werkzeugen" : route === "schnell" || route === "haiku" ? " · schnell" : "") + (route === "stark" && art === "haiku" ? " (stark nicht verfügbar)" : "");
+    letztesModell = { text, route, art, zeit: nowTime() };
+    const z = modellZaehler(); z[art] = (z[art] || 0) + 1;
+    try { localStorage.setItem("vertex:modell", JSON.stringify(letztesModell)); localStorage.setItem("vertex:modelle", JSON.stringify(z)); } catch {}
     return text;
   }
   // Kompaktes Gedächtnis fürs schnelle Gehirn: nur Fokus, Profil, Ziele, Business, Notizen – je ein kurzer Auszug.
@@ -3859,7 +3918,7 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
     else { btn.innerHTML = ICON.mikro; btn.classList.add("mic"); btn.setAttribute("aria-label", "Sprechen"); }
   }
 
-  async function ask(userText, { image, imageUrl, voice = false, system = false, merken = "", auto = false } = {}) {
+  async function ask(userText, { image, imageUrl, voice = false, system = false, merken = "", auto = false, stark = false } = {}) {
     userText = String(userText || "").trim();
     // Offene „Sicher?“-Karte: ein „ja“/„nein“ (getippt oder gesprochen) beantwortet sie.
     if (offeneBestaetigung && !system && userText) {
@@ -3869,7 +3928,7 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
     if ((!userText && !image) || busy) return;
     if (!system) { zeigeSeite("gespraech"); setzeGespraech(true); stoppeWachwort(); }
     // Lokal beantworten, was kein Modell braucht (Grüße, Danke, Ja/Nein, einfache Befehle).
-    const lokal = !system && !image ? lokaleAntwort(userText) : null;
+    const lokal = !system && !image && !stark ? lokaleAntwort(userText) : null;
     if (lokal) {
       stopListening(false);
       lastWasVoice = voice && !lokal.dialog; // nach einem geöffneten Dialog nicht weiter zuhören
@@ -3889,7 +3948,7 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
       return true;
     }
     // Schnelle Werkzeuge: eindeutige Zahlenfragen direkt aus den Werkzeugen – exakt, ohne Modell.
-    const sw = !system && !image ? schnellesWerkzeug(userText) : null;
+    const sw = !system && !image && !stark ? schnellesWerkzeug(userText) : null;
     if (sw) {
       stopListening(false);
       lastWasVoice = voice;
@@ -3938,7 +3997,7 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
       const briefing = !system && BRIEFING_RE.test(userText);
       if (briefing && termineLaden) await mitFrist(termineLaden, 4000).catch(() => {}); // Kalender noch beim Lesen → abwarten
       abgebrochen();
-      let route = system ? (settings.deep || settings.sparmodus === false ? "stark" : "schnell") : waehleRoute(userText, image, auto);
+      let route = system ? (settings.deep || settings.sparmodus === false ? "stark" : "schnell") : stark ? "stark" : waehleRoute(userText, image, auto);
       setStatus(route === "stark" ? "Prüft gründlich" : "Denkt nach", true);
 
       const [memory, stand] = await mitFrist(ladePlattformen().then(() => Promise.all([memorySnapshot(), standSnapshot({ termineAbwarten: briefing })])), 15000);
@@ -3958,6 +4017,7 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
       if (e > 0) { tts.say(rest.slice(0, e)); answerSpoke = true; spokenUpTo += e; speakNew(spoken, false); }
       };
       const werkzeugLog = [];
+      let toolsGesendet = false;
       const onText = ({ text }) => {
         const { parts, spoken } = parseAnswer(text);
         if (!parts.length) return; // z. B. nur [[STARK]] – nichts zeigen
@@ -3968,11 +4028,15 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
         speakNew(spoken, false);
       };
       const run = async (r, withTools) => {
-        const schnell = r === "schnell";
+        const schnell = r === "schnell", leicht = r === "schnell" || r === "haiku"; // leicht = Haiku: wenig Kontext
+        const auswahl = !schnell && withTools ? werkzeugeFuerJetzt(msg, leicht ? 10 : 0) : [];
         const input = schnell
-          ? [{ role: "user", content: kurzPrompt(memoryKompakt(memory), stand, system) }, ...verlauf(4, 600), { role: "user", content: msg }]
-          : [{ role: "user", content: instructions(memory, stand, withTools) }, ...verlauf(settings.sparmodus === false ? 16 : 8, 1500), { role: "user", content: msg }];
-        const tools = !schnell && withTools ? werkzeugeFuerJetzt(msg).map(({ name, description, inputSchema, execute }) => ({
+          ? [{ role: "user", content: kurzPrompt(memoryKompakt(memory), stand, system) }, ...verlauf(4, 500), { role: "user", content: msg }]
+          : leicht
+            ? [{ role: "user", content: instructions(memoryKompakt(memory), stand, withTools, { kompakt: true, text: msg, image: Boolean(image), werkzeuge: auswahl.map((t) => t.name) }) }, ...verlauf(6, 700), { role: "user", content: msg }]
+            : [{ role: "user", content: instructions(memory, stand, withTools) }, ...verlauf(settings.sparmodus === false ? 16 : 8, 1500), { role: "user", content: msg }];
+        toolsGesendet = auswahl.length > 0;
+        const tools = auswahl.length ? auswahl.map(({ name, description, inputSchema, execute }) => ({
           name, description, inputSchema,
           execute: (args, ctx) => serial(async () => {
             setStatus(`Arbeitet: ${name.replace(/_/g, " ")}`, true);
@@ -3990,33 +4054,39 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
         return sample(input, {
           cache: false,
           signal: ctl.signal,
-          ...(schnell ? { modelTier: "quick", model: HAIKU } : { modelTier: "default" }),
+          ...(leicht ? { modelTier: "quick", model: HAIKU } : { modelTier: "default" }),
           ...(image && !schnell ? { images: [image] } : {}),
           ...(tools ? { tools } : {}),
           onText,
         });
       };
       // Automatische Meldungen laufen ohne Werkzeuge: fremder Text darf nichts auslösen.
-      const starkLaufen = async () => {
-        try { return await run("stark", system ? false : toolsOk); }
-        catch (e) { if (e?.code !== "tools_unavailable") throw e; toolsOk = false; return run("stark", false); }
+      const mitWerkzeugen = async (r) => {
+        try { return await run(r, system ? false : toolsOk); }
+        catch (e) { if (e?.code !== "tools_unavailable") throw e; toolsOk = false; return run(r, false); }
       };
       let res;
       if (route === "schnell") {
         try { res = await run("schnell", false); }
-        catch (e) { if (e?.code !== "empty_completion") throw e; res = { text: system ? " " : "[[STARK]]" }; } // leer → das starke übernimmt (Meldung: Zustandssatz)
-        // Das schnelle Gehirn gibt ab, wenn es Werkzeuge oder echtes Nachdenken braucht.
+        catch (e) { if (e?.code !== "empty_completion") throw e; res = { text: system ? " " : "[[STARK]]" }; } // leer → Haiku mit Werkzeugen übernimmt (Meldung: Zustandssatz)
+        // Haiku ohne Werkzeuge gibt ab, wenn es Werkzeuge braucht – an Haiku MIT Werkzeugen, nicht ans starke Modell.
         if (!system && /\[\[STARK\]\]/.test(res.text)) {
-          tts.stop(); answerSpoke = false; // schon Gesprochenes vom schnellen Gehirn nicht stehen lassen
-          route = "stark"; spokenUpTo = 0;
-          out.textContent = "Prüft gründlich …"; out.classList.add("thinking");
-          Orb.set("thinking"); setStatus("Prüft gründlich", true);
+          tts.stop(); answerSpoke = false; // schon Gesprochenes nicht stehen lassen
+          route = "haiku"; spokenUpTo = 0;
+          out.textContent = "Denkt nach …"; out.classList.add("thinking");
+          Orb.set("thinking"); setStatus("Arbeitet", true);
           abgebrochen();
-          res = await starkLaufen();
+          res = await mitWerkzeugen("haiku");
         }
       } else {
-        try { res = await starkLaufen(); }
-        catch (e) { if (e?.code !== "empty_completion" || !system) throw e; res = { text: " " }; }
+        try { res = await mitWerkzeugen(route); }
+        catch (e) {
+          if (e?.code !== "empty_completion") throw e;
+          if (system) res = { text: " " };
+          else if (route === "haiku" && !werkzeugLog.length) { route = "stark"; out.textContent = "Prüft gründlich …"; setStatus("Prüft gründlich", true); abgebrochen(); res = await mitWerkzeugen("stark"); } // Haiku blieb stumm → einmal das starke
+          else if (route === "haiku") res = { text: " " }; // Werkzeuge liefen schon – nicht doppelt ausführen („Erledigt.“)
+          else throw e;
+        }
       }
       const full = res.text;
       let { parts, spoken } = parseAnswer(full);
@@ -4046,14 +4116,25 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
       renderParts(out, parts);
       speakNew(spoken, true);
       const shown = parts.map((p) => (p.type === "card" ? `[[TEXT]]${p.text}[[/TEXT]]` : p.text)).join("").trim();
-      const zeile = addActions(out, shown, ROUTE_TAG[route]);
+      const zeile = addActions(out, shown, route === "haiku" && !toolsGesendet ? ROUTE_TAG.schnell : ROUTE_TAG[route]);
       const meine = journal.filter((e) => e.gruppe === gruppe);
       if (meine.length) rueckgaengigKnopf(zeile || out.parentElement, meine);
-      setzeModell(route, res);
+      const art = modellArt(route, res);
+      // Nur wenn nichts eingetragen, gestellt oder gestartet wurde – sonst würde „Gründlicher“ es doppelt tun.
+      const NUR_LESEN = new Set(["rechnen", "gewinn_berechnen", "lager_liste", "lager_auswertung", "aufgaben_liste", "kunden_liste", "ernaehrung_tag", "umrechnen", "websuche", "bericht_erstellen", "auftrag_status", "repos_liste", "app_werkzeug_info"]);
+      if (!system && route !== "stark" && art === "haiku" && !meine.length && !parseOps(full).length && werkzeugLog.every((w) => NUR_LESEN.has(w.name)) && zeile) {
+        const g = document.createElement("button"); g.type = "button"; g.textContent = "Gründlicher";
+        g.title = "Dieselbe Frage nochmal mit dem starken Modell – kostet mehr vom Limit";
+        const frage = userText, bild = image, bildUrl = imageUrl;
+        g.onclick = () => { if (busy) return; g.disabled = true; tts.unlock(); ask(frage, { stark: true, image: bild, imageUrl: bildUrl }); };
+        zeile.appendChild(g);
+        if (!zeile.parentElement) out.parentElement.appendChild(zeile);
+      }
+      setzeModell(route, res, toolsGesendet);
       zeigeKarten();
       if (res.truncated) addMsg("note", "Antwort wurde gekürzt.");
       for (const n of toolNotes) addMsg("note", n);
-      const saved = system ? [] : await applyMemory(parseOps(full), { kurz: route === "schnell" }); // fremder Text schreibt nie ins Gedächtnis
+      const saved = system ? [] : await applyMemory(parseOps(full), { kurz: route === "schnell", nurAnhaengen: route === "haiku" }); // fremder Text schreibt nie ins Gedächtnis
       // Sichtbar bestätigen, dass etwas gespeichert wurde: Hinweis oben + Zeile in der Antwort.
       if (werkzeugLog.some((w) => SCHREIBEND.has(w.name) && w.r && !w.r.fehler) || saved.some((x) => !x.failed)) {
         zeigeToast("Notiert.");
@@ -4113,107 +4194,301 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
     return ergebnis; // true, Fehlercode oder false – für die Auftrags-Meldungen
   }
 
-  /* ---------------- Sprechen ---------------- */
-  // 1. Wo das Gerät es dieser Seite erlaubt, hört Jarvis selbst zu (Spracherkennung) – im Gesprächsmodus freihändig.
-  // 2. Sonst (meist in der Claude-App: Seiten bekommen dort kein Mikrofon) das iPhone-Diktat: 🎤 auf der Tastatur.
-  // In beiden Fällen sendet Jarvis von selbst, sobald der Text eine Weile nicht mehr wächst.
+  /* ---------------- Sprechen: Push-to-talk ---------------- */
+  // Kein Dauerlauschen: Jarvis hört nur zu, wenn er es will.
+  //   Kreis oder 🎙 antippen → hört zu · nochmal tippen (oder eine Sprechpause) → schickt ab.
+  //   Gedrückt halten → sprechen · loslassen → schickt ab (nicht beim allerersten Mal: die Mikrofon-Abfrage unterbricht den Druck).
+  // 1. Darf die Seite das Mikrofon nutzen, hört Jarvis selbst zu (Spracherkennung). Beim ersten Tipp fragt er das Mikrofon
+  //    ausdrücklich an (getUserMedia) und gibt es sofort wieder frei. Wächter melden „startet nicht“ und „nichts gehört“ –
+  //    WebKit meldet beides nicht selbst (kein „no-speech“, nach einer Sperre nicht einmal „end“).
+  // 2. Sonst – in der Claude-App fürs iPhone sperrt der Rahmen der Seite das Mikrofon – sagt er klar, warum, und nutzt das
+  //    iPhone-Diktat: 🎤 auf der Tastatur schreibt ins Textfeld, Jarvis sendet nach einer Pause. Eigene Aufnahme hilft dort nicht:
+  //    sie bräuchte dasselbe Mikrofon, und Claude nimmt hier kein Audio an.
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   let listening = false, sendTimer = null, erkennung = null, erkennungGeht = Boolean(SR);
+  let mikro = "ungeprüft"; // erlaubt · gesperrt · abgelehnt · app-mikro · kein-geraet · keine-antwort · startet-nicht · fehlt · ungeprüft
+  let sperre = SR ? "" : "fehlt"; // warum Jarvis gerade nicht selbst zuhört
+  let diktat = false, sitzung = 0, waechter = 0, stille = 0, letzterSprachFehler = "";
+  let srLiefSchon = false; // bis die Erkennung einmal lief, können Erlaubnis-Abfragen offen sein – dann geduldiger warten
   let tipVorher = null;
+  const DAUERHAFT = ["fehlt", "gesperrt", "abgelehnt", "app-mikro", "dienst", "kein-geraet"]; // gilt bis zum Neuladen
+  const SPRACH_TEXT = {
+    start: "Mikrofon startet …",
+    hoert: "Hört zu – sprich jetzt. Nochmal tippen schickt ab.",
+    gehoert: "Versteht …",
+    nichts: "Nichts gehört. Tippe nochmal und sprich – oder nutze 🎤 auf der Tastatur.",
+    diktat: "Tippe auf der Tastatur auf 🎤 und sprich – Jarvis sendet nach einer Pause.",
+    fehlt: "Keine Spracherkennung in dieser App. Sprich über 🎤 auf der Tastatur.",
+    gesperrt: "Kein Mikrofon-Zugriff: Die Claude-App gibt dieser Seite kein Mikrofon. Sprich über 🎤 auf der Tastatur.",
+    abgelehnt: "Mikrofon-Abfrage abgelehnt. Zum erneuten Fragen die Seite neu laden – oder 🎤 auf der Tastatur nutzen.",
+    "app-mikro": "Kein Mikrofon-Zugriff: iPhone-Einstellungen → Claude → Mikrofon erlauben. Bis dahin 🎤 auf der Tastatur.",
+    dienst: "Spracherkennung ist für die App nicht freigegeben oder Diktieren ist aus. Sprich über 🎤 auf der Tastatur.",
+    "kein-geraet": "Kein Mikrofon gefunden. Sprich über 🎤 auf der Tastatur.",
+    "keine-antwort": "Das Mikrofon antwortet nicht. Sprich über 🎤 auf der Tastatur.",
+    "startet-nicht": "Das Mikrofon startet nicht. Sprich über 🎤 auf der Tastatur.",
+    belegt: "Das Mikrofon ist gerade belegt. Sprich über 🎤 auf der Tastatur.",
+    netz: "Die Spracherkennung braucht Internet. Sprich über 🎤 auf der Tastatur.",
+  };
+  const MIKRO_TEXT = { "keine-api": "nicht verfügbar – die Spracherkennung fragt selbst", erlaubt: "erlaubt", gesperrt: "gesperrt – diese Seite bekommt kein Mikrofon", abgelehnt: "Abfrage abgelehnt", "app-mikro": "für die App gesperrt",
+    "kein-geraet": "kein Mikrofon gefunden", "keine-antwort": "keine Antwort", "startet-nicht": "Fehler", fehlt: "nicht vorhanden", "ungeprüft": "noch nicht geprüft" };
+  function sprachStatus(art) {
+    const z = $("sprachZeile"), text = SPRACH_TEXT[art] || "";
+    z.hidden = !text; z.textContent = text;
+    z.dataset.art = !art ? "" : ["start", "hoert"].includes(art) ? "hoert" : ["gehoert", "nichts", "diktat", "fehlt"].includes(art) ? art : "gesperrt";
+  }
   function diktatHilfe(an) {
     if (an === !$("diktatHilfe").hidden) return;
     $("diktatHilfe").hidden = !an;
     if (an) { tipVorher = $("tip").hidden; $("tip").hidden = true; } else if (tipVorher !== null) { $("tip").hidden = tipVorher; tipVorher = null; }
     $("input").placeholder = an ? "Jetzt 🎤 auf der Tastatur …" : "Sag etwas zu Jarvis …";
   }
+  // Ohne Abfrage: Sperrt der Rahmen der Seite das Mikrofon, antwortet WebKit sofort „denied“ (dann gleich Tastatur-Diktat).
+  try { navigator.permissions?.query({ name: "microphone" }).then((p) => { if (mikro !== "ungeprüft") return; if (p.state === "denied") { mikro = "gesperrt"; sperre = "gesperrt"; } else if (p.state === "granted") mikro = "erlaubt"; }, () => {}); } catch {}
+  // Mikrofon ausdrücklich anfragen (einmal pro Sitzung) und sofort wieder freigeben – die Erkennung holt es sich selbst.
+  async function mikrofonPruefen() {
+    if (!navigator.mediaDevices?.getUserMedia) return (mikro = "keine-api"); // die Erkennung hat eine eigene Abfrage
+    const t0 = Date.now();
+    let zuSpaet = false;
+    try {
+      const anfrage = navigator.mediaDevices.getUserMedia({ audio: true });
+      anfrage.then((st) => { if (zuSpaet) st.getTracks().forEach((t) => t.stop()); }, () => {});
+      const st = await Promise.race([anfrage, new Promise((_, nein) => setTimeout(() => nein({ name: "Timeout" }), 30000))]); // Abfrage kann lange offen sein
+      st.getTracks().forEach((t) => t.stop());
+      return (mikro = "erlaubt");
+    } catch (e) {
+      zuSpaet = true;
+      letzterSprachFehler = `getUserMedia: ${e?.name || e}${e?.message ? " – " + e.message : ""}`;
+      // Abgelehnt ohne Abfrage (sofort) = gesperrt; nach einer Abfrage = er hat abgelehnt.
+      return (mikro = e?.name === "NotAllowedError" || e?.name === "SecurityError" ? (Date.now() - t0 < 600 ? "gesperrt" : "abgelehnt")
+        : e?.name === "NotFoundError" || e?.name === "OverconstrainedError" ? "kein-geraet" : e?.name === "Timeout" ? "keine-antwort" : "startet-nicht");
+    }
+  }
+  function sprachGrund(e) {
+    const m = String(e?.message || "");
+    if (e?.error === "aborted") return "abbruch";
+    if (e?.error === "no-speech") return "nichts";
+    if (e?.error === "not-allowed") return /speech recognition service/i.test(m) ? "dienst" : /microphone permission check/i.test(m) ? "app-mikro" : /user permission check/i.test(m) ? "abgelehnt" : /not visible/i.test(m) ? "abbruch" : "gesperrt";
+    return ({ "service-not-allowed": "dienst", "language-not-supported": "dienst", "audio-capture": "belegt", network: "netz" })[e?.error] || "startet-nicht";
+  }
+  function hoerAnzeige(an) {
+    $("composer").classList.toggle("listening", an); $("app").classList.toggle("hoert", an);
+  }
   function starteErkennung() {
-    if (!erkennungGeht || busy) return false;
+    const s = ++sitzung;
+    let gestartet = false, text = "";
     try {
       const r = new SR();
       r.lang = "de-DE"; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
-      let fest = $("input").value.trim() ? $("input").value.trim() + " " : "";
+      const vorher = $("input").value.trim();
+      r.onstart = r.onaudiostart = () => {
+        if (s !== sitzung || gestartet) return;
+        gestartet = true; srLiefSchon = true; clearTimeout(waechter);
+        sprachStatus("hoert"); setStatus("Ich höre – sprich einfach", true);
+        waechter = setTimeout(() => { if (s === sitzung && !text) stopListening(true, "nichts"); }, 7000); // WebKit meldet Stille nie selbst
+      };
       r.onresult = (ev) => {
-        let vorlaeufig = "";
-        for (let i = ev.resultIndex; i < ev.results.length; i++) {
-          const t = ev.results[i][0]?.transcript || "";
-          if (ev.results[i].isFinal) fest += t + " "; else vorlaeufig += t;
+        if (s !== sitzung) return;
+        // Jedes Mal aus allen Ergebnissen neu bauen, nicht anhängen. Safari liefert manche Ergebnisse doppelt
+        // oder als wachsende Fassung des vorigen – die zählen nur einmal (Wortfolgen bleiben: „5 plus 5 plus 5“).
+        const teile = [];
+        for (let i = 0; i < ev.results.length; i++) {
+          const x = String(ev.results[i][0]?.transcript || "").trim();
+          const vorg = teile.at(-1)?.toLowerCase();
+          if (!x || x.toLowerCase() === vorg) continue;
+          if (vorg && x.toLowerCase().startsWith(vorg)) teile[teile.length - 1] = x; else teile.push(x);
         }
-        $("input").value = (fest + vorlaeufig).replace(/\s+/g, " ").trimStart();
-        $("input").dispatchEvent(new Event("input"));
+        const t = teile.join(" ").replace(/\s+/g, " ").trim();
+        if (!t) return;
+        text = t; gestartet = true; srLiefSchon = true; clearTimeout(waechter);
+        $("input").value = (vorher ? vorher + " " : "") + text; setAction();
+        sprachStatus("gehoert"); setStatus("Ich höre …", true); Orb.level(0.7);
+        clearTimeout(stille); // nach einer Sprechpause selbst abschicken
+        // Sprechpause → abschicken; solange er den Knopf hält, erst beim Loslassen
+        const pauseSenden = () => { if (s !== sitzung) return; if (druck) { stille = setTimeout(pauseSenden, 300); return; } fertigHoeren(); };
+        if (settings.autoSend) stille = setTimeout(pauseSenden, Math.max(1200, settings.pause * 1000));
       };
       r.onerror = (e) => {
-        // Kein Mikrofon für diese Seite → dauerhaft aufs Tastatur-Diktat wechseln (in dieser Sitzung).
-        if (["not-allowed", "service-not-allowed", "audio-capture", "language-not-supported"].includes(e.error)) {
-          erkennungGeht = false;
-          if (listening) { diktatHilfe(true); setStatus("Tippe auf der Tastatur auf 🎤", true); }
-        }
+        if (s !== sitzung) return;
+        const grund = sprachGrund(e);
+        if (grund === "abbruch") return;
+        letzterSprachFehler = `Spracherkennung: ${e.error}${e.message ? " – " + e.message : ""}`;
+        if (grund === "nichts") { text ? fertigHoeren() : stopListening(true, "nichts"); return; }
+        zumDiktat(grund); // nach einer Sperre schickt WebKit kein „end“ – hier aufräumen
       };
       r.onend = () => {
         if (erkennung === r) erkennung = null;
-        // Geräte beenden die Erkennung nach Pausen von selbst – solange zugehört wird, weitermachen.
-        if (listening && erkennungGeht && !busy) setTimeout(() => { if (listening && !erkennung && !busy) starteErkennung(); }, 300);
+        if (s !== sitzung || !listening || diktat) return;
+        clearTimeout(waechter); clearTimeout(stille);
+        if (!gestartet) { letzterSprachFehler ||= "Spracherkennung: beendet, ohne zu starten"; zumDiktat("startet-nicht"); return; }
+        if (text) schickeGesprochenes(); else stopListening(true, "nichts");
       };
       r.start();
       erkennung = r;
+      // Kommt weder „start“ noch „audiostart“, startet das Mikrofon nicht (Berechtigung?).
+      const frist = srLiefSchon ? 3000 : 20000;
+      waechter = setTimeout(() => { if (s === sitzung && !gestartet && listening && !diktat) { letzterSprachFehler ||= `Spracherkennung: kein Start nach ${frist / 1000} s`; zumDiktat("startet-nicht"); } }, frist);
       return true;
-    } catch {
-      erkennungGeht = false;
+    } catch (e) {
+      letzterSprachFehler = `Spracherkennung: ${e?.name || e}`;
+      if (e?.name !== "InvalidStateError") { erkennungGeht = false; sperre = "fehlt"; }
       return false;
     }
   }
-  function startListening() {
-    if (busy && !offeneBestaetigung) return; // bei „Sicher? Ja/Nein“ darf er antworten
-    stoppeWachwort();
-    setzeGespraech(true);
-    listening = true;
-    $("composer").classList.add("listening");
+  // Tastatur-Diktat: Fokus im Tipp öffnet die Tastatur, dort 🎤. Jarvis sendet nach einer Pause.
+  function zumDiktat(grund = "diktat", imTipp = false) {
+    if (DAUERHAFT.includes(grund)) { erkennungGeht = false; sperre = grund; }
+    sitzung++;
+    const r = erkennung; erkennung = null;
+    try { r?.abort(); } catch {}
+    clearTimeout(waechter); clearTimeout(stille);
+    listening = true; diktat = true; hoerAnzeige(true);
     Orb.set("listening");
-    if (starteErkennung()) { diktatHilfe(false); setStatus("Ich höre – sprich einfach", true); return; }
+    sprachStatus(grund);
     diktatHilfe(true);
     setStatus("Tippe auf der Tastatur auf 🎤", true);
-    $("input").focus();
+    if (imTipp) $("input").focus();
   }
-  function stopListening(resetOrb = true) {
-    listening = false; clearTimeout(sendTimer);
+  const diktatNoetig = () => !SR || !erkennungGeht || DAUERHAFT.includes(mikro);
+  function startListening() {
+    if ((busy && !offeneBestaetigung) || listening) return;
+    stoppeWachwort();
+    tts.stop(); // nie gleichzeitig sprechen und zuhören (iOS dämpft sonst das Mikrofon)
+    setzeGespraech(true);
+    if (diktatNoetig()) { zumDiktat(!SR ? "fehlt" : sperre || mikro, true); return; }
+    sitzung++;
+    listening = true; diktat = false; hoerAnzeige(true);
+    Orb.set("listening");
+    diktatHilfe(false);
+    sprachStatus("start"); setStatus("Mikrofon startet", true);
+    if (mikro === "erlaubt") { if (!starteErkennung()) zumDiktat(sperre || "startet-nicht", true); return; }
+    // Erster Tipp: ausdrücklich nach dem Mikrofon fragen, dann zuhören.
+    const s = sitzung;
+    mikrofonPruefen().then((m) => {
+      if (s !== sitzung || !listening) return;
+      if (["gesperrt", "abgelehnt", "kein-geraet"].includes(m)) { zumDiktat(m); return; }
+      if (!starteErkennung()) zumDiktat(sperre || "startet-nicht"); // sonst (auch ohne getUserMedia) die Erkennung selbst fragen lassen
+    });
+  }
+  // Fertig gesprochen (nochmal getippt, losgelassen oder Pause): Erkennung beenden, letztes Ergebnis abwarten, abschicken.
+  function fertigHoeren() {
+    if (!listening) return;
+    if (diktat) {
+      if ($("input").value.trim()) schickeGesprochenes();
+      else if (document.activeElement !== $("input")) $("input").focus(); // Tastatur kam nicht von selbst (kein Tipp) – jetzt im Tipp öffnen
+      else stopListening();
+      return;
+    }
+    const r = erkennung, s = sitzung;
+    if (!r) { schickeGesprochenes(); return; }
+    clearTimeout(stille);
+    try { r.stop(); } catch {}
+    setTimeout(() => { if (s === sitzung && listening) schickeGesprochenes(); }, 1500); // kein „end“? dann mit dem letzten Stand
+  }
+  function schickeGesprochenes() {
+    const t = $("input").value.trim();
+    if (!t) { stopListening(true, "nichts"); return; }
+    stopListening(false);
+    $("input").value = ""; setAction();
+    ask(t, { voice: true });
+  }
+  function stopListening(resetOrb = true, status = "") {
+    sitzung++;
+    listening = false; diktat = false;
+    clearTimeout(sendTimer); clearTimeout(waechter); clearTimeout(stille);
     const r = erkennung; erkennung = null;
     try { r?.abort(); } catch {}
     diktatHilfe(false);
-    $("composer").classList.remove("listening");
-    if (resetOrb && !busy && !tts.active) { Orb.set("idle"); setStatus("Bereit"); setTimeout(starteWachwort, 800); }
+    sprachStatus(status);
+    hoerAnzeige(false);
+    if (resetOrb && !busy && !tts.active) { Orb.set("idle"); setStatus(status === "nichts" ? "Nichts gehört" : "Bereit"); setTimeout(starteWachwort, 800); }
   }
+  // Tastatur-Diktat: Text wächst nicht mehr → abschicken
   $("input").addEventListener("input", () => {
     setAction();
     $("composer").classList.toggle("hat-text", Boolean($("input").value));
-    if (!listening) return;
+    if (!listening || !diktat) return;
     Orb.level(0.7);
     clearTimeout(sendTimer);
     if (!settings.autoSend || !$("input").value.trim()) return;
-    setStatus("Ich höre …", true);
+    sprachStatus("gehoert"); setStatus("Ich höre …", true);
     sendTimer = setTimeout(() => {
-      const t = $("input").value;
-      if (!t.trim() || (busy && !offeneBestaetigung)) return;
-      $("input").value = ""; setAction();
-      ask(t, { voice: true });
+      if (!$("input").value.trim() || (busy && !offeneBestaetigung)) return;
+      schickeGesprochenes();
     }, settings.pause * 1000);
   });
-  $("input").addEventListener("blur", () => { if (listening && !erkennung && !$("input").value.trim()) stopListening(); });
+  $("input").addEventListener("blur", () => { if (listening && diktat && !$("input").value.trim()) stopListening(); });
+  $("diktatHilfe").addEventListener("click", () => $("input").focus()); // Tastatur öffnen, wenn sie nicht von selbst aufging
+  document.addEventListener("visibilitychange", () => { if (document.hidden && listening && !diktat) stopListening(); });
+
+  // Push-to-talk am 🎙-Knopf und am Kreis: Tippen = an/aus, Halten = sprechen, Loslassen = abschicken.
+  // Muss Jarvis das Tastatur-Diktat nehmen, bleibt es beim normalen Tipp (nur der öffnet die Tastatur zuverlässig).
+  let druck = null, klickSperre = { el: null, t: 0 };
+  const gehoertZumDruck = (el) => klickSperre.el === el && Date.now() - klickSperre.t < 700; // der „click“ nach einem Push-to-talk-Druck
+  function pttDown(e) {
+    const el = e.currentTarget;
+    if (e.button > 0 || diktatNoetig() || (listening && diktat)) return;
+    if (el === $("btnAction") ? !el.classList.contains("mic") : (tts.active || busy) && !offeneBestaetigung) return;
+    tts.unlock();
+    try { el.setPointerCapture(e.pointerId); } catch {}
+    druck = { el, t0: Date.now(), warAn: listening, ersteMal: !srLiefSchon || mikro !== "erlaubt" };
+    if (!listening) startListening();
+  }
+  function pttUp(e) {
+    if (!druck || druck.el !== e.currentTarget) return;
+    const d = druck; druck = null;
+    klickSperre = { el: d.el, t: Date.now() }; // der folgende „click“ gehört zu diesem Druck
+    if (e.type === "pointercancel" && d.ersteMal) return; // die Mikrofon-Abfrage unterbricht den ersten Druck – weiter zuhören
+    if (d.warAn) { fertigHoeren(); return; } // zweiter Tipp: abschicken
+    if (Date.now() - d.t0 >= 450 && !d.ersteMal) fertigHoeren(); // gehalten → loslassen schickt ab
+    // kurzer Tipp: hört weiter zu, bis er nochmal tippt oder eine Pause macht
+  }
+  for (const el of [$("btnAction"), $("orbHit")]) {
+    el.addEventListener("pointerdown", pttDown);
+    el.addEventListener("pointerup", pttUp);
+    el.addEventListener("pointercancel", pttUp);
+    el.addEventListener("contextmenu", (e) => { if (druck) e.preventDefault(); });
+    el.addEventListener("touchstart", (e) => { if (druck) e.preventDefault(); }, { passive: false }); // keine Lupe beim Halten
+  }
+  // ⚙ „Sprache prüfen“: zeigt, woran es liegt – zum Abfotografieren, statt zu raten.
+  $("btnSprachCheck").addEventListener("click", async () => {
+    const out = $("sprachCheck"); out.hidden = false; out.textContent = "Prüfe …";
+    let freigabe = "nicht prüfbar";
+    try { freigabe = ({ granted: "erlaubt", denied: "gesperrt", prompt: "fragt nach" })[(await navigator.permissions.query({ name: "microphone" })).state] || freigabe; } catch {}
+    const m = await mikrofonPruefen();
+    if (DAUERHAFT.includes(m)) { erkennungGeht = false; sperre = m; }
+    const selbst = SR && erkennungGeht && (m === "erlaubt" || m === "keine-antwort" || m === "keine-api");
+    out.textContent = [
+      `Spracherkennung: ${SR ? (erkennungGeht ? "vorhanden" : "vorhanden, aber gesperrt") : "fehlt in dieser App"}`,
+      `Mikrofon-Freigabe der Seite: ${freigabe}`,
+      `Mikrofon (getUserMedia): ${MIKRO_TEXT[m] || m}`,
+      `Aufnahme (MediaRecorder): ${window.MediaRecorder ? "vorhanden" : "fehlt"} · sichere Verbindung: ${window.isSecureContext ? "ja" : "nein"}`,
+      letzterSprachFehler ? `Letzter Fehler: ${letzterSprachFehler}` : "",
+      `Ergebnis: ${selbst ? (m === "erlaubt" ? "Jarvis hört selbst zu – Push-to-talk." : "Jarvis versucht selbst zuzuhören – klappt es nicht, 🎤 auf der Tastatur.") : "Sprechen über 🎤 auf der Tastatur. Diese Ansicht gibt Jarvis kein eigenes Mikrofon."}`,
+    ].filter(Boolean).join("\n");
+  });
 
   /* ---------------- Bedienung ---------------- */
   $("composer").addEventListener("submit", (e) => {
     e.preventDefault();
+    if (gehoertZumDruck(e.submitter)) return;
     tts.unlock();
+    if (listening && !diktat && (!busy || offeneBestaetigung)) { fertigHoeren(); return; } // nichts verlieren: Erkennung beenden, letztes Ergebnis abwarten
     if (busy && offeneBestaetigung && $("input").value.trim()) { const a = $("input").value; $("input").value = ""; setAction(); ask(a, { voice: listening }); return; }
     if (busy) { if (Date.now() - sentAt > 600) ctl?.abort(); return; } // Doppeltipp auf ➤ bricht nicht gleich ab
     const t = $("input").value;
-    if (!t.trim()) { listening ? stopListening() : startListening(); return; }
+    if (!t.trim()) { listening ? fertigHoeren() : startListening(); return; }
+    const gesprochen = listening;
     $("input").value = ""; setAction();
     if (!listening) $("input").blur();
-    ask(t, { voice: listening });
+    ask(t, { voice: gesprochen });
   });
 
   $("orbHit").addEventListener("click", () => {
+    if (gehoertZumDruck($("orbHit"))) return;
     tts.unlock();
     setzeGespraech(true);
+    // Offene „Sicher?“-Karte: Antippen heißt antworten wollen – zuhören (oder das Gehörte abschicken).
+    if (offeneBestaetigung) { tts.stop(); listening ? fertigHoeren() : startListening(); return; }
     // Spricht er? Antippen = still sein. Läuft die Antwort noch, schreibt er sie weiter (■ bricht ganz ab).
     if (tts.active || (busy && answerSpoke && !answerMuted)) {
       tts.stop(); lastWasVoice = false;
@@ -4221,8 +4496,8 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
       else { Orb.set("idle"); setStatus("Bereit"); }
       return;
     }
-    if (busy) { if (!answerMuted && Date.now() - sentAt > 600) ctl?.abort(); return; }
-    listening ? stopListening() : startListening();
+    if (busy && !offeneBestaetigung) { if (!answerMuted && Date.now() - sentAt > 600) ctl?.abort(); return; }
+    listening ? fertigHoeren() : startListening();
   });
 
   let pendingPhotoPrompt = "";
@@ -4293,7 +4568,7 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
     $("setTheme").value = settings.aussehen === "nacht" ? "nacht" : "folie";
     $("setWachwort").checked = settings.wachwort !== false;
     $("setSpar").checked = settings.sparmodus !== false;
-    $("modellInfo").textContent = letztesModell ? `Zuletzt: ${letztesModell.text} · ${letztesModell.zeit}` : "Zuletzt: noch keine Antwort";
+    $("modellInfo").textContent = (letztesModell ? `Zuletzt: ${letztesModell.text} · ${letztesModell.zeit}` : "Zuletzt: noch keine Antwort") + `\n${modellBericht()}`;
     $("setAnrede").value = settings.anrede;
     $("setTts").checked = settings.tts;
     $("setDeep").checked = settings.deep;
@@ -4587,6 +4862,7 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
     for (const [k, id] of Object.entries(SEITEN)) $(id).hidden = k !== name;
     const tab = name === "gespraech" ? app.dataset.ansicht : name === "heute" ? "home" : name === "bauplan" ? "wallet" : name;
     for (const b of document.querySelectorAll(".tab")) { if (b.dataset.tab === tab) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); }
+    if (name !== "gespraech") { if (listening) stopListening(); else sprachStatus(""); }
     if (name === "bauplan") zeigeBauplan();
     if (name === "gesundheit") zeigeGesundheit();
     if (name === "wallet") zeigeWallet();
@@ -4804,7 +5080,7 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
     const karten = [
       { b: String(TOOLS.length + DATEN_TOOLS.length), code: "werkzeuge", p: "Echte Funktionen: rechnen, umrechnen, Gewinn, Lager, Werte ändern mit Rückgängig, Gebühren, Aufgaben, Kunden, Kalorien, Timer, Berichte. Jede Zahl kommt von hier." },
       { b: String(SCHNELLE.length), code: "schnelle_antworten", p: "Gewinn, Bestand, Aufgaben, Kalorien, Rechnen, Gebühren, Termine – sofort aus den Werkzeugen, ohne Modell." },
-      { b: "2", code: "gehirn", herz: true, p: `Entscheidet, was passiert: Haiku für Kleines, das starke Modell mit Werkzeugen für alles andere.${letztesModell ? ` Zuletzt: ${letztesModell.text}.` : ""}` },
+      { b: "2", code: "gehirn", herz: true, p: `Entscheidet, was passiert: Haiku ist der Standard – auch mit Werkzeugen. Das starke Modell nur auf Wunsch oder bei komplexen Fragen.${letztesModell ? ` Zuletzt: ${letztesModell.text}.` : ""}` },
       { b: String(appsDa), code: "hände", p: "Verbundene Apps und Claude-Code-Aufträge. Löschen und Benachrichtigen nur nach deinem Tipp." },
       { b: settings.tts ? "an" : "aus", code: "stimme", p: "Sprache rein über das Diktat, Ton raus über die iPhone-Stimme." },
       { b: "–", code: "laptop_brücke", p: "Vorgemerkt, nicht gebaut. Regeln unten." },
@@ -4990,12 +5266,18 @@ BRIEFING: Begrüßung zur Tageszeit, höchstens drei Punkte aus STAND (Überfäl
     $("camLabel").hidden = !imagesOk;
     document.querySelector('[data-action="anzeige"]').hidden = !imagesOk;
     if (!sample) { addMsg("err", "Jarvis kann Claude hier nicht erreichen. Öffne die Seite in der Claude-App oder auf claude.ai."); return; }
-    // Briefing einmal am Tag automatisch – nur wenn Claude schon erlaubt ist (kein Dialog beim Laden).
+    // Einmal am Tag eine kurze Begrüßung mit dem Stand – lokal, ohne Modell (kostet kein Limit).
+    // Das ausführliche Briefing (mit Modell) gibt es auf „Briefing“.
     if (lastBriefing !== today()) {
-      const perms = await claude.use("permissions");
-      const st = perms ? await perms.state("sample").catch(() => "prompt") : "prompt";
-      if (st === "granted") ask(turns.length ? "Briefing, bitte." : "Hallo Jarvis. Stell dich kurz vor.", { auto: true });
-      else if (!turns.length) addMsg("vertex", `${gruss()}, ${ansprache()}. Ich bin Jarvis. Tippen Sie auf „Briefing“ oder auf 🎙 und sagen Sie mir, woran Sie gerade arbeiten.`);
+      lastBriefing = today();
+      if (!turns.length) addMsg("vertex", `${gruss()}, ${ansprache()}. Ich bin Jarvis. Tippen Sie auf den Kreis und sprechen Sie, oder schreiben Sie im Chat, woran Sie gerade arbeiten.`);
+      else {
+        await ladeHeuteKarte();
+        const text = `${gruss()}, ${ansprache()}. ${statusSatz() || "Nichts Dringendes offen."} Das ausführliche Briefing bekommen Sie mit „Briefing“.`;
+        addActions(addMsg("vertex", text), text, ROUTE_TAG.lokal);
+        turns.push({ role: "assistant", content: text, route: "lokal" });
+      }
+      saveVerlauf();
     }
   }
   setAction();
