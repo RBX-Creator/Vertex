@@ -1,12 +1,15 @@
 import nodemailer from 'nodemailer';
 
 const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
+const BREVO_API_KEY = process.env.BREVO_API_KEY?.trim();
 const FROM = process.env.MAIL_FROM || 'VAIs <no-reply@example.com>';
 
-export const mailConfigured = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS);
+// Zwei Wege: Brevo-API (nur BREVO_API_KEY nötig, läuft über https) oder klassisches SMTP.
+const smtpConfigured = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS);
+export const mailConfigured = Boolean(BREVO_API_KEY) || smtpConfigured;
 
 const port = Number(SMTP_PORT) || 587;
-const transport = mailConfigured
+const transport = !BREVO_API_KEY && smtpConfigured
   ? nodemailer.createTransport({
       host: SMTP_HOST,
       port,
@@ -49,6 +52,7 @@ function html({ title, body }, code) {
 
 export async function sendCode(email, code, purpose) {
   const t = TEXTS[purpose];
+  if (BREVO_API_KEY) return sendViaBrevoApi(email, code, t);
   if (!transport) {
     // Entwicklungsmodus: kein SMTP eingerichtet → Code in der Konsole anzeigen
     console.log(`\n  ✉  [DEV] ${t.subject} für ${email}: ${code}\n`);
@@ -61,4 +65,29 @@ export async function sendCode(email, code, purpose) {
     text: `${t.title}\n\n${t.body}\n\nDein Code: ${code}\n\nDer Code ist 10 Minuten gültig.`,
     html: html(t, code),
   });
+}
+
+// "VAIs <name@example.com>" → { name: 'VAIs', email: 'name@example.com' }
+function parseFrom(from) {
+  const m = from.match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
+  return m ? { name: m[1].replace(/^"|"$/g, '') || 'VAIs', email: m[2].trim() } : { name: 'VAIs', email: from.trim() };
+}
+
+async function sendViaBrevoApi(email, code, t) {
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      sender: parseFrom(FROM),
+      to: [{ email }],
+      subject: t.subject,
+      htmlContent: html(t, code),
+      textContent: `${t.title}\n\n${t.body}\n\nDein Code: ${code}\n\nDer Code ist 10 Minuten gültig.`,
+    }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(`Brevo-API ${res.status}: ${body.message || body.code || 'unbekannter Fehler'}`);
+  }
 }

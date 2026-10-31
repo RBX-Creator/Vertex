@@ -20,9 +20,8 @@ Du brauchst 4 kostenlose Konten. Alles geht im Handy-Browser.
 ### 2. E-Mails: Brevo
 1. brevo.com → kostenlos registrieren (300 Mails/Tag gratis).
 2. **Senders, Domains & Dedicated IPs → Senders → Add a sender** → deine Gmail-Adresse eintragen und den Link in der Bestätigungs-Mail antippen.
-3. **SMTP & API → SMTP** → „Generate a new SMTP key“.
-   - **Login** (sieht aus wie `xxxx@smtp-brevo.com`) → `SMTP_USER`
-   - **SMTP-Key** → `SMTP_PASS`
+3. **SMTP & API → API-Schlüssel** → „API-Schlüssel generieren“ → kopieren (beginnt mit `xkeysib-`) → das ist `BREVO_API_KEY`.
+   (Alternativ geht SMTP mit `SMTP_USER` + `SMTP_PASS`; ist `BREVO_API_KEY` gesetzt, wird SMTP ignoriert.)
 4. `MAIL_FROM` = `VAIs <deine-adresse@gmail.com>` (genau die bestätigte Adresse).
 
 ### 3. KI-Modelle: OpenRouter
