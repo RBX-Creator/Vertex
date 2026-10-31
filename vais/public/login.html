@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Anmelden – VAIs</title>
+  <meta name="description" content="VAIs – die besten KI-Modelle kostenlos nutzen und vergleichen.">
+  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#242422" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="auth">
+    <header class="auth-top">
+      <a class="brand" href="/login" aria-label="VAIs">
+        <svg viewBox="0 0 26 26" fill="none" aria-hidden="true">
+          <path d="M4.5 6 13 21 21.5 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="4.5" cy="6" r="2.4" fill="currentColor"/>
+          <circle cx="21.5" cy="6" r="2.4" fill="currentColor"/>
+        </svg>
+        <span>VAIs</span>
+      </a>
+    </header>
+
+    <main class="auth-main">
+      <div class="auth-box">
+        <h1 class="auth-title" id="title">Willkommen bei VAIs</h1>
+        <p class="auth-sub" id="sub">Die besten KI-Modelle an einem Ort. Kostenlos.</p>
+
+        <!-- 1 · E-Mail -->
+        <section class="step active" data-step="email">
+          <form id="form-email" novalidate>
+            <label class="sr-only" for="email">E-Mail-Adresse</label>
+            <input class="input" id="email" type="email" name="email" placeholder="E-Mail-Adresse"
+                   autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" required autofocus>
+            <p class="msg error" role="alert"></p>
+            <button class="btn" type="submit">Weiter</button>
+          </form>
+        </section>
+
+        <!-- 2a · Anmelden -->
+        <section class="step" data-step="login">
+          <form id="form-login" novalidate>
+            <div class="chip"><span data-email></span><button class="link" type="button" data-back>Ändern</button></div>
+            <input type="email" autocomplete="username" data-email-hidden hidden>
+            <div class="field">
+              <label class="sr-only" for="login-password">Passwort</label>
+              <input class="input" id="login-password" type="password" placeholder="Passwort" autocomplete="current-password" required>
+              <button class="icon-btn" type="button" data-toggle-pw aria-label="Passwort anzeigen"></button>
+            </div>
+            <p class="msg error" role="alert"></p>
+            <button class="btn" type="submit">Anmelden</button>
+            <div class="row center"><button class="link" type="button" id="forgot">Passwort vergessen?</button></div>
+          </form>
+        </section>
+
+        <!-- 2b · Registrieren -->
+        <section class="step" data-step="register">
+          <form id="form-register" novalidate>
+            <div class="chip"><span data-email></span><button class="link" type="button" data-back>Ändern</button></div>
+            <input type="email" autocomplete="username" data-email-hidden hidden>
+            <div class="field">
+              <label class="sr-only" for="register-password">Passwort wählen</label>
+              <input class="input" id="register-password" type="password" placeholder="Passwort wählen"
+                     autocomplete="new-password" minlength="8" required>
+              <button class="icon-btn" type="button" data-toggle-pw aria-label="Passwort anzeigen"></button>
+            </div>
+            <p class="hint">Mindestens 8 Zeichen.</p>
+            <p class="msg error" role="alert"></p>
+            <button class="btn" type="submit">Konto erstellen</button>
+          </form>
+        </section>
+
+        <!-- 3 · Code bestätigen -->
+        <section class="step" data-step="verify">
+          <form id="form-verify" novalidate>
+            <div class="otp" data-otp>
+              <label class="sr-only" for="verify-code">6-stelliger Code</label>
+              <input id="verify-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*">
+              <div class="otp-boxes" aria-hidden="true"></div>
+            </div>
+            <p class="msg error" role="alert"></p>
+            <button class="btn" type="submit">Bestätigen</button>
+            <div class="row">
+              <button class="link" type="button" data-back>Andere E-Mail</button>
+              <button class="link" type="button" data-resend="verify">Code erneut senden</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- 4 · Passwort zurücksetzen -->
+        <section class="step" data-step="reset">
+          <form id="form-reset" novalidate>
+            <div class="otp" data-otp>
+              <label class="sr-only" for="reset-code">6-stelliger Code</label>
+              <input id="reset-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*">
+              <div class="otp-boxes" aria-hidden="true"></div>
+            </div>
+            <input type="email" autocomplete="username" data-email-hidden hidden>
+            <div class="field">
+              <label class="sr-only" for="reset-password">Neues Passwort</label>
+              <input class="input" id="reset-password" type="password" placeholder="Neues Passwort"
+                     autocomplete="new-password" minlength="8" required>
+              <button class="icon-btn" type="button" data-toggle-pw aria-label="Passwort anzeigen"></button>
+            </div>
+            <p class="msg error" role="alert"></p>
+            <button class="btn" type="submit">Passwort speichern</button>
+            <div class="row">
+              <button class="link" type="button" data-back>Zurück</button>
+              <button class="link" type="button" data-resend="reset">Code erneut senden</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </main>
+
+    <footer class="auth-foot">© <span id="year"></span> VAIs</footer>
+  </div>
+
+  <script src="/login.js" type="module"></script>
+</body>
+</html>
