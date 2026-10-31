@@ -1,0 +1,31 @@
+# Render-Blueprint für VAIs: render.com → New → Blueprint → dieses Repo wählen.
+# Werte mit "sync: false" fragt Render beim Einrichten ab.
+services:
+  - type: web
+    name: vais
+    runtime: node
+    plan: free
+    rootDir: vais
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: COOKIE_SECURE
+        value: "true"
+      # E-Mail über Brevo (Port 2525, weil Render Free die Ports 25/465/587 sperrt)
+      - key: SMTP_HOST
+        value: smtp-relay.brevo.com
+      - key: SMTP_PORT
+        value: "2525"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      # Datenbank bei Turso
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_TOKEN
+        sync: false

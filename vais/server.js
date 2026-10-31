@@ -23,8 +23,8 @@ app.use('/api/auth', auth);
 
 // Seiten: nicht eingeloggte Besucher landen beim Login
 const page = (name) => new URL(`./public/${name}`, import.meta.url).pathname;
-app.get('/', (req, res) => (currentUser(req) ? res.sendFile(page('app.html')) : res.redirect('/login')));
-app.get('/login', (req, res) => (currentUser(req) ? res.redirect('/') : res.sendFile(page('login.html'))));
+app.get('/', async (req, res) => ((await currentUser(req)) ? res.sendFile(page('app.html')) : res.redirect('/login')));
+app.get('/login', async (req, res) => ((await currentUser(req)) ? res.redirect('/') : res.sendFile(page('login.html'))));
 
 app.use(express.static(new URL('./public', import.meta.url).pathname, { index: false }));
 

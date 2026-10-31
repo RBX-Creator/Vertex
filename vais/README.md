@@ -2,9 +2,35 @@
 
 KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand: **Login mit E-Mail-Bestätigung** und eine erste Startseite.
 
-## Lokal starten
+## Online stellen – nur mit dem Handy (kostenlos)
 
-Voraussetzung: [Node.js](https://nodejs.org) ab Version 22.13.
+Du brauchst 3 kostenlose Konten. Alles geht im Handy-Browser.
+
+### 1. Datenbank: Turso
+1. turso.tech öffnen → **Sign up** → mit GitHub anmelden.
+2. **Create Database** → Name `vais` → erstellen.
+3. In der Datenbank: die **URL** kopieren (beginnt mit `libsql://`) → das ist `DATABASE_URL`.
+4. **Create Token** / „Generate Token“ → kopieren → das ist `DATABASE_TOKEN`.
+
+### 2. E-Mails: Brevo
+1. brevo.com → kostenlos registrieren (300 Mails/Tag gratis).
+2. **Senders, Domains & Dedicated IPs → Senders → Add a sender** → deine Gmail-Adresse eintragen und den Link in der Bestätigungs-Mail antippen.
+3. **SMTP & API → SMTP** → „Generate a new SMTP key“.
+   - **Login** (sieht aus wie `xxxx@smtp-brevo.com`) → `SMTP_USER`
+   - **SMTP-Key** → `SMTP_PASS`
+4. `MAIL_FROM` = `VAIs <deine-adresse@gmail.com>` (genau die bestätigte Adresse).
+
+### 3. Webseite: Render
+1. render.com → mit GitHub anmelden → Zugriff auf das Repo `Vertex` erlauben.
+2. **New → Blueprint** → Repo `Vertex` wählen, Branch `claude/vais-login`.
+3. Render fragt die 5 Werte ab: `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, `DATABASE_URL`, `DATABASE_TOKEN` → einfügen → **Apply**.
+4. Nach ein paar Minuten ist VAIs unter `https://vais-xxxx.onrender.com` online.
+
+Hinweis: Im Gratis-Tarif schläft die Seite nach 15 Minuten ohne Besucher ein; der erste Aufruf danach dauert ca. 1 Minute. Die Konten bleiben dank Turso trotzdem erhalten.
+
+## Lokal starten (am Computer)
+
+Voraussetzung: [Node.js](https://nodejs.org) ab Version 20.12. Werte aus `.env.example` in eine `.env` kopieren.
 
 ```bash
 cd vais
@@ -15,16 +41,6 @@ npm start
 Dann im Browser http://localhost:3000 öffnen.
 
 Ohne E-Mail-Einstellungen läuft VAIs im **Entwicklungsmodus**: Der 6-stellige Code wird nicht verschickt, sondern im Terminal angezeigt, in dem `npm start` läuft.
-
-## Echte E-Mails verschicken
-
-1. `.env.example` nach `.env` kopieren.
-2. SMTP-Zugangsdaten eintragen. Zwei einfache Möglichkeiten:
-   - **Gmail**: In deinem Google-Konto die Bestätigung in zwei Schritten aktivieren, dann unter *Sicherheit → App-Passwörter* ein App-Passwort erstellen.
-     `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER=deine@gmail.com`, `SMTP_PASS=<App-Passwort>`
-   - **Resend** (resend.com, 3.000 Mails/Monat kostenlos, besser für eine eigene Domain):
-     `SMTP_HOST=smtp.resend.com`, `SMTP_PORT=465`, `SMTP_USER=resend`, `SMTP_PASS=<API-Key>`
-3. Server neu starten.
 
 ## So funktioniert der Login
 
@@ -42,13 +58,7 @@ Sicherheit: Passwörter mit scrypt gehasht, Codes nur als Hash gespeichert, 10 M
 | `server.js` | Webserver (Express) |
 | `src/auth.js` | Registrieren, Anmelden, Codes, Sessions |
 | `src/mailer.js` | E-Mail-Versand und Mail-Vorlage |
-| `src/db.js` | SQLite-Datenbank (`data/vais.db`) |
+| `src/db.js` | Datenbank (Turso online, lokal `data/vais.db`) |
 | `public/login.html`, `login.js` | Login-Fenster |
 | `public/app.html`, `app.css` | Startseite nach dem Login |
 | `public/styles.css` | Gemeinsames Design (hell/dunkel automatisch) |
-
-## Online stellen
-
-GitHub Pages reicht hier nicht, weil VAIs einen Server braucht. Gut geeignet und kostenlos bzw. günstig: **Render**, **Railway** oder **Fly.io**. Dort das Repo verbinden, als Ordner `vais` wählen, Startbefehl `npm start`, die Werte aus `.env` als Umgebungsvariablen eintragen und `COOKIE_SECURE=true` setzen.
-
-Hinweis: Die Datenbank liegt in `data/`. Bei Hostern ohne festen Speicher (z. B. Render Free) braucht es dafür ein „Persistent Disk“/Volume, sonst gehen Konten bei einem Neustart verloren.

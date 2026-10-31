@@ -5,11 +5,12 @@ const FROM = process.env.MAIL_FROM || 'VAIs <no-reply@example.com>';
 
 export const mailConfigured = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS);
 
+const port = Number(SMTP_PORT) || 587;
 const transport = mailConfigured
   ? nodemailer.createTransport({
       host: SMTP_HOST,
-      port: Number(SMTP_PORT) || 465,
-      secure: (Number(SMTP_PORT) || 465) === 465,
+      port,
+      secure: port === 465 || port === 2465, // sonst STARTTLS (587, 2525)
       auth: { user: SMTP_USER, pass: SMTP_PASS },
     })
   : null;

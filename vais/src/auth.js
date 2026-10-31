@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { randomBytes, randomInt, scrypt, timingSafeEqual, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
-import { db } from './db.js';
+import { get, run } from './db.js';
 import { sendCode } from './mailer.js';
 
 const scryptAsync = promisify(scrypt);
@@ -42,32 +42,32 @@ class HttpError extends Error {
 
 // ── Einmal-Codes ──────────────────────────────────────────────────
 async function issueCode(email, purpose) {
-  const existing = db.prepare('SELECT sent_at FROM codes WHERE email = ? AND purpose = ?').get(email, purpose);
+  const existing = await get('SELECT sent_at FROM codes WHERE email = ? AND purpose = ?', email, purpose);
   const now = Date.now();
   if (existing && now - existing.sent_at < RESEND_COOLDOWN) {
     const wait = Math.ceil((RESEND_COOLDOWN - (now - existing.sent_at)) / 1000);
     throw new HttpError(429, `Bitte warte noch ${wait} Sekunden.`, { retryAfter: wait });
   }
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
-  db.prepare(`
+  await run(`
     INSERT INTO codes (email, purpose, code_hash, expires_at, sent_at, attempts)
     VALUES (?, ?, ?, ?, ?, 0)
     ON CONFLICT(email, purpose) DO UPDATE SET
       code_hash = excluded.code_hash, expires_at = excluded.expires_at,
       sent_at = excluded.sent_at, attempts = 0
-  `).run(email, purpose, sha256(`${email}:${code}`), now + CODE_TTL, now);
+  `, email, purpose, sha256(`${email}:${code}`), now + CODE_TTL, now);
 
   try {
     await sendCode(email, code, purpose);
   } catch (err) {
     console.error('E-Mail-Versand fehlgeschlagen:', err.message);
-    db.prepare('DELETE FROM codes WHERE email = ? AND purpose = ?').run(email, purpose);
+    await run('DELETE FROM codes WHERE email = ? AND purpose = ?', email, purpose);
     throw new HttpError(502, 'Die E-Mail konnte nicht gesendet werden. Bitte versuche es später erneut.');
   }
 }
 
-function consumeCode(email, purpose, code) {
-  const row = db.prepare('SELECT * FROM codes WHERE email = ? AND purpose = ?').get(email, purpose);
+async function consumeCode(email, purpose, code) {
+  const row = await get('SELECT * FROM codes WHERE email = ? AND purpose = ?', email, purpose);
   if (!row || row.expires_at < Date.now()) {
     throw new HttpError(400, 'Der Code ist abgelaufen. Fordere einen neuen an.');
   }
@@ -76,18 +76,17 @@ function consumeCode(email, purpose, code) {
   }
   const given = Buffer.from(sha256(`${email}:${String(code ?? '').trim()}`));
   if (!timingSafeEqual(given, Buffer.from(row.code_hash))) {
-    db.prepare('UPDATE codes SET attempts = attempts + 1 WHERE email = ? AND purpose = ?').run(email, purpose);
+    await run('UPDATE codes SET attempts = attempts + 1 WHERE email = ? AND purpose = ?', email, purpose);
     const left = MAX_ATTEMPTS - row.attempts - 1;
     throw new HttpError(400, left > 0 ? `Falscher Code. Noch ${left} Versuch${left === 1 ? '' : 'e'}.` : 'Zu viele Fehlversuche. Fordere einen neuen Code an.');
   }
-  db.prepare('DELETE FROM codes WHERE email = ? AND purpose = ?').run(email, purpose);
+  await run('DELETE FROM codes WHERE email = ? AND purpose = ?', email, purpose);
 }
 
 // ── Sessions ──────────────────────────────────────────────────────
-function startSession(res, userId) {
+async function startSession(res, userId) {
   const token = randomBytes(32).toString('base64url');
-  db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)')
-    .run(sha256(token), userId, Date.now() + SESSION_TTL);
+  await run('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)', sha256(token), userId, Date.now() + SESSION_TTL);
   res.cookie(COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
@@ -106,14 +105,14 @@ function readCookie(req) {
   return null;
 }
 
-export function currentUser(req) {
+export async function currentUser(req) {
   const token = readCookie(req);
   if (!token) return null;
-  return db.prepare(`
+  return (await get(`
     SELECT u.id, u.email, u.created_at FROM sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.token_hash = ? AND s.expires_at > ?
-  `).get(sha256(token), Date.now()) ?? null;
+  `, sha256(token), Date.now())) ?? null;
 }
 
 // ── Einfaches Rate-Limit pro IP ───────────────────────────────────
@@ -142,7 +141,7 @@ auth.use(rateLimit);
 auth.post('/start', wrap(async (req, res) => {
   const email = normEmail(req.body?.email);
   if (!validEmail(email)) throw new HttpError(400, 'Bitte gib eine gültige E-Mail-Adresse ein.');
-  const user = db.prepare('SELECT verified FROM users WHERE email = ?').get(email);
+  const user = await get('SELECT verified FROM users WHERE email = ?', email);
   res.json({ mode: user?.verified ? 'login' : 'register' });
 }));
 
@@ -153,16 +152,15 @@ auth.post('/register', wrap(async (req, res) => {
   if (!validEmail(email)) throw new HttpError(400, 'Bitte gib eine gültige E-Mail-Adresse ein.');
   if (!validPassword(password)) throw new HttpError(400, 'Das Passwort muss mindestens 8 Zeichen lang sein.');
 
-  const user = db.prepare('SELECT id, verified FROM users WHERE email = ?').get(email);
+  const user = await get('SELECT id, verified FROM users WHERE email = ?', email);
   if (user?.verified) throw new HttpError(409, 'Zu dieser E-Mail gibt es schon ein Konto. Melde dich an.');
 
   const hash = await hashPassword(password);
   if (user) {
     // Noch nicht bestätigtes Konto: Passwort darf neu gesetzt werden
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, user.id);
+    await run('UPDATE users SET password_hash = ? WHERE id = ?', hash, user.id);
   } else {
-    db.prepare('INSERT INTO users (email, password_hash, verified, created_at) VALUES (?, ?, 0, ?)')
-      .run(email, hash, Date.now());
+    await run('INSERT INTO users (email, password_hash, verified, created_at) VALUES (?, ?, 0, ?)', email, hash, Date.now());
   }
   await issueCode(email, 'verify');
   res.json({ next: 'verify' });
@@ -171,11 +169,11 @@ auth.post('/register', wrap(async (req, res) => {
 // Code aus der E-Mail eingeben → Konto aktiv + eingeloggt
 auth.post('/verify', wrap(async (req, res) => {
   const email = normEmail(req.body?.email);
-  const user = db.prepare('SELECT id, verified FROM users WHERE email = ?').get(email);
+  const user = await get('SELECT id, verified FROM users WHERE email = ?', email);
   if (!user) throw new HttpError(400, 'Kein Konto zu dieser E-Mail gefunden.');
-  consumeCode(email, 'verify', req.body?.code);
-  db.prepare('UPDATE users SET verified = 1 WHERE id = ?').run(user.id);
-  startSession(res, user.id);
+  await consumeCode(email, 'verify', req.body?.code);
+  await run('UPDATE users SET verified = 1 WHERE id = ?', user.id);
+  await startSession(res, user.id);
   res.json({ ok: true });
 }));
 
@@ -183,7 +181,7 @@ auth.post('/verify', wrap(async (req, res) => {
 auth.post('/resend', wrap(async (req, res) => {
   const email = normEmail(req.body?.email);
   const purpose = req.body?.purpose === 'reset' ? 'reset' : 'verify';
-  const user = db.prepare('SELECT verified FROM users WHERE email = ?').get(email);
+  const user = await get('SELECT verified FROM users WHERE email = ?', email);
   const allowed = purpose === 'verify' ? user && !user.verified : user?.verified;
   if (allowed) await issueCode(email, purpose);
   res.json({ ok: true });
@@ -193,14 +191,14 @@ auth.post('/resend', wrap(async (req, res) => {
 auth.post('/login', wrap(async (req, res) => {
   const email = normEmail(req.body?.email);
   const { password } = req.body ?? {};
-  const user = db.prepare('SELECT id, password_hash, verified FROM users WHERE email = ?').get(email);
+  const user = await get('SELECT id, password_hash, verified FROM users WHERE email = ?', email);
   const ok = user && typeof password === 'string' && (await checkPassword(password, user.password_hash));
   if (!ok) throw new HttpError(401, 'E-Mail oder Passwort ist falsch.');
   if (!user.verified) {
     await issueCode(email, 'verify').catch((e) => { if (e.status !== 429) throw e; });
     return res.json({ next: 'verify' });
   }
-  startSession(res, user.id);
+  await startSession(res, user.id);
   res.json({ ok: true });
 }));
 
@@ -208,7 +206,7 @@ auth.post('/login', wrap(async (req, res) => {
 auth.post('/forgot', wrap(async (req, res) => {
   const email = normEmail(req.body?.email);
   if (!validEmail(email)) throw new HttpError(400, 'Bitte gib eine gültige E-Mail-Adresse ein.');
-  const user = db.prepare('SELECT verified FROM users WHERE email = ?').get(email);
+  const user = await get('SELECT verified FROM users WHERE email = ?', email);
   if (user?.verified) await issueCode(email, 'reset');
   res.json({ next: 'reset' });
 }));
@@ -218,27 +216,27 @@ auth.post('/reset', wrap(async (req, res) => {
   const email = normEmail(req.body?.email);
   const { password, code } = req.body ?? {};
   if (!validPassword(password)) throw new HttpError(400, 'Das Passwort muss mindestens 8 Zeichen lang sein.');
-  const user = db.prepare('SELECT id FROM users WHERE email = ? AND verified = 1').get(email);
+  const user = await get('SELECT id FROM users WHERE email = ? AND verified = 1', email);
   if (!user) throw new HttpError(400, 'Der Code ist abgelaufen. Fordere einen neuen an.');
-  consumeCode(email, 'reset', code);
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(await hashPassword(password), user.id);
-  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id); // überall abmelden
-  startSession(res, user.id);
+  await consumeCode(email, 'reset', code);
+  await run('UPDATE users SET password_hash = ? WHERE id = ?', await hashPassword(password), user.id);
+  await run('DELETE FROM sessions WHERE user_id = ?', user.id); // überall abmelden
+  await startSession(res, user.id);
   res.json({ ok: true });
 }));
 
-auth.post('/logout', (req, res) => {
+auth.post('/logout', wrap(async (req, res) => {
   const token = readCookie(req);
-  if (token) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(sha256(token));
+  if (token) await run('DELETE FROM sessions WHERE token_hash = ?', sha256(token));
   res.clearCookie(COOKIE, { path: '/' });
   res.json({ ok: true });
-});
+}));
 
-auth.get('/me', (req, res) => {
-  const user = currentUser(req);
+auth.get('/me', wrap(async (req, res) => {
+  const user = await currentUser(req);
   if (!user) return res.status(401).json({ error: 'Nicht angemeldet.' });
   res.json({ user: { email: user.email } });
-});
+}));
 
 // Fehler einheitlich als JSON zurückgeben
 auth.use((err, req, res, _next) => {
