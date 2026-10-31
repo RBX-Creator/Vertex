@@ -360,6 +360,7 @@ $('#suggest-track').addEventListener('click', (e) => {
 });
 
 function resetChat() {
+  if (!$('#preview').hidden) closePreview();
   for (const c of state.controllers) c.abort();
   state.controllers.clear();
   state.chat = null;
@@ -466,10 +467,11 @@ function updateCard(turnIndex, side) {
   if (!card) return;
   const isLast = turnIndex === chat.turns.length - 1;
   paintLabel(card, side);
-  $('[data-act="regen"]', card).disabled = !isLast || a.status === 'streaming';
-  $('[data-act="copy"]', card).disabled = !a.text;
-  $('[data-act="expand"]', card).disabled = !a.text;
-  $('[data-act="preview"]', card).hidden = !(a.status === 'done' && htmlBlock(a.text));
+  const actBtn = (name) => card.querySelector(`.card-actions [data-act="${name}"], .card-foot [data-act="${name}"]`);
+  actBtn('regen').disabled = !isLast || a.status === 'streaming';
+  actBtn('copy').disabled = !a.text;
+  actBtn('expand').disabled = !a.text;
+  actBtn('preview').hidden = !(a.status === 'done' && htmlBlock(a.text));
   const foot = $('.card-foot', card);
   if (foot) {
     foot.hidden = a.status === 'streaming';
@@ -479,10 +481,24 @@ function updateCard(turnIndex, side) {
   }
 
   const body = $('.card-body', card);
+  const part = websitePart(a.text);
+  renderBuild(card, a, part);
   renderThinking(card, a);
   renderSteps(card, a);
   renderSources(card, a, turnIndex === chat.turns.length - 1);
-  if (a.status === 'error') {
+  if (pv.turn === turnIndex && pv.side === side) refreshPreview();
+  if (part || (codeChat() && a.status === 'streaming')) {
+    // Webseite: Code als kompakter Datei-Chip statt riesigem Codeblock, dazu Fortschritt
+    const lines = part ? part.code.split('\n').filter((l, i, all) => l || i < all.length - 1).length : 0;
+    const chip = part ? `<button type="button" class="code-chip" data-act="code">${ICON['m-code']}<span>index.html</span><small>${lines} Zeilen</small></button>` : '';
+    const gen = a.status === 'streaming'
+      ? `<p class="gen"><span class="gen-dots"></span><span class="shimmer">${part ? 'Baut …' : 'Generiert …'}</span>${a.startedAt ? ` <small data-since="${a.startedAt}"></small>` : ''}</p>`
+      : '';
+    const err = a.status === 'error' ? '<p class="card-error"></p>' : '';
+    body.innerHTML = `${part?.before.trim() ? markdown(part.before) : (!part && a.text ? markdown(a.text) : '')}${chip}${part?.after.trim() ? markdown(part.after) : ''}${gen}${err}`;
+    if (err) $('.card-error', body).textContent = a.error;
+    tickTimers();
+  } else if (a.status === 'error') {
     body.innerHTML = `${a.text ? markdown(a.text) : ''}<p class="card-error"></p>${isLast ? '<button class="retry" data-act="regen">Erneut versuchen</button>' : ''}`;
     $('.card-error', body).textContent = a.error;
   } else if (!a.text) {
@@ -591,7 +607,7 @@ function scheduleUpdate(turnIndex, side) {
 async function runSide(turnIndex, side) {
   const chat = state.chat;
   const a = chat.turns[turnIndex].answers[side];
-  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false });
+  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, startedAt: Date.now(), buildMs: 0 });
   updateCard(turnIndex, side);
 
   const ctrl = new AbortController();
@@ -644,6 +660,7 @@ async function runSide(turnIndex, side) {
     if (ctrl.signal.aborted) a.status = a.text ? 'done' : 'stopped';
     else Object.assign(a, { status: 'error', error: err.message || 'Das Modell konnte nicht antworten.' });
   } finally {
+    a.buildMs = Date.now() - a.startedAt;
     state.controllers.delete(ctrl);
     if (state.chat === chat) updateCard(turnIndex, side);
     updateSend();
@@ -788,12 +805,8 @@ el.thread.addEventListener('click', async (e) => {
     } catch {
       toast('Kopieren nicht möglich');
     }
-  } else if (act === 'preview') {
-    const code = htmlBlock(a.text);
-    if (!code) return;
-    $('#preview-frame').srcdoc = code;
-    $('#preview').hidden = false;
-    $('#preview [data-close]').focus();
+  } else if (act === 'preview' || act === 'code') {
+    openPreview(turnIndex, side, act === 'code' ? 'code' : 'view');
   } else if (act === 'expand') {
     $('#expand-title').textContent = labelFor(state.chat, side);
     $('#expand-body').innerHTML = markdown(a.text);
@@ -808,13 +821,148 @@ el.thread.addEventListener('click', async (e) => {
   }
 });
 
-// Letzten ```html-Codeblock einer Antwort finden (für die Vorschau)
-function htmlBlock(text) {
-  const blocks = [...text.matchAll(/```html[^\n]*\n([\s\S]*?)```/gi)];
-  return blocks.length ? blocks.at(-1)[1] : null;
+// ── Webseiten (Code-Modus) ────────────────────────────────────────
+const codeChat = () => state.chat?.modality === 'code';
+
+// Letzte HTML-Webseite in einer Antwort finden – auch während sie noch geschrieben wird
+function websitePart(text = '') {
+  const fence = /^[ \t]*```([\w-]*)[^\n]*$/gm;
+  const isHtml = (lang, code) => lang === 'html' || lang === 'htm' || (!lang && /^\s*<(!doctype|html)/i.test(code));
+  let open = null;
+  let found = null;
+  let m;
+  while ((m = fence.exec(text))) {
+    if (!open) {
+      open = { lang: m[1].toLowerCase(), start: m.index, codeStart: m.index + m[0].length + 1 };
+    } else {
+      const code = text.slice(open.codeStart, m.index);
+      if (isHtml(open.lang, code)) found = { ...open, code, end: m.index + m[0].length, done: true };
+      open = null;
+    }
+  }
+  if (open) {
+    const code = text.slice(open.codeStart);
+    if (isHtml(open.lang, code)) found = { ...open, code, end: text.length, done: false };
+  }
+  if (!found) return null;
+  // Nur ganze Seiten zeigen wir als Webseite; kleine Schnipsel nur im Code-Modus
+  if (!codeChat() && !/<(!doctype|html|body)/i.test(found.code)) return null;
+  return { before: text.slice(0, found.start), code: found.code, after: text.slice(found.end), done: found.done };
 }
+const htmlBlock = (text) => { const p = websitePart(text); return p?.done ? p.code : null; };
+
+const BRICKS = '<span class="bricks"><i></i><i></i><i></i><i></i><i></i><i></i></span>';
+
+// „Baut …“-Karte oben in der Antwort
+function renderBuild(card, a, part) {
+  let box = $('.build', card);
+  const show = part || (codeChat() && a.status === 'streaming');
+  if (!show || (a.status !== 'streaming' && !part?.done)) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement('button');
+    box.type = 'button';
+    box.className = 'build';
+    box.dataset.act = 'preview';
+    $('.card-head', card).after(box);
+  }
+  const ready = part?.done;
+  box.classList.toggle('ready', !!ready);
+  const secs = a.buildMs ? ` · ${(a.buildMs / 1000).toFixed(1)} s` : '';
+  box.innerHTML = `
+    <span class="build-icon">${ready ? ICON['m-code'] : BRICKS.replace('bricks', 'bricks live')}</span>
+    <span class="build-text"><b>${ready ? 'Webseite fertig' : 'Baut …'}</b><small>${ready ? `Tippe, um sie anzusehen${secs}` : 'Vorschau bald verfügbar'}</small></span>
+    ${ready ? ICON.preview : ''}`;
+}
+
+// Laufende Zeit („Baut … 12.3 s“)
+function tickTimers() {
+  const now = Date.now();
+  document.querySelectorAll('[data-since]').forEach((t) => {
+    t.textContent = `(${((now - Number(t.dataset.since)) / 1000).toFixed(1)} s)`;
+  });
+}
+setInterval(tickTimers, 100);
+
+// Vorschau-Fenster: 👁 Webseite oder </> Code, Neu laden, Herunterladen
+const pv = { turn: null, side: null, tab: 'view', shown: null, code: null };
+
+function previewAnswer() {
+  return state.chat?.turns[pv.turn]?.answers[pv.side] ?? null;
+}
+
+function openPreview(turnIndex, side, tab = 'view') {
+  Object.assign(pv, { turn: turnIndex, side, tab, shown: null, code: null });
+  $('#preview').hidden = false;
+  refreshPreview();
+  $(`[data-ptab="${tab}"]`).focus();
+}
+
+function closePreview() {
+  $('#preview').hidden = true;
+  $('#preview-frame').srcdoc = '';
+  Object.assign(pv, { turn: null, side: null, shown: null, code: null });
+}
+
+function refreshPreview() {
+  if ($('#preview').hidden) return;
+  const a = previewAnswer();
+  if (!a) return closePreview();
+  const part = websitePart(a.text);
+  const ready = !!part?.done;
+  document.querySelectorAll('[data-ptab]').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.ptab === pv.tab)));
+
+  const frame = $('#preview-frame');
+  const build = $('#preview-build');
+  const codeBox = $('#preview-code');
+  frame.hidden = pv.tab !== 'view' || !ready;
+  build.hidden = pv.tab !== 'view' || ready;
+  codeBox.hidden = pv.tab !== 'code';
+  $('#preview-download').disabled = !part?.code;
+
+  if (pv.tab === 'view' && ready && pv.shown !== part.code) {
+    frame.srcdoc = part.code;
+    pv.shown = part.code;
+  }
+  if (!ready) {
+    const working = a.status === 'streaming';
+    $('#preview-build-title').textContent = working ? 'Baut …' : 'Keine Webseite';
+    $('#preview-build-text').textContent = working
+      ? 'Die Vorschau erscheint, sobald die Webseite fertig ist.'
+      : 'In dieser Antwort wurde keine vollständige Webseite gefunden.';
+    $('.bricks', build).classList.toggle('live', working);
+  }
+  if (pv.tab === 'code') {
+    const code = part?.code ?? '';
+    if (pv.code !== code) {
+      const pre = $('pre', codeBox);
+      const stick = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
+      $('code', codeBox).innerHTML = code.split('\n').map((l) => `<span>${escapeHtml(l)}</span>`).join('');
+      pv.code = code;
+      if (a.status === 'streaming' && stick) pre.scrollTop = pre.scrollHeight;
+    }
+  }
+}
+
 $('#preview').addEventListener('click', (e) => {
-  if (e.target.closest('[data-close]')) { $('#preview').hidden = true; $('#preview-frame').srcdoc = ''; }
+  if (e.target.closest('[data-close]')) return closePreview();
+  const tab = e.target.closest('[data-ptab]');
+  if (tab) { pv.tab = tab.dataset.ptab; pv.code = null; refreshPreview(); }
+});
+$('#preview-reload').addEventListener('click', () => {
+  if (pv.tab !== 'view' || !pv.shown) return;
+  const frame = $('#preview-frame');
+  frame.srcdoc = '';
+  requestAnimationFrame(() => { frame.srcdoc = pv.shown; });
+});
+$('#preview-download').addEventListener('click', () => {
+  const part = websitePart(previewAnswer()?.text ?? '');
+  if (!part?.code) return;
+  const url = URL.createObjectURL(new Blob([part.code], { type: 'text/html' }));
+  const link = Object.assign(document.createElement('a'), { href: url, download: 'index.html' });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 });
 
 $('#expand').addEventListener('click', (e) => { if (e.target.closest('[data-close]')) $('#expand').hidden = true; });
@@ -859,7 +1007,7 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (!$('#preview').hidden) { $('#preview').hidden = true; $('#preview-frame').srcdoc = ''; }
+  if (!$('#preview').hidden) closePreview();
   else if (!el.modalityMenu.hidden) { toggleModalityMenu(false); el.modalityBtn.focus(); }
   else if (!el.drawer.hidden) closeDrawer();
   else if (!$('#expand').hidden) $('#expand').hidden = true;
