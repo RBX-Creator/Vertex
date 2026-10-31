@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { get, run, all } from './db.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { runAgent } from './agent.js';
+import { sourcesFromText } from './models.js';
 import { listModels, findModel, streamChat, displayName, describeModel, modelKey, demoMode } from './models.js';
 
 const MAX_MESSAGES = 40;          // so viele Nachrichten gehen max. ans Modell
@@ -87,13 +88,24 @@ chat.post('/stream', wrap(async (req, res) => {
   // Verlauf speichern: deine Frage sofort, die Antwort am Ende
   const steps = [];
   let thinking = '';
+  const sources = new Map();
+  const onSources = (list) => {
+    let added = false;
+    for (const src of list) {
+      if (!src?.url || sources.has(src.url) || sources.size >= 12) continue;
+      sources.set(src.url, src);
+      added = true;
+    }
+    if (added) res.write(`${JSON.stringify({ sources: [...sources.values()] })}\n`);
+  };
   let thinkStart = 0;
   let thinkMs = 0;
   const save = (s, content, status = 'done', error = null) => (turnNo === null ? null : run(
     `INSERT INTO messages (chat_id, turn, side, content, status, error, meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(chat_id, turn, side) DO UPDATE SET content = excluded.content, status = excluded.status, error = excluded.error, meta = excluded.meta`,
     row.id, turnNo, s, content, status, error,
-    s >= 0 && (steps.length || thinking) ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs }) : null, Date.now(),
+    s >= 0 && (steps.length || thinking || sources.size)
+      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, sources: [...sources.values()] }) : null, Date.now(),
   ).catch((e) => console.error('Verlauf speichern fehlgeschlagen:', e.message)));
   await save(-1, clean.at(-1).content);
   await run('UPDATE chats SET updated_at = ? WHERE id = ?', Date.now(), row.id);
@@ -126,6 +138,7 @@ chat.post('/stream', wrap(async (req, res) => {
         signal: controller.signal,
         onText,
         onReasoning,
+        onSources,
         onStep: (step) => { steps.push(step); res.write(`${JSON.stringify({ step })}\n`); },
       });
     } else {
@@ -135,7 +148,10 @@ chat.post('/stream', wrap(async (req, res) => {
         signal: controller.signal,
         onText,
         onReasoning,
+        onSources,
       });
+      // Websuche: zusätzlich Links aus der Antwort als Quellen sammeln
+      if (row.modality === 'web' || /#search$|compound/.test(model)) onSources(sourcesFromText(text));
     }
     res.write(`${JSON.stringify({ done: true })}\n`);
     await save(side === 1 ? 1 : 0, text, text ? 'done' : 'error', text ? null : 'Das Modell hat keine Antwort geliefert.');
@@ -209,6 +225,7 @@ chat.get('/:id', wrap(async (req, res) => {
       turns[m.turn].answers[m.side] = {
         text: m.content, status: m.status, error: m.error,
         steps: meta.steps ?? [], thinking: meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0, feedback: m.feedback ?? 0,
+        sources: meta.sources ?? [],
       };
     }
   }

@@ -2,7 +2,7 @@
 // Werkzeuge: Websuche, Webseiten lesen, Rechnen, Datum/Uhrzeit.
 import { lookup } from 'node:dns/promises';
 import net from 'node:net';
-import { listModels, complete, demoMode } from './models.js';
+import { listModels, complete, demoMode, sourcesFromText, makeSource } from './models.js';
 
 const MAX_STEPS = 8;
 
@@ -73,7 +73,7 @@ function systemPrompt() {
 }
 
 // ── Werkzeuge ─────────────────────────────────────────────────────
-async function webSearch(query, signal) {
+async function webSearch(query, signal, addSources) {
   const model = await pickModel(SEARCH_PREFERENCE);
   if (!model) throw new Error('Websuche ist nicht verfügbar (GROQ_API_KEY fehlt).');
   const msg = await complete({
@@ -84,7 +84,9 @@ async function webSearch(query, signal) {
       { role: 'user', content: query },
     ],
   });
-  return (msg.content || 'Keine Ergebnisse gefunden.').replace(/\s*【[^】]*】/g, '');
+  const text = (msg.content || 'Keine Ergebnisse gefunden.').replace(/\s*【[^】]*】/g, '');
+  addSources([...(msg.sources ?? []), ...sourcesFromText(text)]);
+  return text;
 }
 
 function isPrivateIp(ip) {
@@ -125,7 +127,7 @@ function htmlToText(html) {
   return { title, text };
 }
 
-async function readWebpage(raw, signal) {
+async function readWebpage(raw, signal, addSources) {
   let url = await assertPublicUrl(raw);
   let res;
   for (let hop = 0; hop < 4; hop++) {
@@ -157,6 +159,7 @@ async function readWebpage(raw, signal) {
   reader.cancel().catch(() => {});
   const body = new TextDecoder().decode(Buffer.concat(chunks));
   const { title, text } = /html/i.test(type) ? htmlToText(body) : { title: '', text: body };
+  addSources([makeSource(url.href, title)].filter(Boolean));
   return `Titel: ${title || '–'}\nURL: ${url.href}\n\n${text.slice(0, 12_000)}${text.length > 12_000 ? '\n\n[… gekürzt]' : ''}`;
 }
 
@@ -220,13 +223,13 @@ function currentDatetime(tz = 'Europe/Berlin') {
   return `${now.toLocaleString('de-DE', { timeZone: zone, dateStyle: 'full', timeStyle: 'long' })} (${zone}); ISO: ${now.toISOString()}`;
 }
 
-async function runTool(name, args, signal) {
+async function runTool(name, args, signal, addSources) {
   switch (name) {
-    case 'web_search': return { step: { kind: 'search', text: args.query }, run: () => webSearch(String(args.query ?? ''), signal) };
+    case 'web_search': return { step: { kind: 'search', text: args.query }, run: () => webSearch(String(args.query ?? ''), signal, addSources) };
     case 'read_webpage': {
       let label = String(args.url ?? '');
       try { const u = new URL(label); label = u.hostname + (u.pathname.length > 1 ? u.pathname : ''); } catch { /* egal */ }
-      return { step: { kind: 'read', text: label.slice(0, 80) }, run: () => readWebpage(String(args.url ?? ''), signal) };
+      return { step: { kind: 'read', text: label.slice(0, 80) }, run: () => readWebpage(String(args.url ?? ''), signal, addSources) };
     }
     case 'calculate': return { step: { kind: 'calc', text: String(args.expression ?? '') }, run: async () => String(calculate(args.expression)) };
     case 'current_datetime': return { step: { kind: 'time', text: 'Datum und Uhrzeit' }, run: async () => currentDatetime(args.timezone) };
@@ -246,8 +249,8 @@ async function emitText(text, onText, signal, words = 3, delay = 12) {
   }
 }
 
-export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {} }) {
-  if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning });
+export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {} }) {
+  if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources });
   const model = await pickModel(AGENT_PREFERENCE);
   if (!model) throw new Error('Agent X braucht einen Groq-Schlüssel (GROQ_API_KEY), damit er Werkzeuge benutzen kann.');
 
@@ -263,7 +266,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
     for (const call of calls) {
       let args = {};
       try { args = JSON.parse(call.function?.arguments || '{}'); } catch { /* leere Argumente */ }
-      const tool = await runTool(call.function?.name, args, signal);
+      const tool = await runTool(call.function?.name, args, signal, onSources);
       onStep(tool.step);
       let result;
       try {
@@ -285,11 +288,12 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   return emitText(final.content || 'Ich konnte leider keine Antwort finden.', onText, signal);
 }
 
-async function demoAgent({ messages, onStep, onText, onReasoning, signal }) {
+async function demoAgent({ messages, onStep, onText, onReasoning, onSources, signal }) {
   const q = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
   await emitText(`Der Nutzer möchte: „${q.slice(0, 80)}“. Ich prüfe zuerst das Datum, suche dann aktuelle Infos, lese eine Quelle genauer und rechne zur Kontrolle nach. Danach fasse ich alles übersichtlich zusammen und nenne die Quellen.`, onReasoning, signal, 2, 40);
   await sleep(400); onStep({ kind: 'time', text: 'Datum und Uhrzeit' });
   await sleep(500); onStep({ kind: 'search', text: q.slice(0, 60) });
+  onSources([{ url: 'https://www.wetter.com/deutschland/berlin/', title: 'Wetter Berlin | wetter.com' }, { url: 'https://de.wikipedia.org/wiki/Berlin', title: 'Berlin – Wikipedia' }]);
   await sleep(700); onStep({ kind: 'read', text: 'example.com/artikel' });
   await sleep(500); onStep({ kind: 'calc', text: '21 * 2' });
   await sleep(400);

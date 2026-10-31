@@ -862,3 +862,73 @@ body { overflow: hidden; }
 .card-foot .card-btn[aria-pressed='true'] { color: var(--text); }
 .card-foot .card-btn[aria-pressed='true'] svg { fill: currentColor; fill-opacity: .25; }
 .answers.single .card-head { padding-bottom: 8px; }
+
+/* ── Quellen ───────────────────────────────────────────── */
+.sources { margin: 0 0 14px; border: 1px solid var(--border-strong); border-radius: 12px; }
+.answers:not(.single) .card .sources { margin: 14px 18px 0; }
+.sources-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 16px;
+  text-align: left;
+}
+.sources-head > svg:first-child { width: 22px; height: 22px; color: #7c8cf5; flex-shrink: 0; }
+.sources-head > span { flex: 1; }
+.sources-head small { margin-left: 4px; color: var(--muted); font-size: 13px; }
+.sources-head .chev { width: 18px; height: 18px; transition: transform .2s; }
+.sources.open .sources-head .chev { transform: rotate(180deg); }
+.sources .shimmer {
+  color: transparent;
+  background: linear-gradient(90deg, var(--muted) 0%, var(--text) 50%, var(--muted) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: shimmer 1.6s linear infinite;
+}
+.sources-list { display: none; list-style: none; margin: 0; padding: 4px 8px 10px; }
+.sources.open .sources-list { display: grid; gap: 4px; }
+.sources-list a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px;
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+.sources-list a:hover { background: var(--surface-2); }
+.sources-list img, .src-fallback {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--surface-2);
+  object-fit: contain;
+}
+.src-fallback { display: grid; place-items: center; font-weight: 600; color: var(--muted); }
+.src-text { display: flex; flex-direction: column; min-width: 0; }
+.src-text b { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 15px; min-width: 0; }
+.src-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.src-text small { color: #7c8cf5; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cite {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: #7c8cf5;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--sans);
+  vertical-align: 2px;
+  flex-shrink: 0;
+}

@@ -83,7 +83,8 @@ if (window.DOMPurify) {
   });
 }
 function markdown(text) {
-  text = text.replace(/\s*【[^】]*】/g, ''); // Quellen-Marker der Websuche ausblenden
+  // Quellen-Marker der Websuche („【1†L79-L83】“) als kleine Nummern anzeigen
+  text = text.replace(/\s*【(\d+)[^】]*】/g, ' <span class="cite">$1</span>').replace(/\s*【[^】]*】/g, '');
   if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(text, { gfm: true, breaks: true }));
   return escapeHtml(text).replace(/\n/g, '<br>');
 }
@@ -480,6 +481,7 @@ function updateCard(turnIndex, side) {
   const body = $('.card-body', card);
   renderThinking(card, a);
   renderSteps(card, a);
+  renderSources(card, a, turnIndex === chat.turns.length - 1);
   if (a.status === 'error') {
     body.innerHTML = `${a.text ? markdown(a.text) : ''}<p class="card-error"></p>${isLast ? '<button class="retry" data-act="regen">Erneut versuchen</button>' : ''}`;
     $('.card-error', body).textContent = a.error;
@@ -512,6 +514,46 @@ function renderThinking(card, a) {
   const body = $('.think-body', box);
   $('p', body).textContent = a.thinking;
   if (live) { const p = $("p", body); p.scrollTop = p.scrollHeight; } // schnell mitscrollen
+}
+
+// „Sucht im Web …“ und danach aufklappbare Quellen
+function renderSources(card, a) {
+  let box = $('.sources', card);
+  const searching = a.status === 'streaming' && !a.text && !a.sources?.length
+    && state.chat?.modality === 'web' && state.chat?.mode !== 'agent';
+  if (!a.sources?.length && !searching) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'sources';
+    $('.card-body', card).before(box);
+  }
+  box.classList.toggle('searching', searching);
+  box.classList.toggle('open', !!a.sourcesOpen);
+  if (searching) {
+    box.innerHTML = `<div class="sources-head">${ICON['m-web']}<span class="shimmer">Sucht im Web …</span></div>`;
+    return;
+  }
+  box.innerHTML = `
+    <button type="button" class="sources-head" data-act="sources" aria-expanded="${!!a.sourcesOpen}">
+      ${ICON['m-web']}<span>Quellen <small>${a.sources.length}</small></span>${ICON.chev}
+    </button>
+    <ol class="sources-list">${a.sources.map((src, i) => `
+      <li><a target="_blank" rel="noopener noreferrer">
+        <img alt="" loading="lazy">
+        <span class="src-text"><b><span class="cite">${i + 1}</span><span class="src-title"></span></b><small></small></span>
+      </a></li>`).join('')}
+    </ol>`;
+  box.querySelectorAll('.sources-list a').forEach((link, i) => {
+    const src = a.sources[i];
+    let host = '';
+    try { host = new URL(src.url).hostname; } catch { /* egal */ }
+    link.href = /^https?:/i.test(src.url) ? src.url : '#';
+    $('.src-title', link).textContent = src.title || host;
+    $('small', link).textContent = src.url;
+    const img = $('img', link);
+    img.src = `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(host)}`;
+    img.onerror = () => { img.replaceWith(Object.assign(document.createElement('span'), { className: 'src-fallback', textContent: (host.replace(/^www\./, '')[0] || '?').toUpperCase() })); };
+  });
 }
 
 // Arbeitsschritte von Agent X über der Antwort anzeigen
@@ -549,7 +591,7 @@ function scheduleUpdate(turnIndex, side) {
 async function runSide(turnIndex, side) {
   const chat = state.chat;
   const a = chat.turns[turnIndex].answers[side];
-  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false });
+  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false });
   updateCard(turnIndex, side);
 
   const ctrl = new AbortController();
@@ -591,6 +633,7 @@ async function runSide(turnIndex, side) {
           scheduleUpdate(turnIndex, side);
         }
         if (msg.step) { a.steps.push(msg.step); scheduleUpdate(turnIndex, side); }
+        if (msg.sources) { a.sources = msg.sources; scheduleUpdate(turnIndex, side); }
         if (msg.done) finished = true;
       }
     }
@@ -632,7 +675,7 @@ async function send() {
     el.send.disabled = true;
     try {
       const data = await post('/api/chat/start', body);
-      state.chat = { id: data.id, mode: state.mode, labels: data.models, names: null, winner: null, turns: [] };
+      state.chat = { id: data.id, mode: state.mode, modality: state.modality, labels: data.models, names: null, winner: null, turns: [] };
     } catch (err) {
       return toast(err.message);
     } finally {
@@ -720,6 +763,12 @@ el.thread.addEventListener('click', async (e) => {
       updateCard(turnIndex, side);
       toast(err.message);
     }
+    return;
+  }
+
+  if (act === 'sources') {
+    a.sourcesOpen = !a.sourcesOpen;
+    renderSources(btn.closest('.card'), a);
     return;
   }
 
@@ -875,6 +924,7 @@ async function loadChat(id) {
     labels: data.labels,
     names: data.mode === 'battle' && data.winner ? data.labels : null,
     winner: data.winner,
+    modality: data.modality,
     turns: data.turns,
   };
   state.mode = data.mode;

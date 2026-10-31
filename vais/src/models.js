@@ -177,6 +177,29 @@ export async function displayName(id) {
 }
 
 // ── Antwort streamen ──────────────────────────────────────────────
+// ── Quellen (Websuche) ───────────────────────────────────────────
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+export function makeSource(url, title) {
+  const clean = String(url).replace(/[.,;:!?)\]]+$/, '');
+  if (!/^https?:\/\//i.test(clean) || !hostOf(clean)) return null;
+  return { url: clean, title: String(title || '').trim().slice(0, 160) || hostOf(clean) };
+}
+// Links aus Text: [Titel](url) und nackte Adressen
+export function sourcesFromText(text = '') {
+  const out = [];
+  for (const m of text.matchAll(/\[([^\]\n]{1,200})\]\((https?:\/\/[^\s)]+)\)/g)) out.push(makeSource(m[2], m[1]));
+  for (const m of text.matchAll(/https?:\/\/[^\s<>()\]"'`]+/g)) out.push(makeSource(m[0]));
+  return out.filter(Boolean);
+}
+// Suchergebnisse in Antwort-Daten der Anbieter finden (Groq executed_tools, OpenRouter annotations/citations)
+function sourcesFromData(obj, out = [], depth = 0) {
+  if (!obj || typeof obj !== 'object' || depth > 6) return out;
+  if (Array.isArray(obj)) { obj.forEach((x) => (typeof x === 'string' ? out.push(makeSource(x)) : sourcesFromData(x, out, depth + 1))); return out; }
+  if (typeof obj.url === 'string') out.push(makeSource(obj.url, obj.title ?? obj.name));
+  for (const [k, v] of Object.entries(obj)) if (k !== 'content' && k !== 'reasoning' && v && typeof v === 'object') sourcesFromData(v, out, depth + 1);
+  return out.filter(Boolean);
+}
+
 // Trennt "<think>…</think>" am Anfang einer Antwort ab (z. B. Qwen, DeepSeek)
 function thinkSplitter(onText, onReasoning) {
   let mode = 'start'; // start → think → text
@@ -207,7 +230,7 @@ function thinkSplitter(onText, onReasoning) {
   };
 }
 
-export async function streamChat({ model, messages, signal, onText, onReasoning = () => {} }) {
+export async function streamChat({ model, messages, signal, onText, onReasoning = () => {}, onSources = () => {} }) {
   const [provider, ...rest] = model.split(':');
   let upstream = rest.join(':');
   const search = upstream.endsWith(SEARCH_SUFFIX);
@@ -256,6 +279,10 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
       try { json = JSON.parse(data); } catch { continue; }
       if (json.error) throw new Error(friendlyError(json.error.code, json.error.message, p));
       const delta = json.choices?.[0]?.delta ?? {};
+      if (json.citations || Object.keys(delta).some((k) => !['content', 'role', 'reasoning', 'reasoning_content'].includes(k))) {
+        const found = sourcesFromData({ delta, citations: json.citations });
+        if (found.length) onSources(found);
+      }
       const thought = delta.reasoning ?? delta.reasoning_content;
       if (thought) onReasoning(thought);
       if (delta.content) emit(delta.content);
@@ -291,7 +318,9 @@ export async function complete({ model, messages, tools, signal }) {
     throw new Error(friendlyError(res.status, err?.message, p));
   }
   const json = await res.json();
-  return json.choices?.[0]?.message ?? { content: '' };
+  const message = json.choices?.[0]?.message ?? { content: '' };
+  message.sources = sourcesFromData({ m: { ...message, content: undefined }, citations: json.citations });
+  return message;
 }
 
 function friendlyError(status, message = '', p) {
@@ -314,7 +343,9 @@ async function demoStream({ name, messages, signal, onText, onReasoning = () => 
   const code = messages[0]?.role === 'system';
   const text = code
     ? `Hier ist eine kleine Demo-Seite von **${name}**:\n\n\`\`\`html\n<!doctype html>\n<html><body style="font-family:sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#f4f2ee">\n<h1>Hallo von ${name} 👋</h1>\n</body></html>\n\`\`\`\n\nTippe auf **Vorschau**, um sie anzusehen.`
-    : `Hallo! Ich bin **${name}**, ein Platzhalter-Modell.\n\nDu hast geschrieben: „${quote}“\n\nSobald ein API-Schlüssel eingetragen ist, antworten hier echte KI-Modelle.`;
+    : /^(echo|fjord)/.test(name)
+      ? `Laut aktueller Suche wird es morgen in Berlin bewölkt bei etwa 8 °C 【1†L1-L3】. Regen ist kaum zu erwarten 【2†L4】.\n\n**Quellen**\n- [Wetter Berlin morgen | wetter.com](https://www.wetter.com/deutschland/berlin/)\n- [Berlin – Wikipedia](https://de.wikipedia.org/wiki/Berlin)`
+      : `Hallo! Ich bin **${name}**, ein Platzhalter-Modell.\n\nDu hast geschrieben: „${quote}“\n\nSobald ein API-Schlüssel eingetragen ist, antworten hier echte KI-Modelle.`;
   await sleep(300 + Math.random() * 500, signal);
   if (name.startsWith('basalt') || code) {
     const plan = `Der Nutzer möchte: „${quote}“. Ich überlege kurz, wie ich das am besten beantworte: zuerst die Kernaussage, dann Details, am Ende eine kurze Zusammenfassung. Formatierung mit Markdown, freundlich und klar.`;
