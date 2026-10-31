@@ -86,10 +86,14 @@ chat.post('/stream', wrap(async (req, res) => {
 
   // Verlauf speichern: deine Frage sofort, die Antwort am Ende
   const steps = [];
+  let thinking = '';
+  let thinkStart = 0;
+  let thinkMs = 0;
   const save = (s, content, status = 'done', error = null) => (turnNo === null ? null : run(
     `INSERT INTO messages (chat_id, turn, side, content, status, error, meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(chat_id, turn, side) DO UPDATE SET content = excluded.content, status = excluded.status, error = excluded.error, meta = excluded.meta`,
-    row.id, turnNo, s, content, status, error, s >= 0 && steps.length ? JSON.stringify({ steps }) : null, Date.now(),
+    row.id, turnNo, s, content, status, error,
+    s >= 0 && (steps.length || thinking) ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs }) : null, Date.now(),
   ).catch((e) => console.error('Verlauf speichern fehlgeschlagen:', e.message)));
   await save(-1, clean.at(-1).content);
   await run('UPDATE chats SET updated_at = ? WHERE id = ?', Date.now(), row.id);
@@ -106,12 +110,22 @@ chat.post('/stream', wrap(async (req, res) => {
 
   let text = '';
   try {
-    const onText = (t) => { text += t; res.write(`${JSON.stringify({ t })}\n`); };
+    const onText = (t) => {
+      if (thinkStart && !thinkMs) thinkMs = Date.now() - thinkStart;
+      text += t;
+      res.write(`${JSON.stringify({ t })}\n`);
+    };
+    const onReasoning = (r) => {
+      if (!thinkStart) thinkStart = Date.now();
+      thinking += r;
+      res.write(`${JSON.stringify({ r })}\n`);
+    };
     if (row.mode === 'agent') {
       await runAgent({
         messages: clean,
         signal: controller.signal,
         onText,
+        onReasoning,
         onStep: (step) => { steps.push(step); res.write(`${JSON.stringify({ step })}\n`); },
       });
     } else {
@@ -120,6 +134,7 @@ chat.post('/stream', wrap(async (req, res) => {
         messages: row.modality === 'code' ? [{ role: 'system', content: CODE_PROMPT }, ...clean] : clean,
         signal: controller.signal,
         onText,
+        onReasoning,
       });
     }
     res.write(`${JSON.stringify({ done: true })}\n`);
@@ -189,9 +204,12 @@ chat.get('/:id', wrap(async (req, res) => {
     turns[m.turn] ??= { user: '', answers: Array.from({ length: sides }, () => ({ text: '', status: 'stopped', error: null })) };
     if (m.side < 0) turns[m.turn].user = m.content;
     else if (m.side < sides) {
-      let steps = [];
-      try { steps = JSON.parse(m.meta || '{}').steps ?? []; } catch { /* egal */ }
-      turns[m.turn].answers[m.side] = { text: m.content, status: m.status, error: m.error, steps };
+      let meta = {};
+      try { meta = JSON.parse(m.meta || '{}'); } catch { /* egal */ }
+      turns[m.turn].answers[m.side] = {
+        text: m.content, status: m.status, error: m.error,
+        steps: meta.steps ?? [], thinking: meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0,
+      };
     }
   }
   const ids = [row.model_a, row.model_b].filter(Boolean);

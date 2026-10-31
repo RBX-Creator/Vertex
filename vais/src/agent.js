@@ -64,6 +64,7 @@ function systemPrompt() {
   const now = new Date().toLocaleString('de-DE', { timeZone: 'Europe/Berlin', dateStyle: 'full', timeStyle: 'short' });
   return [
     'Du bist Agent X, der stärkste Assistent von VAIs. Du arbeitest gründlich und selbstständig in mehreren Schritten.',
+    'Denke auf Deutsch. Beginne deine Überlegungen mit einem kurzen Satz, was der Nutzer genau möchte, und plane dann die Schritte.',
     `Heute ist ${now} (Europe/Berlin).`,
     'Nutze deine Werkzeuge, wann immer sie die Antwort besser machen: web_search für alles Aktuelle oder Unsichere, read_webpage um Quellen oder Links zu lesen, calculate für jede Rechnung, current_datetime für Zeitfragen.',
     'Prüfe wichtige Fakten bei Bedarf mit einer zweiten Suche. Erfinde keine Fakten oder Links.',
@@ -236,22 +237,25 @@ async function runTool(name, args, signal) {
 // ── Ablauf ────────────────────────────────────────────────────────
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function emitText(text, onText, signal) {
-  for (const piece of text.match(/(\S+\s*){1,3}|\s+/g) ?? []) {
+async function emitText(text, onText, signal, words = 3, delay = 12) {
+  const re = new RegExp(`(\\S+\\s*){1,${words}}|\\s+`, 'g');
+  for (const piece of text.match(re) ?? []) {
     if (signal?.aborted) return;
     onText(piece);
-    await sleep(12);
+    await sleep(delay);
   }
 }
 
-export async function runAgent({ messages, signal, onStep, onText }) {
-  if (demoMode) return demoAgent({ messages, signal, onStep, onText });
+export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {} }) {
+  if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning });
   const model = await pickModel(AGENT_PREFERENCE);
   if (!model) throw new Error('Agent X braucht einen Groq-Schlüssel (GROQ_API_KEY), damit er Werkzeuge benutzen kann.');
 
   const convo = [{ role: 'system', content: systemPrompt() }, ...messages];
   for (let round = 0; round < MAX_STEPS; round++) {
     const msg = await complete({ model: model.id, messages: convo, tools: TOOLS, signal });
+    const thought = msg.reasoning ?? msg.reasoning_content;
+    if (thought) await emitText(`${thought.trim()}\n\n`, onReasoning, signal, 6, 8);
     const calls = msg.tool_calls ?? [];
     if (!calls.length) return emitText(msg.content || 'Ich konnte leider keine Antwort finden.', onText, signal);
 
@@ -281,8 +285,9 @@ export async function runAgent({ messages, signal, onStep, onText }) {
   return emitText(final.content || 'Ich konnte leider keine Antwort finden.', onText, signal);
 }
 
-async function demoAgent({ messages, onStep, onText, signal }) {
+async function demoAgent({ messages, onStep, onText, onReasoning, signal }) {
   const q = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+  await emitText(`Der Nutzer möchte: „${q.slice(0, 80)}“. Ich prüfe zuerst das Datum, suche dann aktuelle Infos, lese eine Quelle genauer und rechne zur Kontrolle nach. Danach fasse ich alles übersichtlich zusammen und nenne die Quellen.`, onReasoning, signal, 2, 40);
   await sleep(400); onStep({ kind: 'time', text: 'Datum und Uhrzeit' });
   await sleep(500); onStep({ kind: 'search', text: q.slice(0, 60) });
   await sleep(700); onStep({ kind: 'read', text: 'example.com/artikel' });

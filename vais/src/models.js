@@ -177,12 +177,42 @@ export async function displayName(id) {
 }
 
 // ── Antwort streamen ──────────────────────────────────────────────
-export async function streamChat({ model, messages, signal, onText }) {
+// Trennt "<think>…</think>" am Anfang einer Antwort ab (z. B. Qwen, DeepSeek)
+function thinkSplitter(onText, onReasoning) {
+  let mode = 'start'; // start → think → text
+  let buf = '';
+  return (chunk) => {
+    if (mode === 'text') return onText(chunk);
+    buf += chunk;
+    if (mode === 'start') {
+      const trimmed = buf.trimStart();
+      if (!trimmed) return;
+      if ('<think>'.startsWith(trimmed) && trimmed.length < 7) return; // noch unklar
+      if (!trimmed.startsWith('<think>')) { mode = 'text'; const out = buf; buf = ''; return onText(out); }
+      mode = 'think';
+      buf = trimmed.slice(7);
+    }
+    const end = buf.indexOf('</think>');
+    if (end === -1) {
+      // Rest behalten, falls "</think>" gerade über zwei Stücke geteilt ist
+      const keep = 8;
+      if (buf.length > keep) { onReasoning(buf.slice(0, -keep)); buf = buf.slice(-keep); }
+      return;
+    }
+    if (end > 0) onReasoning(buf.slice(0, end));
+    const rest = buf.slice(end + 8).replace(/^\s+/, '');
+    mode = 'text';
+    buf = '';
+    if (rest) onText(rest);
+  };
+}
+
+export async function streamChat({ model, messages, signal, onText, onReasoning = () => {} }) {
   const [provider, ...rest] = model.split(':');
   let upstream = rest.join(':');
   const search = upstream.endsWith(SEARCH_SUFFIX);
   if (search) upstream = upstream.slice(0, -SEARCH_SUFFIX.length);
-  if (provider === 'demo') return demoStream({ name: `${upstream}-demo`, messages, signal, onText });
+  if (provider === 'demo') return demoStream({ name: `${upstream}-demo`, messages, signal, onText, onReasoning });
   const p = PROVIDERS[provider];
   if (!p?.key) throw new Error('Dieses Modell ist gerade nicht verfügbar.');
 
@@ -210,6 +240,7 @@ export async function streamChat({ model, messages, signal, onText }) {
     throw new Error(friendlyError(res.status, err?.message, p));
   }
 
+  const emit = thinkSplitter(onText, onReasoning);
   const decoder = new TextDecoder();
   let buffer = '';
   for await (const chunk of res.body) {
@@ -224,8 +255,10 @@ export async function streamChat({ model, messages, signal, onText }) {
       let json;
       try { json = JSON.parse(data); } catch { continue; }
       if (json.error) throw new Error(friendlyError(json.error.code, json.error.message, p));
-      const text = json.choices?.[0]?.delta?.content;
-      if (text) onText(text);
+      const delta = json.choices?.[0]?.delta ?? {};
+      const thought = delta.reasoning ?? delta.reasoning_content;
+      if (thought) onReasoning(thought);
+      if (delta.content) emit(delta.content);
     }
   }
 }
@@ -275,7 +308,7 @@ const sleep = (ms, signal) => new Promise((resolve, reject) => {
   signal?.addEventListener('abort', () => { clearTimeout(t); reject(signal.reason); }, { once: true });
 });
 
-async function demoStream({ name, messages, signal, onText }) {
+async function demoStream({ name, messages, signal, onText, onReasoning = () => {} }) {
   const last = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
   const quote = last.length > 120 ? `${last.slice(0, 120)}…` : last;
   const code = messages[0]?.role === 'system';
@@ -283,6 +316,10 @@ async function demoStream({ name, messages, signal, onText }) {
     ? `Hier ist eine kleine Demo-Seite von **${name}**:\n\n\`\`\`html\n<!doctype html>\n<html><body style="font-family:sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#f4f2ee">\n<h1>Hallo von ${name} 👋</h1>\n</body></html>\n\`\`\`\n\nTippe auf **Vorschau**, um sie anzusehen.`
     : `Hallo! Ich bin **${name}**, ein Platzhalter-Modell.\n\nDu hast geschrieben: „${quote}“\n\nSobald ein API-Schlüssel eingetragen ist, antworten hier echte KI-Modelle.`;
   await sleep(300 + Math.random() * 500, signal);
+  if (name.startsWith('basalt') || code) {
+    const plan = `Der Nutzer möchte: „${quote}“. Ich überlege kurz, wie ich das am besten beantworte: zuerst die Kernaussage, dann Details, am Ende eine kurze Zusammenfassung. Formatierung mit Markdown, freundlich und klar.`;
+    for (const piece of plan.match(/\S+\s*/g)) { await sleep(25, signal); onReasoning(piece); }
+  }
   for (const piece of text.match(/\S+\s*|\s+/g)) {
     await sleep(18 + Math.random() * 40, signal);
     onText(piece);

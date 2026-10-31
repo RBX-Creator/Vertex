@@ -795,3 +795,62 @@ body { overflow: hidden; }
   font-weight: 600;
   vertical-align: 2px;
 }
+
+/* ── Denkt nach … ──────────────────────────────────────── */
+.think { margin: 0 0 14px; }
+.answers:not(.single) .card .think { margin: 14px 18px 0; }
+.answers:not(.single) .card .agent-steps { margin: 14px 18px 0; }
+.think-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+}
+.think-head > svg:first-child { width: 20px; height: 20px; }
+.think-head .chev { width: 14px; height: 14px; transition: transform .2s; }
+.think.open .think-head .chev { transform: rotate(180deg); }
+.think.live .think-head span {
+  background: linear-gradient(90deg, var(--muted) 0%, var(--text) 50%, var(--muted) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 1.6s linear infinite;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
+.think-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows .35s ease;
+  margin-left: 9px;
+  border-left: 2px solid var(--border);
+}
+.think.open .think-body { grid-template-rows: 1fr; }
+.think-body p {
+  min-height: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 0 0 0 16px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.think.open .think-body p { padding: 8px 0 8px 16px; }
+/* Während des Denkens: kleines Fenster, das schnell mitscrollt und oben/unten ausblendet */
+.think.live .think-body { max-height: 170px; overflow: hidden; }
+.think.live .think-body p {
+  max-height: 170px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28%, #000 72%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 28%, #000 72%, transparent 100%);
+}
+.think:not(.live).open .think-body p { max-height: 360px; overflow-y: auto; }
+@media (prefers-reduced-motion: reduce) { .think-body { transition: none; } .think.live .think-head span { animation: none; } }

@@ -27,6 +27,7 @@ const MODALITIES = {
   auto: { label: 'Auto', desc: 'Wählt automatisch passende Modelle', cap: 'text' },
 };
 Object.assign(ICON, {
+  brain: svg('<path d="M9.5 4A2.5 2.5 0 0 0 7 6.5v.1A3 3 0 0 0 4.5 9.5c0 .8.3 1.5.8 2a3 3 0 0 0 .7 4.8V17a3 3 0 0 0 3 3 2.5 2.5 0 0 0 3-1.7V5.6A2.5 2.5 0 0 0 9.5 4z"/><path d="M14.5 4A2.5 2.5 0 0 1 17 6.5v.1a3 3 0 0 1 2.5 2.9c0 .8-.3 1.5-.8 2a3 3 0 0 1-.7 4.8V17a3 3 0 0 1-3 3 2.5 2.5 0 0 1-3-1.7"/>'),
   agent: svg('<path d="M12 2.5 14 8l5.5 2-5.5 2-2 5.5-2-5.5L4.5 10 10 8z"/><path d="M19 15.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>'),
   's-search': svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
   's-read': svg('<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>'),
@@ -457,6 +458,7 @@ function updateCard(turnIndex, side) {
   $('[data-act="preview"]', card).hidden = !(a.status === 'done' && htmlBlock(a.text));
 
   const body = $('.card-body', card);
+  renderThinking(card, a);
   renderSteps(card, a);
   if (a.status === 'error') {
     body.innerHTML = `${a.text ? markdown(a.text) : ''}<p class="card-error"></p>${isLast ? '<button class="retry" data-act="regen">Erneut versuchen</button>' : ''}`;
@@ -468,6 +470,28 @@ function updateCard(turnIndex, side) {
   } else {
     body.innerHTML = markdown(a.text);
   }
+}
+
+// „Denkt nach …“: Gedanken laufen schnell durch, klappen zu, sobald die Antwort beginnt
+function renderThinking(card, a) {
+  let box = $('.think', card);
+  if (!a.thinking) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'think';
+    box.innerHTML = `<button type="button" class="think-head" data-act="think">${ICON.brain}<span></span>${ICON.chev}</button><div class="think-body"><p></p></div>`;
+    ($('.agent-steps', card) ?? $('.card-body', card)).before(box);
+  }
+  const live = a.status === 'streaming' && !a.text;
+  const open = live || a.thinkOpen;
+  box.classList.toggle('live', live);
+  box.classList.toggle('open', open);
+  const secs = Math.max(1, Math.round((a.thinkMs || 0) / 1000));
+  $('.think-head span', box).textContent = live ? 'Denkt nach …' : `Gedacht${a.thinkMs ? ` · ${secs} s` : ''}`;
+  $('.think-head', box).setAttribute('aria-expanded', String(open));
+  const body = $('.think-body', box);
+  $('p', body).textContent = a.thinking;
+  if (live) { const p = $("p", body); p.scrollTop = p.scrollHeight; } // schnell mitscrollen
 }
 
 // Arbeitsschritte von Agent X über der Antwort anzeigen
@@ -505,7 +529,7 @@ function scheduleUpdate(turnIndex, side) {
 async function runSide(turnIndex, side) {
   const chat = state.chat;
   const a = chat.turns[turnIndex].answers[side];
-  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [] });
+  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false });
   updateCard(turnIndex, side);
 
   const ctrl = new AbortController();
@@ -536,7 +560,16 @@ async function runSide(turnIndex, side) {
         if (!line.trim()) continue;
         const msg = JSON.parse(line);
         if (msg.error) throw new Error(msg.error);
-        if (msg.t) { a.text += msg.t; scheduleUpdate(turnIndex, side); }
+        if (msg.r) {
+          if (!a.thinkStart) a.thinkStart = Date.now();
+          a.thinking += msg.r;
+          scheduleUpdate(turnIndex, side);
+        }
+        if (msg.t) {
+          if (a.thinkStart && !a.thinkMs) a.thinkMs = Date.now() - a.thinkStart;
+          a.text += msg.t;
+          scheduleUpdate(turnIndex, side);
+        }
         if (msg.step) { a.steps.push(msg.step); scheduleUpdate(turnIndex, side); }
         if (msg.done) finished = true;
       }
@@ -600,7 +633,7 @@ async function send() {
   el.voteResult.hidden = true;
 
   const sides = chat.mode === 'direct' || chat.mode === 'agent' ? 1 : 2;
-  chat.turns.push({ user: text, answers: Array.from({ length: sides }, () => ({ text: '', status: 'streaming', error: null, steps: [] })) });
+  chat.turns.push({ user: text, answers: Array.from({ length: sides }, () => ({ text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0 })) });
   const index = chat.turns.length - 1;
   if (index > 0) chat.turns[index - 1].answers.forEach((_, s) => updateCard(index - 1, s)); // „Neu generieren“ dort abschalten
   const node = renderTurn(index);
@@ -653,6 +686,13 @@ el.thread.addEventListener('click', async (e) => {
   const side = Number(btn.closest('.card').dataset.side);
   const a = state.chat.turns[turnIndex].answers[side];
   const act = btn.dataset.act;
+
+  if (act === 'think') {
+    if (a.status === 'streaming' && !a.text) return;
+    a.thinkOpen = !a.thinkOpen;
+    renderThinking(btn.closest('.card'), a);
+    return;
+  }
 
   if (act === 'copy') {
     try {
