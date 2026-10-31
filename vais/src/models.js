@@ -8,6 +8,7 @@
 // zusätzlich kostenpflichtige OpenRouter-Modelle frei (braucht Guthaben bei OpenRouter).
 
 const MAX_OUTPUT_TOKENS = 8192;
+const SEARCH_SUFFIX = '#search'; // Variante mit eingebauter Websuche (Groq gpt-oss)
 
 const PROVIDERS = {
   openrouter: { key: process.env.OPENROUTER_API_KEY?.trim(), base: 'https://openrouter.ai/api/v1', label: 'OpenRouter', env: 'OPENROUTER_API_KEY' },
@@ -113,9 +114,14 @@ const LISTERS = {
     return data
       .filter((m) => m.active !== false)
       .filter((m) => !/(whisper|tts|guard|playai|orpheus|distil|safeguard|allam)/i.test(m.id))
-      .map((m) => (/(^|\/)compound/i.test(m.id)
-        ? makeModel('groq', m.id, m.id.split('/').pop(), 'Groq', ['web'])
-        : makeModel('groq', m.id, m.id.split('/').pop(), m.owned_by)));
+      .flatMap((m) => {
+        const name = m.id.split('/').pop();
+        if (/(^|\/)compound/i.test(m.id)) return [makeModel('groq', m.id, name, 'Groq', ['web'])];
+        const base = makeModel('groq', m.id, name, m.owned_by);
+        // gpt-oss kann bei Groq selbst im Web suchen (Werkzeug "browser_search")
+        if (/gpt-oss/i.test(m.id)) return [base, { ...makeModel('groq', `${m.id}${SEARCH_SUFFIX}`, `${name}-search`, m.owned_by, ['web']) }];
+        return [base];
+      });
   },
 };
 
@@ -158,7 +164,9 @@ export async function displayName(id) {
 // ── Antwort streamen ──────────────────────────────────────────────
 export async function streamChat({ model, messages, signal, onText }) {
   const [provider, ...rest] = model.split(':');
-  const upstream = rest.join(':');
+  let upstream = rest.join(':');
+  const search = upstream.endsWith(SEARCH_SUFFIX);
+  if (search) upstream = upstream.slice(0, -SEARCH_SUFFIX.length);
   if (provider === 'demo') return demoStream({ name: `${upstream}-demo`, messages, signal, onText });
   const p = PROVIDERS[provider];
   if (!p?.key) throw new Error('Dieses Modell ist gerade nicht verfügbar.');
@@ -172,7 +180,13 @@ export async function streamChat({ model, messages, signal, onText }) {
     method: 'POST',
     signal,
     headers,
-    body: JSON.stringify({ model: upstream, messages, stream: true, max_tokens: MAX_OUTPUT_TOKENS }),
+    body: JSON.stringify({
+      model: upstream,
+      messages,
+      stream: true,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      ...(search ? { tools: [{ type: 'browser_search' }], tool_choice: 'auto' } : {}),
+    }),
   });
 
   if (!res.ok) {
