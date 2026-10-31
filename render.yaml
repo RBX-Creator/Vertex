@@ -27,6 +27,12 @@ services:
       # KI-Modelle über OpenRouter (kostenlose Modelle). Leer = Demo-Modus
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: CEREBRAS_API_KEY
+        sync: false
+      - key: MISTRAL_API_KEY
+        sync: false
       # Datenbank bei Turso
       - key: DATABASE_URL
         sync: false

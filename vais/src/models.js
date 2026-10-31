@@ -14,6 +14,8 @@ const PROVIDERS = {
   openrouter: { key: process.env.OPENROUTER_API_KEY?.trim(), base: 'https://openrouter.ai/api/v1', label: 'OpenRouter', env: 'OPENROUTER_API_KEY' },
   gemini: { key: process.env.GEMINI_API_KEY?.trim(), base: 'https://generativelanguage.googleapis.com/v1beta/openai', label: 'Google AI Studio', env: 'GEMINI_API_KEY' },
   groq: { key: process.env.GROQ_API_KEY?.trim(), base: 'https://api.groq.com/openai/v1', label: 'Groq', env: 'GROQ_API_KEY' },
+  cerebras: { key: process.env.CEREBRAS_API_KEY?.trim(), base: 'https://api.cerebras.ai/v1', label: 'Cerebras', env: 'CEREBRAS_API_KEY' },
+  mistral: { key: process.env.MISTRAL_API_KEY?.trim(), base: 'https://api.mistral.ai/v1', label: 'Mistral', env: 'MISTRAL_API_KEY' },
 };
 const EXTRA = (process.env.OPENROUTER_EXTRA_MODELS || '').split(',').map((s) => s.trim()).filter(Boolean);
 
@@ -69,6 +71,8 @@ function maker(upstreamId, fallbackName) {
   if (/^qwen/i.test(upstreamId)) return { maker: 'Qwen', icon: 'qwen-color' };
   if (/^gpt|^o\d/i.test(upstreamId)) return { maker: 'OpenAI', icon: 'openai' };
   if (/^kimi/i.test(upstreamId)) return { maker: 'Moonshot', icon: 'kimi-color' };
+  if (/^(mistral|magistral|codestral|devstral|ministral|pixtral|open-mi)/i.test(upstreamId)) return { maker: 'Mistral', icon: 'mistral-color' };
+  if (/glm/i.test(upstreamId)) return { maker: 'Z.ai', icon: 'zhipu' };
   if (/^deepseek/i.test(upstreamId)) return { maker: 'DeepSeek', icon: 'deepseek-color' };
   return { maker: fallbackName || prefix || 'KI', icon: null };
 }
@@ -109,6 +113,21 @@ const LISTERS = {
       .map((id) => makeModel('gemini', id, id, 'Google'));
   },
 
+  async cerebras(p) {
+    const { data } = await getJson(`${p.base}/models`, { Authorization: `Bearer ${p.key}` });
+    return data.map((m) => makeModel('cerebras', m.id, m.id.split('/').pop(), m.owned_by));
+  },
+
+  async mistral(p) {
+    const { data } = await getJson(`${p.base}/models`, { Authorization: `Bearer ${p.key}` });
+    const chat = data
+      .filter((m) => m.capabilities?.completion_chat !== false)
+      .filter((m) => !/(embed|moderation|ocr|transcribe|voxtral|saba)/i.test(m.id));
+    const latest = chat.filter((m) => m.id.endsWith('-latest'));
+    return (latest.length ? latest : chat)
+      .map((m) => makeModel('mistral', m.id, m.id.replace(/-latest$/, ''), 'Mistral'));
+  },
+
   async groq(p) {
     const { data } = await getJson(`${p.base}/models`, { Authorization: `Bearer ${p.key}` });
     return data
@@ -134,7 +153,7 @@ const DEMO_MODELS = [
   { id: 'demo:fjord', provider: 'demo', upstream: 'fjord', name: 'fjord-search-demo', maker: 'VAIs Demo', icon: null, caps: ['web'] },
 ];
 
-const ORDER = { gemini: 0, groq: 1, openrouter: 2 };
+const ORDER = { gemini: 0, groq: 1, cerebras: 2, mistral: 3, openrouter: 4 };
 const cache = {}; // provider → { at, list }
 
 export async function listModels() {
@@ -151,7 +170,39 @@ export async function listModels() {
     }
     return cache[name]?.list ?? [];
   }));
-  return lists.flat().sort((a, b) => ORDER[a.provider] - ORDER[b.provider] || a.name.localeCompare(b.name));
+  return lists.flat()
+    .map((m) => ({ ...m, busy: isBusy(m.id) }))
+    .sort((a, b) => ORDER[a.provider] - ORDER[b.provider] || a.name.localeCompare(b.name));
+}
+
+// ── Ausgelastete Modelle merken und überspringen ─────────────────
+const cooldown = new Map(); // 'p:<anbieter>' oder Modell-ID → bis wann
+const providerOf = (id) => id.split(':')[0];
+export function isBusy(id) {
+  const now = Date.now();
+  return (cooldown.get(`p:${providerOf(id)}`) ?? 0) > now || (cooldown.get(id) ?? 0) > now;
+}
+const isDailyLimit = (msg = '') => /per[- ]?day|daily|tageslimit|quota/i.test(msg);
+function markFailed(id, status, message) {
+  const now = Date.now();
+  const midnightUtc = new Date(); midnightUtc.setUTCHours(24, 0, 0, 0);
+  if (status === 429 && isDailyLimit(message)) cooldown.set(`p:${providerOf(id)}`, midnightUtc.getTime());
+  else if (status === 401 || status === 403) cooldown.set(`p:${providerOf(id)}`, now + 10 * 60 * 1000);
+  else if (status === 429) cooldown.set(id, now + 90 * 1000);
+  else if (status === 404) cooldown.set(id, now + 60 * 60 * 1000);
+  else cooldown.set(id, now + 60 * 1000);
+}
+function fail(model, status, message, p) {
+  markFailed(model, status, message);
+  return Object.assign(new Error(friendlyError(status, message, p)), { status });
+}
+
+// Zufälliges freies Modell mit einer Fähigkeit (für Battle und als Ersatz)
+export async function pickAvailable(cap, exclude = []) {
+  const all = (await listModels()).filter((m) => m.caps.includes(cap) && !exclude.includes(m.id));
+  const free = all.filter((m) => !m.busy);
+  const pool = free.length ? free : [];
+  return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
 }
 
 export async function findModel(id) {
@@ -260,7 +311,7 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const err = Array.isArray(body) ? body[0]?.error : body?.error;
-    throw new Error(friendlyError(res.status, err?.message, p));
+    throw fail(model, res.status, err?.message, p);
   }
 
   const emit = thinkSplitter(onText, onReasoning);
@@ -277,7 +328,7 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
       if (data === '[DONE]') return;
       let json;
       try { json = JSON.parse(data); } catch { continue; }
-      if (json.error) throw new Error(friendlyError(json.error.code, json.error.message, p));
+      if (json.error) throw fail(model, Number(json.error.code) || 500, json.error.message, p);
       const delta = json.choices?.[0]?.delta ?? {};
       if (json.citations || Object.keys(delta).some((k) => !['content', 'role', 'reasoning', 'reasoning_content'].includes(k))) {
         const found = sourcesFromData({ delta, citations: json.citations });
@@ -315,7 +366,7 @@ export async function complete({ model, messages, tools, signal }) {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const err = Array.isArray(body) ? body[0]?.error : body?.error;
-    throw new Error(friendlyError(res.status, err?.message, p));
+    throw fail(model, res.status, err?.message, p);
   }
   const json = await res.json();
   const message = json.choices?.[0]?.message ?? { content: '' };
@@ -324,7 +375,8 @@ export async function complete({ model, messages, tools, signal }) {
 }
 
 function friendlyError(status, message = '', p) {
-  if (status === 429) return 'Dieses Modell ist gerade ausgelastet oder das Tageslimit ist erreicht. Versuche es gleich noch einmal oder wähle ein anderes Modell.';
+  if (status === 429 && isDailyLimit(message)) return `Das kostenlose Tageslimit von ${p.label} ist für heute aufgebraucht. Wähle ein Modell von einem anderen Anbieter.`;
+  if (status === 429) return 'Dieses Modell ist gerade ausgelastet. Versuche es gleich noch einmal oder wähle ein anderes Modell.';
   if (status === 401 || status === 403 || /api key/i.test(message)) return `Der Schlüssel für ${p.label} wurde abgelehnt. Bitte ${p.env} prüfen.`;
   if (status === 404) return 'Dieses Modell ist nicht mehr verfügbar. Bitte wähle ein anderes.';
   if (status === 400 && /context|token/i.test(message)) return 'Der Chat ist zu lang für dieses Modell. Starte einen neuen Chat.';

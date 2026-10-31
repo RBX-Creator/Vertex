@@ -1105,3 +1105,6 @@ body { overflow: hidden; }
 }
 @keyframes slide-in-right { from { transform: translateX(100%); } }
 @media (prefers-reduced-motion: reduce) { .psheet-panel { animation: none; } .bricks.live i, .gen-dots { animation: none; } }
+
+.model-opt.busy { opacity: .45; }
+.model-opt.busy .prov { color: var(--danger); }

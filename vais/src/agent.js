@@ -9,6 +9,7 @@ const MAX_STEPS = 8;
 // Das stärkste verfügbare Modell mit Werkzeug-Unterstützung
 const AGENT_PREFERENCE = [
   /^groq:openai\/gpt-oss-120b$/,
+  /^cerebras:gpt-oss-120b$/,
   /^groq:moonshotai\/kimi-k2/,
   /^groq:.*llama-3\.3-70b/,
   /^groq:openai\/gpt-oss-20b$/,
@@ -18,7 +19,7 @@ const AGENT_PREFERENCE = [
 async function pickModel(preferences) {
   const all = await listModels();
   for (const re of preferences) {
-    const hit = all.find((m) => re.test(m.id));
+    const hit = all.find((m) => re.test(m.id) && !m.busy) ;
     if (hit) return hit;
   }
   return null;

@@ -4,6 +4,7 @@ import { get, run, all } from './db.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { runAgent } from './agent.js';
 import { sourcesFromText } from './models.js';
+import { pickAvailable } from './models.js';
 import { listModels, findModel, streamChat, displayName, describeModel, modelKey, demoMode } from './models.js';
 
 const MAX_MESSAGES = 40;          // so viele Nachrichten gehen max. ans Modell
@@ -44,12 +45,11 @@ chat.post('/start', wrap(async (req, res) => {
   if (mode === 'agent') {
     picked = ['agent'];
   } else if (mode === 'battle') {
-    const all = (await listModels()).filter((m) => m.caps.includes(MODALITY_CAP[modality]));
-    if (all.length < 2) throw new HttpError(503, modality === 'web' ? 'Für ein Websuche-Battle sind gerade nicht genug Such-Modelle verfügbar.' : 'Gerade sind nicht genug Modelle verfügbar.');
-    const i = Math.floor(Math.random() * all.length);
-    let j = Math.floor(Math.random() * (all.length - 1));
-    if (j >= i) j++;
-    picked = [all[i].id, all[j].id];
+    const cap = MODALITY_CAP[modality];
+    const first = await pickAvailable(cap);
+    const second = first && await pickAvailable(cap, [first.id]);
+    if (!first || !second) throw new HttpError(503, modality === 'web' ? 'Für ein Websuche-Battle sind gerade nicht genug Such-Modelle frei. Versuche es gleich noch einmal.' : 'Gerade sind nicht genug Modelle frei. Versuche es gleich noch einmal.');
+    picked = [first.id, second.id];
   } else if (mode === 'sxs' || mode === 'direct') {
     const need = mode === 'sxs' ? 2 : 1;
     if (!Array.isArray(models) || models.length !== need) throw new HttpError(400, 'Bitte wähle die Modelle aus.');
@@ -73,7 +73,7 @@ chat.post('/stream', wrap(async (req, res) => {
   const { chatId, side = 0, messages, turn } = req.body ?? {};
   const row = await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
   if (!row) throw new HttpError(404, 'Chat nicht gefunden. Starte einen neuen Chat.');
-  const model = side === 1 ? row.model_b : row.model_a;
+  let model = side === 1 ? row.model_b : row.model_a;
   if (!model) throw new HttpError(400, 'Ungültige Seite.');
 
   if (!Array.isArray(messages) || !messages.length) throw new HttpError(400, 'Keine Nachricht.');
@@ -142,14 +142,32 @@ chat.post('/stream', wrap(async (req, res) => {
         onStep: (step) => { steps.push(step); res.write(`${JSON.stringify({ step })}\n`); },
       });
     } else {
-      await streamChat({
-        model,
-        messages: row.modality === 'code' ? [{ role: 'system', content: CODE_PROMPT }, ...clean] : clean,
-        signal: controller.signal,
-        onText,
-        onReasoning,
-        onSources,
-      });
+      // Im Battle springt bei einem Ausfall still ein anderes Modell ein (Namen sind ja geheim)
+      const tried = [model];
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await streamChat({
+            model,
+            messages: row.modality === 'code' ? [{ role: 'system', content: CODE_PROMPT }, ...clean] : clean,
+            signal: controller.signal,
+            onText,
+            onReasoning,
+            onSources,
+          });
+          break;
+        } catch (err) {
+          if (controller.signal.aborted || text || row.mode !== 'battle' || attempt >= 3) throw err;
+          const fresh = await get('SELECT model_a, model_b FROM chats WHERE id = ?', row.id);
+          const other = side === 1 ? fresh.model_a : fresh.model_b;
+          const next = await pickAvailable(MODALITY_CAP[row.modality] ?? 'text', [...tried, other]);
+          if (!next) throw err;
+          console.log(`Battle-Ersatz: ${model} → ${next.id} (${err.message})`);
+          model = next.id;
+          tried.push(model);
+          thinking = '';
+          await run(`UPDATE chats SET ${side === 1 ? 'model_b' : 'model_a'} = ? WHERE id = ?`, model, row.id);
+        }
+      }
       // Websuche: zusätzlich Links aus der Antwort als Quellen sammeln
       if (row.modality === 'web' || /#search$|compound/.test(model)) onSources(sourcesFromText(text));
     }
