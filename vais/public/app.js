@@ -225,8 +225,58 @@ function showView(view) {
   el.board.hidden = view !== 'board';
   el.dock.hidden = view === 'board';
   el.newChat.hidden = view === 'home';
+  $('#suggest').hidden = view !== 'home';
   if (view === 'board') el.title.textContent = '';
 }
+
+// ── Vorschläge auf der Startseite ─────────────────────────────────
+const SUGGESTIONS = [
+  {
+    title: 'Landingpage erstellen', desc: 'Eine schlichte, moderne Webseite',
+    icon: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8h18M6 6h.01M8.5 6h.01M14 13l2 5 1-2 2-1z"/>',
+    prompt: 'Erstelle eine schlichte, moderne Landingpage als einzelne HTML-Datei (mit CSS) für ein kleines Café namens „Bohne“. Mit Startbereich, Speisekarte und Kontakt.',
+  },
+  {
+    title: 'Einfach erklären', desc: 'Ein Thema verständlich erklärt',
+    icon: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/>',
+    prompt: 'Erkläre mir so einfach wie möglich, wie künstliche Intelligenz funktioniert. Mit einem Beispiel aus dem Alltag.',
+  },
+  {
+    title: 'Text verbessern', desc: 'Rechtschreibung und Stil prüfen',
+    icon: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
+    prompt: 'Verbessere Rechtschreibung, Grammatik und Stil in diesem Text und erkläre kurz die wichtigsten Änderungen:\n\n',
+  },
+  {
+    title: 'Code reparieren', desc: 'Fehler finden und erklären',
+    icon: '<path d="m8 7-5 5 5 5M16 7l5 5-5 5"/>',
+    prompt: 'Finde den Fehler in diesem Code, erkläre ihn und zeig mir die korrigierte Version:\n\n',
+  },
+  {
+    title: 'Reise planen', desc: 'Ein Wochenende voller Ideen',
+    icon: '<path d="M12 21s-7-6.1-7-11a7 7 0 1 1 14 0c0 4.9-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+    prompt: 'Plane mir ein entspanntes Wochenende in Hamburg: Sehenswürdigkeiten, gutes Essen und ein Tipp für schlechtes Wetter.',
+  },
+  {
+    title: 'Ideen sammeln', desc: 'Brainstorming für dein Projekt',
+    icon: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"/>',
+    prompt: 'Gib mir 10 kreative Ideen für ein eigenes Roblox-Spiel, jeweils mit einem Satz zur Spielidee.',
+  },
+];
+
+$('#suggest-track').innerHTML = SUGGESTIONS.map((s, i) => `
+  <button type="button" class="suggest-card" data-suggest="${i}">
+    <span class="suggest-icon">${svg(s.icon)}</span>
+    <span class="suggest-text"><b>${escapeHtml(s.title)}</b><small>${escapeHtml(s.desc)}</small></span>
+  </button>`).join('');
+
+$('#suggest-track').addEventListener('click', (e) => {
+  const card = e.target.closest('[data-suggest]');
+  if (!card) return;
+  el.prompt.value = SUGGESTIONS[card.dataset.suggest].prompt;
+  autosize();
+  el.prompt.focus();
+  el.prompt.setSelectionRange(el.prompt.value.length, el.prompt.value.length);
+});
 
 function resetChat() {
   for (const c of state.controllers) c.abort();

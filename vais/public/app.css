@@ -697,3 +697,51 @@ body { overflow: hidden; }
 .board-empty .btn { max-width: 240px; }
 
 @media (prefers-reduced-motion: reduce) { .drawer-panel, .drawer-backdrop { animation: none; } }
+
+/* ── Vorschläge ────────────────────────────────────────── */
+.suggest { margin-bottom: 12px; }
+.suggest-label { margin: 0 0 10px; font-size: 15px; color: var(--muted); }
+.suggest-track {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  margin: 0 -16px;
+  padding: 0 16px;
+  scroll-padding: 0 16px;
+}
+.suggest-track::-webkit-scrollbar { display: none; }
+.suggest-card {
+  flex: 0 0 min(270px, 78%);
+  scroll-snap-align: start;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 14px 10px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: none;
+  text-align: left;
+  transition: background .15s;
+}
+.suggest-card:hover { background: var(--surface); }
+.suggest-card:focus-visible { outline: 2px solid var(--border-strong); outline-offset: 2px; }
+.suggest-icon {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.suggest-icon svg { width: 24px; height: 24px; }
+.suggest-text { display: flex; flex-direction: column; min-width: 0; }
+.suggest-text b { font-weight: 500; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.suggest-text small { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (min-width: 900px) {
+  .suggest-track { display: grid; grid-template-columns: repeat(3, 1fr); overflow: visible; margin: 0; padding: 0; }
+  .suggest-card { flex: none; }
+}
