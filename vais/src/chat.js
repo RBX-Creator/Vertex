@@ -122,7 +122,9 @@ chat.post('/stream', wrap(async (req, res) => {
 // ── Verlauf ───────────────────────────────────────────────────────
 chat.get('/list', wrap(async (req, res) => {
   const rows = await all(
-    'SELECT id, title, mode, COALESCE(updated_at, created_at) AS updated FROM chats WHERE user_id = ? ORDER BY updated DESC LIMIT 200',
+    `SELECT id, title, mode, COALESCE(updated_at, created_at) AS updated FROM chats
+     WHERE user_id = ? AND EXISTS (SELECT 1 FROM messages WHERE messages.chat_id = chats.id)
+     ORDER BY updated DESC LIMIT 200`,
     req.user.id,
   );
   res.json({ chats: rows.map((r) => ({ id: r.id, title: r.title || 'Chat', mode: r.mode, updated: r.updated })) });
