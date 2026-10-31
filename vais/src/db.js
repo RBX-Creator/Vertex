@@ -66,6 +66,7 @@ for (const [column, type] of [['title', 'TEXT'], ['updated_at', 'INTEGER'], ['mo
 }
 
 try { await client.execute('ALTER TABLE messages ADD COLUMN meta TEXT'); } catch { /* gibt es schon */ }
+try { await client.execute('ALTER TABLE messages ADD COLUMN feedback INTEGER'); } catch { /* gibt es schon */ }
 
 export const all = async (sql, ...args) => (await client.execute({ sql, args })).rows;
 

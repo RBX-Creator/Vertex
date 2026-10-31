@@ -854,3 +854,11 @@ body { overflow: hidden; }
 }
 .think:not(.live).open .think-body p { max-height: 360px; overflow-y: auto; }
 @media (prefers-reduced-motion: reduce) { .think-body { transition: none; } .think.live .think-head span { animation: none; } }
+
+/* ── Knöpfe unter Einzel-Antworten ─────────────────────── */
+.card-foot { display: flex; gap: 2px; margin: 10px 0 0 -8px; }
+.card-foot .card-btn { color: var(--muted); }
+.card-foot .card-btn:hover { color: var(--text); }
+.card-foot .card-btn[aria-pressed='true'] { color: var(--text); }
+.card-foot .card-btn[aria-pressed='true'] svg { fill: currentColor; fill-opacity: .25; }
+.answers.single .card-head { padding-bottom: 8px; }

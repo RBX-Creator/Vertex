@@ -197,7 +197,7 @@ chat.get('/leaderboard', wrap(async (req, res) => {
 chat.get('/:id', wrap(async (req, res) => {
   const row = await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
   if (!row) throw new HttpError(404, 'Chat nicht gefunden.');
-  const msgs = await all('SELECT turn, side, content, status, error, meta FROM messages WHERE chat_id = ? ORDER BY turn, side', row.id);
+  const msgs = await all('SELECT turn, side, content, status, error, meta, feedback FROM messages WHERE chat_id = ? ORDER BY turn, side', row.id);
   const sides = row.mode === 'direct' || row.mode === 'agent' ? 1 : 2;
   const turns = [];
   for (const m of msgs) {
@@ -208,7 +208,7 @@ chat.get('/:id', wrap(async (req, res) => {
       try { meta = JSON.parse(m.meta || '{}'); } catch { /* egal */ }
       turns[m.turn].answers[m.side] = {
         text: m.content, status: m.status, error: m.error,
-        steps: meta.steps ?? [], thinking: meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0,
+        steps: meta.steps ?? [], thinking: meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0, feedback: m.feedback ?? 0,
       };
     }
   }
@@ -225,6 +225,16 @@ chat.get('/:id', wrap(async (req, res) => {
     labels: reveal ? names : null,
     turns: turns.filter((t) => t && t.user),
   });
+}));
+
+// 👍 / 👎 zu einer Antwort (1, -1 oder 0 zum Zurücknehmen)
+chat.post('/feedback', wrap(async (req, res) => {
+  const { chatId, turn, side, value } = req.body ?? {};
+  if (![1, -1, 0].includes(value) || !Number.isInteger(turn) || ![0, 1].includes(side)) throw new HttpError(400, 'Ungültige Bewertung.');
+  const row = await get('SELECT id FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
+  if (!row) throw new HttpError(404, 'Chat nicht gefunden.');
+  await run('UPDATE messages SET feedback = ? WHERE chat_id = ? AND turn = ? AND side = ?', value || null, row.id, turn, side);
+  res.json({ ok: true });
 }));
 
 chat.delete('/:id', wrap(async (req, res) => {

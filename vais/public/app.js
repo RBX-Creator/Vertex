@@ -27,6 +27,8 @@ const MODALITIES = {
   auto: { label: 'Auto', desc: 'Wählt automatisch passende Modelle', cap: 'text' },
 };
 Object.assign(ICON, {
+  up: svg('<path d="M7 10v11M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.6l-2.3 7A2 2 0 0 1 17.5 21H7V10l4.4-7.2A1.9 1.9 0 0 1 15 4.3z"/><path d="M3 10h4v11H3z"/>'),
+  down: svg('<path d="M17 14V3M9 18.1 10 14H4.2a2 2 0 0 1-1.9-2.6l2.3-7A2 2 0 0 1 6.5 3H17v11l-4.4 7.2A1.9 1.9 0 0 1 9 19.7z"/><path d="M21 14h-4V3h4z"/>'),
   brain: svg('<path d="M9.5 4A2.5 2.5 0 0 0 7 6.5v.1A3 3 0 0 0 4.5 9.5c0 .8.3 1.5.8 2a3 3 0 0 0 .7 4.8V17a3 3 0 0 0 3 3 2.5 2.5 0 0 0 3-1.7V5.6A2.5 2.5 0 0 0 9.5 4z"/><path d="M14.5 4A2.5 2.5 0 0 1 17 6.5v.1a3 3 0 0 1 2.5 2.9c0 .8-.3 1.5-.8 2a3 3 0 0 1-.7 4.8V17a3 3 0 0 1-3 3 2.5 2.5 0 0 1-3-1.7"/>'),
   agent: svg('<path d="M12 2.5 14 8l5.5 2-5.5 2-2 5.5-2-5.5L4.5 10 10 8z"/><path d="M19 15.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>'),
   's-search': svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
@@ -392,18 +394,29 @@ function renderTurn(turnIndex) {
     <div class="turn-user"><div class="bubble"></div></div>
     <div class="answers${n === 1 ? ' single' : ''}">
       <div class="track">
-        ${turn.answers.map((_, side) => `
-          <article class="card" data-side="${side}">
-            <header class="card-head">
-              <span class="card-label"></span>
-              <div class="card-actions">
+        ${turn.answers.map((_, side) => {
+          const actions = `
                 <button class="card-btn" data-act="regen" aria-label="Neu generieren" title="Neu generieren">${ICON.regen}</button>
                 <button class="card-btn" data-act="copy" aria-label="Kopieren" title="Kopieren">${ICON.copy}</button>
                 <button class="card-btn" data-act="preview" aria-label="Vorschau" title="Vorschau" hidden>${ICON.preview}</button>
-                <button class="card-btn" data-act="expand" aria-label="Vollbild" title="Vollbild">${ICON.expand}</button>
+                <button class="card-btn" data-act="expand" aria-label="Vollbild" title="Vollbild">${ICON.expand}</button>`;
+          // Einzel-Antwort (Direkt, Agent X): Knöpfe unter der Nachricht wie bei Arena, mit 👍/👎
+          return n === 1 ? `
+          <article class="card" data-side="${side}">
+            <header class="card-head"><span class="card-label"></span></header>
+            <div class="card-body md"></div>
+            <div class="card-foot">
+                <button class="card-btn" data-act="like" aria-label="Gute Antwort" title="Gute Antwort" aria-pressed="false">${ICON.up}</button>
+                <button class="card-btn" data-act="dislike" aria-label="Schlechte Antwort" title="Schlechte Antwort" aria-pressed="false">${ICON.down}</button>${actions}
+            </div>` : `
+          <article class="card" data-side="${side}">
+            <header class="card-head">
+              <span class="card-label"></span>
+              <div class="card-actions">${actions}
               </div>
             </header>
-            <div class="card-body md"></div>
+            <div class="card-body md"></div>`;
+        }).map((html) => `${html}
           </article>`).join('')}
       </div>
       ${n > 1 ? `
@@ -456,6 +469,13 @@ function updateCard(turnIndex, side) {
   $('[data-act="copy"]', card).disabled = !a.text;
   $('[data-act="expand"]', card).disabled = !a.text;
   $('[data-act="preview"]', card).hidden = !(a.status === 'done' && htmlBlock(a.text));
+  const foot = $('.card-foot', card);
+  if (foot) {
+    foot.hidden = a.status === 'streaming';
+    $('[data-act="like"]', foot).setAttribute('aria-pressed', String(a.feedback === 1));
+    $('[data-act="dislike"]', foot).setAttribute('aria-pressed', String(a.feedback === -1));
+    $('[data-act="like"]', foot).hidden = $('[data-act="dislike"]', foot).hidden = !a.text;
+  }
 
   const body = $('.card-body', card);
   renderThinking(card, a);
@@ -686,6 +706,22 @@ el.thread.addEventListener('click', async (e) => {
   const side = Number(btn.closest('.card').dataset.side);
   const a = state.chat.turns[turnIndex].answers[side];
   const act = btn.dataset.act;
+
+  if (act === 'like' || act === 'dislike') {
+    const value = act === 'like' ? 1 : -1;
+    const before = a.feedback ?? 0;
+    a.feedback = before === value ? 0 : value;
+    updateCard(turnIndex, side);
+    try {
+      await post('/api/chat/feedback', { chatId: state.chat.id, turn: turnIndex, side, value: a.feedback });
+      if (a.feedback) toast(a.feedback === 1 ? 'Danke für dein Feedback 👍' : 'Danke, wir merken uns das 👎');
+    } catch (err) {
+      a.feedback = before;
+      updateCard(turnIndex, side);
+      toast(err.message);
+    }
+    return;
+  }
 
   if (act === 'think') {
     if (a.status === 'streaming' && !a.text) return;
