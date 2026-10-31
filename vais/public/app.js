@@ -53,6 +53,7 @@ if (window.DOMPurify) {
   });
 }
 function markdown(text) {
+  text = text.replace(/\s*【[^】]*】/g, ''); // Quellen-Marker der Websuche ausblenden
   if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(text, { gfm: true, breaks: true }));
   return escapeHtml(text).replace(/\n/g, '<br>');
 }
