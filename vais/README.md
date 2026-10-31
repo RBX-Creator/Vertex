@@ -1,10 +1,15 @@
 # VAIs
 
-KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand: **Login mit E-Mail-Bestätigung** und eine erste Startseite.
+KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand:
+- **Login** mit E-Mail-Bestätigung
+- **Chat** in drei Modi: **Battle** (2 anonyme Modelle, Namen erst nach der Abstimmung), **Side by Side** (2 Modelle deiner Wahl), **Direkt** (1 Modell)
+- Antworten nebeneinander (PC) bzw. zum Wischen (Handy), Abstimmen mit „A ist besser“, Unentschieden, Beide schlecht, „B ist besser“
+
+Ohne OpenRouter-Schlüssel läuft der Chat im **Demo-Modus** mit Platzhalter-Modellen.
 
 ## Online stellen – nur mit dem Handy (kostenlos)
 
-Du brauchst 3 kostenlose Konten. Alles geht im Handy-Browser.
+Du brauchst 4 kostenlose Konten. Alles geht im Handy-Browser.
 
 ### 1. Datenbank: Turso
 1. turso.tech öffnen → **Sign up** → mit GitHub anmelden.
@@ -20,10 +25,16 @@ Du brauchst 3 kostenlose Konten. Alles geht im Handy-Browser.
    - **SMTP-Key** → `SMTP_PASS`
 4. `MAIL_FROM` = `VAIs <deine-adresse@gmail.com>` (genau die bestätigte Adresse).
 
-### 3. Webseite: Render
+### 3. KI-Modelle: OpenRouter
+1. openrouter.ai → **Sign in** (mit Google oder GitHub).
+2. Menü → **Keys** → **Create Key** → kopieren → das ist `OPENROUTER_API_KEY`.
+
+Kostenlose Modelle haben ein Tageslimit (ca. 50 Anfragen pro Tag; mit einmalig 10 $ Guthaben bei OpenRouter ca. 1.000 pro Tag).
+
+### 4. Webseite: Render
 1. render.com → mit GitHub anmelden → Zugriff auf das Repo `Vertex` erlauben.
 2. **New → Blueprint** → Repo `Vertex` wählen, Branch `claude/vais-login`.
-3. Render fragt die 5 Werte ab: `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, `DATABASE_URL`, `DATABASE_TOKEN` → einfügen → **Apply**.
+3. Render fragt die 6 Werte ab: `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, `OPENROUTER_API_KEY`, `DATABASE_URL`, `DATABASE_TOKEN` → einfügen → **Apply**.
 4. Nach ein paar Minuten ist VAIs unter `https://vais-xxxx.onrender.com` online.
 
 Hinweis: Im Gratis-Tarif schläft die Seite nach 15 Minuten ohne Besucher ein; der erste Aufruf danach dauert ca. 1 Minute. Die Konten bleiben dank Turso trotzdem erhalten.
@@ -57,8 +68,10 @@ Sicherheit: Passwörter mit scrypt gehasht, Codes nur als Hash gespeichert, 10 M
 | --- | --- |
 | `server.js` | Webserver (Express) |
 | `src/auth.js` | Registrieren, Anmelden, Codes, Sessions |
+| `src/chat.js` | Chats starten, Antworten streamen, Abstimmen |
+| `src/models.js` | Modell-Liste und Anbindung an OpenRouter (+ Demo-Modus) |
 | `src/mailer.js` | E-Mail-Versand und Mail-Vorlage |
 | `src/db.js` | Datenbank (Turso online, lokal `data/vais.db`) |
 | `public/login.html`, `login.js` | Login-Fenster |
-| `public/app.html`, `app.css` | Startseite nach dem Login |
+| `public/app.html`, `app.js`, `app.css` | Chat-Oberfläche |
 | `public/styles.css` | Gemeinsames Design (hell/dunkel automatisch) |

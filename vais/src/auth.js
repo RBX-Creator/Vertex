@@ -32,7 +32,7 @@ const normEmail = (e) => String(e ?? '').trim().toLowerCase();
 const validEmail = (e) => e.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
 const validPassword = (p) => typeof p === 'string' && p.length >= 8 && p.length <= 200;
 
-class HttpError extends Error {
+export class HttpError extends Error {
   constructor(status, message, extra = {}) {
     super(message);
     this.status = status;
@@ -132,7 +132,7 @@ setInterval(() => {
 }, 5 * 60 * 1000).unref();
 
 // ── Routen ────────────────────────────────────────────────────────
-const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+export const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 export const auth = Router();
 auth.use(rateLimit);
@@ -239,8 +239,9 @@ auth.get('/me', wrap(async (req, res) => {
 }));
 
 // Fehler einheitlich als JSON zurückgeben
-auth.use((err, req, res, _next) => {
+export function errorHandler(err, req, res, _next) {
   if (err instanceof HttpError) return res.status(err.status).json({ error: err.message, ...err.extra });
   console.error(err);
   res.status(500).json({ error: 'Etwas ist schiefgelaufen. Bitte versuche es erneut.' });
-});
+}
+auth.use(errorHandler);

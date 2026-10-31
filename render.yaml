@@ -24,6 +24,9 @@ services:
         sync: false
       - key: MAIL_FROM
         sync: false
+      # KI-Modelle über OpenRouter (kostenlose Modelle). Leer = Demo-Modus
+      - key: OPENROUTER_API_KEY
+        sync: false
       # Datenbank bei Turso
       - key: DATABASE_URL
         sync: false

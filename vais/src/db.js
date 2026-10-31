@@ -34,6 +34,18 @@ await client.batch([
     user_id    INTEGER NOT NULL,
     expires_at INTEGER NOT NULL
   )`,
+  // Ein Chat: 'battle' (2 anonyme Modelle), 'sxs' (2 gewählte), 'direct' (1 Modell)
+  // winner: 'a' | 'b' | 'tie' | 'bad' – Grundlage für eine spätere Bestenliste
+  `CREATE TABLE IF NOT EXISTS chats (
+    id         TEXT    PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    mode       TEXT    NOT NULL,
+    model_a    TEXT    NOT NULL,
+    model_b    TEXT,
+    winner     TEXT,
+    voted_at   INTEGER,
+    created_at INTEGER NOT NULL
+  )`,
 ], 'write');
 
 // Abgelaufene Einträge regelmäßig aufräumen
