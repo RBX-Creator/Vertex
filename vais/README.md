@@ -2,6 +2,7 @@
 
 KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand:
 - **Login** mit E-Mail-Bestätigung
+- **Agent X**: arbeitet selbstständig in mehreren Schritten (Websuche, Webseiten lesen, Rechnen, Datum/Uhrzeit) mit dem stärksten verfügbaren Modell; braucht `GROQ_API_KEY`
 - **Chat** in drei Modi: **Battle** (2 anonyme Modelle, Namen erst nach der Abstimmung), **Side by Side** (2 Modelle deiner Wahl), **Direkt** (1 Modell)
 - Antworten nebeneinander (PC) bzw. zum Wischen (Handy), Abstimmen mit „A ist besser“, Unentschieden, Beide schlecht, „B ist besser“
 - **Art der Anfrage** (zweites Menü): Auto, Text, Code (mit Vorschau für erstellte Webseiten), Websuche; Bild und Video folgen
@@ -75,6 +76,7 @@ Sicherheit: Passwörter mit scrypt gehasht, Codes nur als Hash gespeichert, 10 M
 | --- | --- |
 | `server.js` | Webserver (Express) |
 | `src/auth.js` | Registrieren, Anmelden, Codes, Sessions |
+| `src/agent.js` | Agent X: Werkzeuge und Ablauf |
 | `src/chat.js` | Chats starten, Antworten streamen, Abstimmen |
 | `src/models.js` | Modelle von OpenRouter, Google und Groq, Logos, Kategorien (+ Demo-Modus) |
 | `public/icons/` | Hersteller-Logos (MIT, LobeHub) |

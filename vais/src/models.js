@@ -164,6 +164,7 @@ export function modelKey(id) {
   return id.replace(/^openrouter:/, '').replace(/#search$/, '');
 }
 export async function describeModel(id) {
+  if (id === 'agent') return { name: 'Agent X', maker: 'VAIs', icon: null };
   const live = await findModel(id) ?? await findModel(`openrouter:${id}`);
   if (live) return { name: live.name, maker: live.maker, icon: live.icon };
   const upstream = modelKey(id).replace(/^(gemini|groq|demo):/, '');
@@ -171,6 +172,7 @@ export async function describeModel(id) {
 }
 
 export async function displayName(id) {
+  if (id === 'agent') return 'Agent X';
   return (await findModel(id))?.name ?? id.split(/[:/]/).pop().replace(/:free$/, '');
 }
 
@@ -226,6 +228,37 @@ export async function streamChat({ model, messages, signal, onText }) {
       if (text) onText(text);
     }
   }
+}
+
+// Eine Antwort ohne Streaming, optional mit Werkzeugen (für Agent X)
+export async function complete({ model, messages, tools, signal }) {
+  const [provider, ...rest] = model.split(':');
+  let upstream = rest.join(':');
+  const search = upstream.endsWith(SEARCH_SUFFIX);
+  if (search) upstream = upstream.slice(0, -SEARCH_SUFFIX.length);
+  const p = PROVIDERS[provider];
+  if (!p?.key) throw new Error('Dieses Modell ist gerade nicht verfügbar.');
+  const headers = { Authorization: `Bearer ${p.key}`, 'Content-Type': 'application/json' };
+  if (provider === 'openrouter') { headers['HTTP-Referer'] = process.env.APP_URL || 'https://vais.onrender.com'; headers['X-Title'] = 'VAIs'; }
+  const allTools = [...(tools ?? []), ...(search ? [{ type: 'browser_search' }] : [])];
+  const res = await fetch(`${p.base}/chat/completions`, {
+    method: 'POST',
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(90_000)]) : AbortSignal.timeout(90_000),
+    headers,
+    body: JSON.stringify({
+      model: upstream,
+      messages,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      ...(allTools.length ? { tools: allTools, tool_choice: 'auto' } : {}),
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = Array.isArray(body) ? body[0]?.error : body?.error;
+    throw new Error(friendlyError(res.status, err?.message, p));
+  }
+  const json = await res.json();
+  return json.choices?.[0]?.message ?? { content: '' };
 }
 
 function friendlyError(status, message = '', p) {

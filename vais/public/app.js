@@ -27,6 +27,13 @@ const MODALITIES = {
   auto: { label: 'Auto', desc: 'Wählt automatisch passende Modelle', cap: 'text' },
 };
 Object.assign(ICON, {
+  agent: svg('<path d="M12 2.5 14 8l5.5 2-5.5 2-2 5.5-2-5.5L4.5 10 10 8z"/><path d="M19 15.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>'),
+  's-search': svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+  's-read': svg('<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>'),
+  's-calc': svg('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"/>'),
+  's-time': svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+  's-error': svg('<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>'),
+  's-other': svg('<circle cx="12" cy="12" r="3"/>'),
   'm-video': svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="m10 9 5 3-5 3z"/>'),
   'm-image': svg('<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><circle cx="15.5" cy="8.5" r="1.8"/><path d="m3.5 17 5-5 5 5 2-2 5 5"/>'),
   'm-web': svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"/>'),
@@ -37,6 +44,7 @@ Object.assign(ICON, {
 });
 
 const MODES = {
+  agent: { label: 'Agent X', desc: 'Sucht, liest und rechnet selbstständig – der stärkste Modus' },
   battle: { label: 'Battle', desc: '2 anonyme Modelle im Vergleich' },
   sxs: { label: 'Side by Side', desc: '2 Modelle deiner Wahl vergleichen' },
   direct: { label: 'Direkt', desc: 'Mit 1 Modell chatten' },
@@ -136,6 +144,7 @@ const modelById = (id) => state.models.find((m) => m.id === id);
 function renderControls() {
   el.modeBtn.innerHTML = ICON[state.mode] + ICON.chev;
   el.modeBtn.setAttribute('aria-label', `Modus: ${MODES[state.mode].label}`);
+  el.modalityBtn.hidden = state.mode === 'agent';
   el.modalityBtn.innerHTML = ICON[`m-${state.modality}`] + ICON.chev;
   el.modalityBtn.setAttribute('aria-label', `Art: ${MODALITIES[state.modality].label}`);
   el.chips.forEach((chip, slot) => {
@@ -281,6 +290,7 @@ el.sheet.addEventListener('click', (e) => {
 
 // ── Chat ──────────────────────────────────────────────────────────
 function labelFor(chat, side) {
+  if (chat.mode === 'agent') return 'Agent X';
   if (chat.mode === 'battle') return chat.names ? chat.names[side] : `Assistent ${'AB'[side]}`;
   return chat.labels[side];
 }
@@ -447,6 +457,7 @@ function updateCard(turnIndex, side) {
   $('[data-act="preview"]', card).hidden = !(a.status === 'done' && htmlBlock(a.text));
 
   const body = $('.card-body', card);
+  renderSteps(card, a);
   if (a.status === 'error') {
     body.innerHTML = `${a.text ? markdown(a.text) : ''}<p class="card-error"></p>${isLast ? '<button class="retry" data-act="regen">Erneut versuchen</button>' : ''}`;
     $('.card-error', body).textContent = a.error;
@@ -457,6 +468,24 @@ function updateCard(turnIndex, side) {
   } else {
     body.innerHTML = markdown(a.text);
   }
+}
+
+// Arbeitsschritte von Agent X über der Antwort anzeigen
+const STEP_LABEL = { search: 'Sucht', read: 'Liest', calc: 'Rechnet', time: 'Prüft', error: 'Problem', other: 'Nutzt' };
+function renderSteps(card, a) {
+  let box = $('.agent-steps', card);
+  if (!a.steps?.length) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement('ol');
+    box.className = 'agent-steps';
+    $('.card-body', card).before(box);
+  }
+  const working = a.status === 'streaming' && !a.text;
+  box.innerHTML = a.steps.map((st, i) => `
+    <li class="agent-step ${st.kind}${working && i === a.steps.length - 1 ? ' active' : ''}">
+      ${ICON[`s-${st.kind}`] ?? ICON['s-other']}<span><b>${STEP_LABEL[st.kind] ?? 'Schritt'}</b> <span class="t"></span></span>
+    </li>`).join('');
+  box.querySelectorAll('.t').forEach((t, i) => { t.textContent = a.steps[i].text; });
 }
 
 // Beim Streamen höchstens einmal pro Frame neu zeichnen
@@ -476,7 +505,7 @@ function scheduleUpdate(turnIndex, side) {
 async function runSide(turnIndex, side) {
   const chat = state.chat;
   const a = chat.turns[turnIndex].answers[side];
-  Object.assign(a, { text: '', status: 'streaming', error: null });
+  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [] });
   updateCard(turnIndex, side);
 
   const ctrl = new AbortController();
@@ -508,6 +537,7 @@ async function runSide(turnIndex, side) {
         const msg = JSON.parse(line);
         if (msg.error) throw new Error(msg.error);
         if (msg.t) { a.text += msg.t; scheduleUpdate(turnIndex, side); }
+        if (msg.step) { a.steps.push(msg.step); scheduleUpdate(turnIndex, side); }
         if (msg.done) finished = true;
       }
     }
@@ -526,7 +556,7 @@ async function runSide(turnIndex, side) {
 
 function afterTurn() {
   const chat = state.chat;
-  if (!chat || chat.mode === 'direct' || chat.winner) return;
+  if (!chat || chat.mode === 'direct' || chat.mode === 'agent' || chat.winner) return;
   const last = chat.turns.at(-1);
   if (!last) return;
   el.vote.hidden = !last.answers.every((a) => a.status === 'done' && a.text);
@@ -538,7 +568,7 @@ async function send() {
   if (!state.models.length) return toast('Modelle konnten nicht geladen werden. Lade die Seite neu.');
 
   if (!state.chat) {
-    if (state.mode !== 'battle') {
+    if (state.mode === 'sxs' || state.mode === 'direct') {
       const need = state.mode === 'sxs' ? 2 : 1;
       const missing = state.picks.slice(0, need).findIndex((id) => !modelById(id));
       if (missing !== -1) return openSheet(missing);
@@ -569,8 +599,8 @@ async function send() {
   el.vote.hidden = true;
   el.voteResult.hidden = true;
 
-  const sides = chat.mode === 'direct' ? 1 : 2;
-  chat.turns.push({ user: text, answers: Array.from({ length: sides }, () => ({ text: '', status: 'streaming', error: null })) });
+  const sides = chat.mode === 'direct' || chat.mode === 'agent' ? 1 : 2;
+  chat.turns.push({ user: text, answers: Array.from({ length: sides }, () => ({ text: '', status: 'streaming', error: null, steps: [] })) });
   const index = chat.turns.length - 1;
   if (index > 0) chat.turns[index - 1].answers.forEach((_, s) => updateCard(index - 1, s)); // „Neu generieren“ dort abschalten
   const node = renderTurn(index);

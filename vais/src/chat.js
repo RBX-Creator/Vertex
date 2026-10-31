@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
 import { get, run, all } from './db.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
+import { runAgent } from './agent.js';
 import { listModels, findModel, streamChat, displayName, describeModel, modelKey, demoMode } from './models.js';
 
 const MAX_MESSAGES = 40;          // so viele Nachrichten gehen max. ans Modell
@@ -39,7 +40,9 @@ chat.post('/start', wrap(async (req, res) => {
   const { mode, models = [], title } = req.body ?? {};
   const modality = MODALITY_CAP[req.body?.modality] ? req.body.modality : 'auto';
   let picked;
-  if (mode === 'battle') {
+  if (mode === 'agent') {
+    picked = ['agent'];
+  } else if (mode === 'battle') {
     const all = (await listModels()).filter((m) => m.caps.includes(MODALITY_CAP[modality]));
     if (all.length < 2) throw new HttpError(503, modality === 'web' ? 'Für ein Websuche-Battle sind gerade nicht genug Such-Modelle verfügbar.' : 'Gerade sind nicht genug Modelle verfügbar.');
     const i = Math.floor(Math.random() * all.length);
@@ -82,10 +85,11 @@ chat.post('/stream', wrap(async (req, res) => {
   limit(req.user.id);
 
   // Verlauf speichern: deine Frage sofort, die Antwort am Ende
+  const steps = [];
   const save = (s, content, status = 'done', error = null) => (turnNo === null ? null : run(
-    `INSERT INTO messages (chat_id, turn, side, content, status, error, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(chat_id, turn, side) DO UPDATE SET content = excluded.content, status = excluded.status, error = excluded.error`,
-    row.id, turnNo, s, content, status, error, Date.now(),
+    `INSERT INTO messages (chat_id, turn, side, content, status, error, meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(chat_id, turn, side) DO UPDATE SET content = excluded.content, status = excluded.status, error = excluded.error, meta = excluded.meta`,
+    row.id, turnNo, s, content, status, error, s >= 0 && steps.length ? JSON.stringify({ steps }) : null, Date.now(),
   ).catch((e) => console.error('Verlauf speichern fehlgeschlagen:', e.message)));
   await save(-1, clean.at(-1).content);
   await run('UPDATE chats SET updated_at = ? WHERE id = ?', Date.now(), row.id);
@@ -102,12 +106,22 @@ chat.post('/stream', wrap(async (req, res) => {
 
   let text = '';
   try {
-    await streamChat({
-      model,
-      messages: row.modality === 'code' ? [{ role: 'system', content: CODE_PROMPT }, ...clean] : clean,
-      signal: controller.signal,
-      onText: (t) => { text += t; res.write(`${JSON.stringify({ t })}\n`); },
-    });
+    const onText = (t) => { text += t; res.write(`${JSON.stringify({ t })}\n`); };
+    if (row.mode === 'agent') {
+      await runAgent({
+        messages: clean,
+        signal: controller.signal,
+        onText,
+        onStep: (step) => { steps.push(step); res.write(`${JSON.stringify({ step })}\n`); },
+      });
+    } else {
+      await streamChat({
+        model,
+        messages: row.modality === 'code' ? [{ role: 'system', content: CODE_PROMPT }, ...clean] : clean,
+        signal: controller.signal,
+        onText,
+      });
+    }
     res.write(`${JSON.stringify({ done: true })}\n`);
     await save(side === 1 ? 1 : 0, text, text ? 'done' : 'error', text ? null : 'Das Modell hat keine Antwort geliefert.');
   } catch (err) {
@@ -168,13 +182,17 @@ chat.get('/leaderboard', wrap(async (req, res) => {
 chat.get('/:id', wrap(async (req, res) => {
   const row = await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
   if (!row) throw new HttpError(404, 'Chat nicht gefunden.');
-  const msgs = await all('SELECT turn, side, content, status, error FROM messages WHERE chat_id = ? ORDER BY turn, side', row.id);
-  const sides = row.mode === 'direct' ? 1 : 2;
+  const msgs = await all('SELECT turn, side, content, status, error, meta FROM messages WHERE chat_id = ? ORDER BY turn, side', row.id);
+  const sides = row.mode === 'direct' || row.mode === 'agent' ? 1 : 2;
   const turns = [];
   for (const m of msgs) {
     turns[m.turn] ??= { user: '', answers: Array.from({ length: sides }, () => ({ text: '', status: 'stopped', error: null })) };
     if (m.side < 0) turns[m.turn].user = m.content;
-    else if (m.side < sides) turns[m.turn].answers[m.side] = { text: m.content, status: m.status, error: m.error };
+    else if (m.side < sides) {
+      let steps = [];
+      try { steps = JSON.parse(m.meta || '{}').steps ?? []; } catch { /* egal */ }
+      turns[m.turn].answers[m.side] = { text: m.content, status: m.status, error: m.error, steps };
+    }
   }
   const ids = [row.model_a, row.model_b].filter(Boolean);
   const names = await Promise.all(ids.map(displayName));
@@ -185,7 +203,7 @@ chat.get('/:id', wrap(async (req, res) => {
     modality: row.modality || 'auto',
     title: row.title || 'Chat',
     winner: row.winner,
-    models: row.mode === 'battle' ? null : ids,
+    models: row.mode === 'battle' || row.mode === 'agent' ? null : ids,
     labels: reveal ? names : null,
     turns: turns.filter((t) => t && t.user),
   });
