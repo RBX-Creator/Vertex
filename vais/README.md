@@ -28,6 +28,11 @@ Du brauchst 4 kostenlose Konten. Alles geht im Handy-Browser.
 1. openrouter.ai → **Sign in** (mit Google oder GitHub).
 2. Menü → **Keys** → **Create Key** → kopieren → das ist `OPENROUTER_API_KEY`.
 
+Weitere kostenlose Modelle (optional, je ein Schlüssel in Render unter **Environment** eintragen):
+- **Google Gemini/Gemma:** aistudio.google.com/apikey → `GEMINI_API_KEY`
+- **Groq** (gpt-oss von OpenAI, Llama, Qwen, Kimi und Websuche über `compound`): console.groq.com/keys → `GROQ_API_KEY`
+- Kostenpflichtige Modelle wie Claude oder GPT: Guthaben bei OpenRouter aufladen und die IDs in `OPENROUTER_EXTRA_MODELS` eintragen (durch Komma getrennt).
+
 Kostenlose Modelle haben ein Tageslimit (ca. 50 Anfragen pro Tag; mit einmalig 10 $ Guthaben bei OpenRouter ca. 1.000 pro Tag).
 
 ### 4. Webseite: Render
@@ -68,7 +73,8 @@ Sicherheit: Passwörter mit scrypt gehasht, Codes nur als Hash gespeichert, 10 M
 | `server.js` | Webserver (Express) |
 | `src/auth.js` | Registrieren, Anmelden, Codes, Sessions |
 | `src/chat.js` | Chats starten, Antworten streamen, Abstimmen |
-| `src/models.js` | Modell-Liste und Anbindung an OpenRouter (+ Demo-Modus) |
+| `src/models.js` | Modelle von OpenRouter, Google und Groq, Logos, Kategorien (+ Demo-Modus) |
+| `public/icons/` | Hersteller-Logos (MIT, LobeHub) |
 | `src/mailer.js` | E-Mail-Versand und Mail-Vorlage |
 | `src/db.js` | Datenbank (Turso online, lokal `data/vais.db`) |
 | `public/login.html`, `login.js` | Login-Fenster |

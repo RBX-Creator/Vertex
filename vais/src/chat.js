@@ -36,7 +36,7 @@ chat.post('/start', wrap(async (req, res) => {
   const { mode, models = [] } = req.body ?? {};
   let picked;
   if (mode === 'battle') {
-    const all = await listModels();
+    const all = (await listModels()).filter((m) => m.caps.includes('text'));
     if (all.length < 2) throw new HttpError(503, 'Gerade sind nicht genug Modelle verfügbar.');
     const i = Math.floor(Math.random() * all.length);
     let j = Math.floor(Math.random() * (all.length - 1));
@@ -56,7 +56,7 @@ chat.post('/start', wrap(async (req, res) => {
     'INSERT INTO chats (id, user_id, mode, model_a, model_b, created_at) VALUES (?, ?, ?, ?, ?, ?)',
     id, req.user.id, mode, picked[0], picked[1] ?? null, Date.now(),
   );
-  res.json({ id, models: mode === 'battle' ? null : picked.map(displayName) });
+  res.json({ id, models: mode === 'battle' ? null : await Promise.all(picked.map(displayName)) });
 }));
 
 // Antwort einer Seite (0 = A, 1 = B) als NDJSON-Stream
@@ -111,7 +111,7 @@ chat.post('/vote', wrap(async (req, res) => {
   if (!row.winner) {
     await run('UPDATE chats SET winner = ?, voted_at = ? WHERE id = ?', winner, Date.now(), row.id);
   }
-  res.json({ models: [displayName(row.model_a), displayName(row.model_b)], winner: row.winner ?? winner });
+  res.json({ models: [await displayName(row.model_a), await displayName(row.model_b)], winner: row.winner ?? winner });
 }));
 
 chat.use(errorHandler);

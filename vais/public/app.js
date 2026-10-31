@@ -57,10 +57,18 @@ function markdown(text) {
   return escapeHtml(text).replace(/\n/g, '<br>');
 }
 
-function providerBadge(provider = '?') {
+// Hersteller-Logo eines Modells (farbig als Bild, einfarbige Logos per CSS-Maske in Textfarbe)
+function modelLogo(m) {
+  if (m?.icon) {
+    const src = `/icons/${encodeURIComponent(m.icon)}.svg`;
+    return /-color$/.test(m.icon)
+      ? `<img class="logo" src="${src}" alt="">`
+      : `<span class="logo mono" style="--icon:url('${src}')"></span>`;
+  }
+  const label = m?.maker || '?';
   let h = 0;
-  for (const c of provider) h = (h * 31 + c.charCodeAt(0)) % 360;
-  return `<span class="pav" style="background:hsl(${h} 42% 42%)">${escapeHtml(provider.trim()[0]?.toUpperCase() ?? '?')}</span>`;
+  for (const c of label) h = (h * 31 + c.charCodeAt(0)) % 360;
+  return `<span class="logo pav" style="background:hsl(${h} 42% 42%)">${escapeHtml(label.trim()[0]?.toUpperCase() ?? '?')}</span>`;
 }
 
 // ── Zustand ───────────────────────────────────────────────────────
@@ -105,7 +113,7 @@ function renderControls() {
     if (!show) return;
     const m = modelById(state.picks[slot]);
     chip.innerHTML = m
-      ? `${providerBadge(m.provider)}<span class="name">${escapeHtml(m.name)}</span>${ICON.chev}`
+      ? `${modelLogo(m)}<span class="name">${escapeHtml(m.name)}</span>${ICON.chev}`
       : `<span class="name">Modell wählen</span>${ICON.chev}`;
     chip.setAttribute('aria-label', `Modell ${slot + 1}: ${m?.name ?? 'keins gewählt'}`);
   });
@@ -142,24 +150,39 @@ el.modeMenu.addEventListener('click', (e) => {
 
 // ── Modellauswahl ─────────────────────────────────────────────────
 let sheetSlot = 0;
+let sheetCap = 'text';
+const CAP_EMPTY = {
+  image: 'Bild-Modelle kommen bald.',
+  web: 'Für Websuche bitte einen Groq-Schlüssel eintragen (GROQ_API_KEY).',
+};
 function renderModelList() {
+  document.querySelectorAll('.cap-tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.cap === sheetCap)));
   const q = el.search.value.trim().toLowerCase();
   const other = state.mode === 'sxs' ? state.picks[1 - sheetSlot] : null;
-  const items = state.models.filter((m) => !q || m.name.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q));
+  const items = state.models
+    .filter((m) => m.caps.includes(sheetCap))
+    .filter((m) => !q || m.name.toLowerCase().includes(q) || m.maker.toLowerCase().includes(q));
   el.list.innerHTML = items.length
     ? items.map((m) => {
         const selected = m.id === state.picks[sheetSlot];
         return `<li><button type="button" class="model-opt${selected ? ' selected' : ''}${m.id === other ? ' taken' : ''}" data-id="${escapeHtml(m.id)}">
-          ${providerBadge(m.provider)}<span class="name">${escapeHtml(m.name)}</span>
+          ${modelLogo(m)}<span class="name">${escapeHtml(m.name)}</span>
           ${selected ? ICON.check.replace('<svg ', '<svg width="18" height="18" ') : ''}
-          <span class="prov">${escapeHtml(m.provider)}</span></button></li>`;
+          <span class="prov">${escapeHtml(m.maker)}</span></button></li>`;
       }).join('')
-    : '<li class="model-empty">Kein Modell gefunden.</li>';
+    : `<li class="model-empty">${q ? 'Kein Modell gefunden.' : CAP_EMPTY[sheetCap] ?? 'Keine Modelle in dieser Kategorie.'}</li>`;
 }
+
+document.querySelectorAll('.cap-tab').forEach((tab) => tab.addEventListener('click', () => {
+  sheetCap = tab.dataset.cap;
+  renderModelList();
+}));
 
 function openSheet(slot) {
   sheetSlot = slot;
   el.search.value = '';
+  const current = modelById(state.picks[slot]);
+  sheetCap = current?.caps.includes('text') || !current ? 'text' : current.caps[0];
   renderModelList();
   el.sheet.hidden = false;
   requestAnimationFrame(() => (matchMedia('(pointer: fine)').matches ? el.search : $('.model-opt.selected', el.list) ?? el.search)?.focus());

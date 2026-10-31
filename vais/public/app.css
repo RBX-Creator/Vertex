@@ -375,10 +375,20 @@ body { overflow: hidden; }
 .model-chip { max-width: 150px; }
 .model-chip .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 
-.pav {
-  width: 20px;
-  height: 20px;
+.logo {
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
+  object-fit: contain;
+}
+.logo.mono {
+  background: currentColor;
+  -webkit-mask: var(--icon) center / contain no-repeat;
+  mask: var(--icon) center / contain no-repeat;
+}
+.ctrl .logo { width: 20px; height: 20px; }
+
+.pav {
   border-radius: 6px;
   display: grid;
   place-items: center;
@@ -451,6 +461,21 @@ body { overflow: hidden; }
   animation: slide-up .28s cubic-bezier(.2, .8, .2, 1);
 }
 .sheet-grip { width: 64px; height: 5px; border-radius: 3px; background: var(--border-strong); margin: 2px auto 4px; }
+.cap-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.cap-tab {
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+}
+.cap-tab svg { width: 22px; height: 22px; }
+.cap-tab[aria-selected='true'] { background: var(--bg); border-color: var(--border-strong); box-shadow: inset 0 0 0 1px var(--border-strong); }
+@media (prefers-color-scheme: light) { .cap-tab[aria-selected='true'] { background: var(--surface-2); } }
+.cap-tab:focus-visible { outline: 2px solid var(--border-strong); outline-offset: 2px; }
+
 .model-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; overscroll-behavior: contain; }
 .model-opt {
   width: 100%;
