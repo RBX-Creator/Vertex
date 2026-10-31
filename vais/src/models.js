@@ -113,7 +113,7 @@ const LISTERS = {
     return data
       .filter((m) => m.active !== false)
       .filter((m) => !/(whisper|tts|guard|playai|orpheus|distil|safeguard|allam)/i.test(m.id))
-      .map((m) => (/^groq\/compound/.test(m.id)
+      .map((m) => (/(^|\/)compound/i.test(m.id)
         ? makeModel('groq', m.id, m.id.split('/').pop(), 'Groq', ['web'])
         : makeModel('groq', m.id, m.id.split('/').pop(), m.owned_by)));
   },
