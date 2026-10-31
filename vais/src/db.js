@@ -46,7 +46,26 @@ await client.batch([
     voted_at   INTEGER,
     created_at INTEGER NOT NULL
   )`,
+  // Verlauf: eine Zeile pro Nachricht. side = -1 für deine Frage, 0/1 für Antwort A/B
+  `CREATE TABLE IF NOT EXISTS messages (
+    chat_id    TEXT    NOT NULL,
+    turn       INTEGER NOT NULL,
+    side       INTEGER NOT NULL,
+    content    TEXT    NOT NULL,
+    status     TEXT    NOT NULL DEFAULT 'done',
+    error      TEXT,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (chat_id, turn, side)
+  )`,
+  'CREATE INDEX IF NOT EXISTS chats_by_user ON chats (user_id, created_at)',
 ], 'write');
+
+// Spalten, die später dazugekommen sind (bestehende Datenbanken nachrüsten)
+for (const [column, type] of [['title', 'TEXT'], ['updated_at', 'INTEGER']]) {
+  try { await client.execute(`ALTER TABLE chats ADD COLUMN ${column} ${type}`); } catch { /* gibt es schon */ }
+}
+
+export const all = async (sql, ...args) => (await client.execute({ sql, args })).rows;
 
 // Abgelaufene Einträge regelmäßig aufräumen
 const cleanup = async () => {

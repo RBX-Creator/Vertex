@@ -86,6 +86,11 @@ const el = {
   stage: $('#stage'),
   home: $('#home'),
   thread: $('#thread'),
+  board: $('#board'),
+  dock: $('.dock'),
+  drawer: $('#drawer'),
+  dList: $('#d-list'),
+  dSearch: $('#d-search'),
   title: $('#chat-title'),
   newChat: $('#new-chat'),
   form: $('#composer'),
@@ -213,10 +218,14 @@ function labelFor(chat, side) {
   return chat.labels[side];
 }
 
-function showThread(on) {
-  el.home.hidden = on;
-  el.thread.hidden = !on;
-  el.newChat.hidden = !on;
+// Ansicht: 'home' (Start), 'thread' (Chat) oder 'board' (Bestenliste)
+function showView(view) {
+  el.home.hidden = view !== 'home';
+  el.thread.hidden = view !== 'thread';
+  el.board.hidden = view !== 'board';
+  el.dock.hidden = view === 'board';
+  el.newChat.hidden = view === 'home';
+  if (view === 'board') el.title.textContent = '';
 }
 
 function resetChat() {
@@ -227,12 +236,12 @@ function resetChat() {
   el.title.textContent = '';
   el.vote.hidden = true;
   el.voteResult.hidden = true;
-  showThread(false);
+  showView('home');
   renderControls();
   updateSend();
 }
 
-el.newChat.addEventListener('click', () => { resetChat(); el.prompt.focus(); });
+el.newChat.addEventListener('click', () => { go(''); el.prompt.focus(); });
 
 function buildMessages(turnIndex, side) {
   const msgs = [];
@@ -358,7 +367,7 @@ async function runSide(turnIndex, side) {
     const res = await fetch('/api/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId: chat.id, side, messages: buildMessages(turnIndex, side) }),
+      body: JSON.stringify({ chatId: chat.id, side, turn: turnIndex, messages: buildMessages(turnIndex, side) }),
       signal: ctrl.signal,
     });
     if (res.status === 401) location.replace('/login');
@@ -400,6 +409,7 @@ function afterTurn() {
   const chat = state.chat;
   if (!chat || chat.mode === 'direct' || chat.winner) return;
   const last = chat.turns.at(-1);
+  if (!last) return;
   el.vote.hidden = !last.answers.every((a) => a.status === 'done' && a.text);
 }
 
@@ -414,7 +424,7 @@ async function send() {
       const missing = state.picks.slice(0, need).findIndex((id) => !modelById(id));
       if (missing !== -1) return openSheet(missing);
     }
-    const body = { mode: state.mode };
+    const body = { mode: state.mode, title: text.slice(0, 80) };
     if (state.mode === 'sxs') body.models = state.picks.slice(0, 2);
     if (state.mode === 'direct') body.models = [state.picks[0]];
     el.send.disabled = true;
@@ -427,11 +437,14 @@ async function send() {
       el.send.disabled = false;
     }
     el.title.textContent = text.length > 40 ? `${text.slice(0, 40)}…` : text;
-    showThread(true);
+    history.pushState(null, '', `#c/${state.chat.id}`);
+    historyDirty = true;
+    showView('thread');
     renderControls();
   }
 
   const chat = state.chat;
+  historyDirty = true;
   el.prompt.value = '';
   autosize();
   el.vote.hidden = true;
@@ -556,7 +569,8 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (!$('#expand').hidden) $('#expand').hidden = true;
+  if (!el.drawer.hidden) closeDrawer();
+  else if (!$('#expand').hidden) $('#expand').hidden = true;
   else if (!el.sheet.hidden) closeSheet();
   else if (!el.modeMenu.hidden) { toggleModeMenu(false); el.modeBtn.focus(); }
   else toggleAccount(false);
@@ -581,6 +595,181 @@ if (window.visualViewport) {
   fit();
 }
 
+// ── Navigation (#c/<id> = Chat, #bestenliste = Bestenliste) ───────
+function go(hash) {
+  if (location.hash !== hash) history.pushState(null, '', hash || location.pathname);
+  route();
+}
+
+async function route() {
+  const h = location.hash;
+  if (h === '#bestenliste') return showBoard();
+  if (h.startsWith('#c/')) {
+    const id = decodeURIComponent(h.slice(3));
+    if (state.chat?.id === id) return showView('thread');
+    return loadChat(id);
+  }
+  if (state.chat) resetChat();
+  showView('home');
+}
+window.addEventListener('popstate', route);
+
+async function loadChat(id) {
+  for (const c of state.controllers) c.abort();
+  let data;
+  try {
+    const res = await fetch(`/api/chat/${encodeURIComponent(id)}`);
+    if (res.status === 401) return location.replace('/login');
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Chat nicht gefunden.');
+    data = await res.json();
+  } catch (err) {
+    toast(err.message);
+    return go('');
+  }
+  state.chat = {
+    id: data.id,
+    mode: data.mode,
+    labels: data.labels,
+    names: data.mode === 'battle' && data.winner ? data.labels : null,
+    winner: data.winner,
+    turns: data.turns,
+  };
+  state.mode = data.mode;
+  if (data.models?.every((m) => modelById(m))) data.models.forEach((m, i) => { state.picks[i] = m; });
+  el.thread.innerHTML = '';
+  el.vote.hidden = true;
+  el.voteResult.hidden = true;
+  state.chat.turns.forEach((_, i) => renderTurn(i));
+  el.title.textContent = data.title.length > 40 ? `${data.title.slice(0, 40)}…` : data.title;
+  showView('thread');
+  renderControls();
+  updateSend();
+  afterTurn();
+  requestAnimationFrame(() => { el.stage.scrollTop = el.stage.scrollHeight; });
+}
+
+// ── Seitenleiste mit Verlauf ──────────────────────────────────────
+let historyDirty = true;
+let historyItems = [];
+
+function groupLabel(ts) {
+  const day = 24 * 3600 * 1000;
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const t = start.getTime();
+  if (ts >= t) return 'Heute';
+  if (ts >= t - day) return 'Gestern';
+  if (ts >= t - 7 * day) return 'Letzte 7 Tage';
+  if (ts >= t - 30 * day) return 'Letzte 30 Tage';
+  return 'Älter';
+}
+
+function renderHistory() {
+  const q = el.dSearch.value.trim().toLowerCase();
+  const items = historyItems.filter((c) => !q || c.title.toLowerCase().includes(q));
+  if (!items.length) {
+    el.dList.innerHTML = `<p class="drawer-empty">${q ? 'Nichts gefunden.' : 'Noch keine Chats.'}</p>`;
+    return;
+  }
+  let html = '';
+  let last = '';
+  for (const c of items) {
+    const g = groupLabel(c.updated);
+    if (g !== last) { html += `<p class="drawer-group">${g}</p>`; last = g; }
+    const active = state.chat?.id === c.id ? ' active' : '';
+    html += `<div class="drawer-chat${active}">
+      <button class="drawer-chat-open" data-open="${escapeHtml(c.id)}">${ICON[c.mode] ?? ''}<span></span></button>
+      <button class="drawer-chat-del" data-del="${escapeHtml(c.id)}" aria-label="Chat löschen" title="Löschen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
+      </button>
+    </div>`;
+  }
+  el.dList.innerHTML = html;
+  // Titel sicher als Text einsetzen
+  el.dList.querySelectorAll('[data-open] span').forEach((span, i) => { span.textContent = items[i].title; });
+}
+
+async function openDrawer() {
+  el.drawer.hidden = false;
+  $('#open-drawer').setAttribute('aria-expanded', 'true');
+  if (historyDirty || !historyItems.length) {
+    if (!historyItems.length) el.dList.innerHTML = '<p class="drawer-empty">Lädt …</p>';
+    try {
+      const res = await fetch('/api/chat/list');
+      historyItems = (await res.json()).chats ?? [];
+      historyDirty = false;
+    } catch {
+      el.dList.innerHTML = '<p class="drawer-empty">Verlauf konnte nicht geladen werden.</p>';
+      return;
+    }
+  }
+  renderHistory();
+}
+function closeDrawer() {
+  el.drawer.hidden = true;
+  $('#open-drawer').setAttribute('aria-expanded', 'false');
+}
+
+$('#open-drawer').addEventListener('click', openDrawer);
+el.dSearch.addEventListener('input', renderHistory);
+$('#d-new').addEventListener('click', () => { closeDrawer(); go(''); el.prompt.focus(); });
+$('#d-board').addEventListener('click', () => { closeDrawer(); go('#bestenliste'); });
+el.drawer.addEventListener('click', async (e) => {
+  if (e.target.closest('[data-close-drawer]')) return closeDrawer();
+  const open = e.target.closest('[data-open]');
+  if (open) { closeDrawer(); return go(`#c/${open.dataset.open}`); }
+  const del = e.target.closest('[data-del]');
+  if (del) {
+    if (!confirm('Diesen Chat löschen?')) return;
+    const id = del.dataset.del;
+    const res = await fetch(`/api/chat/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!res.ok) return toast('Löschen fehlgeschlagen.');
+    historyItems = historyItems.filter((c) => c.id !== id);
+    renderHistory();
+    if (state.chat?.id === id) go('');
+    toast('Chat gelöscht');
+  }
+});
+
+// ── Bestenliste ───────────────────────────────────────────────────
+async function showBoard() {
+  if (state.chat) resetChat();
+  showView('board');
+  const list = $('#board-list');
+  const sub = $('#board-sub');
+  sub.textContent = 'Lädt …';
+  list.innerHTML = '';
+  try {
+    const res = await fetch('/api/chat/leaderboard');
+    const data = await res.json();
+    if (!data.models?.length) {
+      sub.textContent = 'Noch keine Stimmen. Starte ein Battle, stimme ab, und die Modelle landen hier.';
+      list.innerHTML = '<li class="board-empty"><button class="btn" id="board-start">Battle starten</button></li>';
+      $('#board-start').addEventListener('click', () => {
+        state.mode = 'battle';
+        store.set('vais.mode', 'battle');
+        go('');
+        renderControls();
+        el.prompt.focus();
+      });
+      return;
+    }
+    sub.textContent = `Elo-Wertung aus ${data.totalVotes} ${data.totalVotes === 1 ? 'Stimme' : 'Stimmen'} im Battle-Modus.`;
+    list.innerHTML = data.models.map((m, i) => `
+      <li class="board-row">
+        <span class="b-rank">${i + 1}</span>
+        ${modelLogo(m)}
+        <span class="b-name"><b></b><small></small></span>
+        <span class="b-score"><b>${m.rating}</b><small>${m.votes} ${m.votes === 1 ? 'Stimme' : 'Stimmen'}</small></span>
+      </li>`).join('');
+    list.querySelectorAll('.b-name').forEach((n, i) => {
+      n.querySelector('b').textContent = data.models[i].name;
+      n.querySelector('small').textContent = data.models[i].maker;
+    });
+  } catch {
+    sub.textContent = 'Die Bestenliste konnte nicht geladen werden.';
+  }
+}
+
 // ── Start ─────────────────────────────────────────────────────────
 async function init() {
   const me = await fetch('/api/auth/me');
@@ -589,6 +778,8 @@ async function init() {
   avatar.textContent = user.email[0].toUpperCase();
   avatar.setAttribute('aria-label', `Konto: ${user.email}`);
   $('#menu-email').textContent = user.email;
+  $('#d-avatar').textContent = user.email[0].toUpperCase();
+  $('#d-email').textContent = user.email;
 
   renderControls();
   updateSend();
@@ -604,6 +795,7 @@ async function init() {
   state.picks = [0, 1].map((i) => (modelById(state.picks[i]) ? state.picks[i] : state.models[i]?.id ?? null));
   if (state.picks[0] && state.picks[0] === state.picks[1]) state.picks[1] = state.models.find((m) => m.id !== state.picks[0])?.id ?? null;
   renderControls();
+  route();
 }
 
 init();

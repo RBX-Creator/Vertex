@@ -4,6 +4,8 @@ KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand:
 - **Login** mit E-Mail-Bestätigung
 - **Chat** in drei Modi: **Battle** (2 anonyme Modelle, Namen erst nach der Abstimmung), **Side by Side** (2 Modelle deiner Wahl), **Direkt** (1 Modell)
 - Antworten nebeneinander (PC) bzw. zum Wischen (Handy), Abstimmen mit „A ist besser“, Unentschieden, Beide schlecht, „B ist besser“
+- **Seitenleiste** mit gespeichertem Chat-Verlauf (suchen, öffnen, löschen)
+- **Bestenliste**: Elo-Wertung aus allen Battle-Stimmen (Unentschieden und „beide schlecht“ zählen halb)
 
 Ohne OpenRouter-Schlüssel läuft der Chat im **Demo-Modus** mit Platzhalter-Modellen.
 

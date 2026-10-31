@@ -157,6 +157,18 @@ export async function findModel(id) {
   return (await listModels()).find((m) => m.id === id) ?? null;
 }
 
+// Name, Hersteller und Logo für jede Modell-ID – auch für Modelle, die es nicht mehr gibt
+// (ältere Chats speichern OpenRouter-IDs noch ohne "openrouter:" davor).
+export function modelKey(id) {
+  return id.replace(/^openrouter:/, '').replace(/#search$/, '');
+}
+export async function describeModel(id) {
+  const live = await findModel(id) ?? await findModel(`openrouter:${id}`);
+  if (live) return { name: live.name, maker: live.maker, icon: live.icon };
+  const upstream = modelKey(id).replace(/^(gemini|groq|demo):/, '');
+  return { name: upstream.split('/').pop().replace(/:free$/, ''), ...maker(upstream) };
+}
+
 export async function displayName(id) {
   return (await findModel(id))?.name ?? id.split(/[:/]/).pop().replace(/:free$/, '');
 }

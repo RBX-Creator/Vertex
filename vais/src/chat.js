@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
-import { get, run } from './db.js';
+import { get, run, all } from './db.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
-import { listModels, findModel, streamChat, displayName, demoMode } from './models.js';
+import { listModels, findModel, streamChat, displayName, describeModel, modelKey, demoMode } from './models.js';
 
 const MAX_MESSAGES = 40;          // so viele Nachrichten gehen max. ans Modell
 const MAX_CHARS = 20_000;         // pro Nachricht
@@ -33,7 +33,7 @@ chat.get('/models', wrap(async (req, res) => {
 
 // Neuen Chat anlegen. Im Battle wählt der Server zwei zufällige Modelle und verrät sie erst nach der Abstimmung.
 chat.post('/start', wrap(async (req, res) => {
-  const { mode, models = [] } = req.body ?? {};
+  const { mode, models = [], title } = req.body ?? {};
   let picked;
   if (mode === 'battle') {
     const all = (await listModels()).filter((m) => m.caps.includes('text'));
@@ -52,16 +52,17 @@ chat.post('/start', wrap(async (req, res) => {
   }
 
   const id = randomBytes(12).toString('base64url');
+  const now = Date.now();
   await run(
-    'INSERT INTO chats (id, user_id, mode, model_a, model_b, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-    id, req.user.id, mode, picked[0], picked[1] ?? null, Date.now(),
+    'INSERT INTO chats (id, user_id, mode, model_a, model_b, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    id, req.user.id, mode, picked[0], picked[1] ?? null, String(title ?? '').trim().slice(0, 80) || 'Neuer Chat', now, now,
   );
   res.json({ id, models: mode === 'battle' ? null : await Promise.all(picked.map(displayName)) });
 }));
 
 // Antwort einer Seite (0 = A, 1 = B) als NDJSON-Stream
 chat.post('/stream', wrap(async (req, res) => {
-  const { chatId, side = 0, messages } = req.body ?? {};
+  const { chatId, side = 0, messages, turn } = req.body ?? {};
   const row = await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
   if (!row) throw new HttpError(404, 'Chat nicht gefunden. Starte einen neuen Chat.');
   const model = side === 1 ? row.model_b : row.model_a;
@@ -73,7 +74,17 @@ chat.post('/stream', wrap(async (req, res) => {
     return { role: m.role, content: m.content.slice(0, MAX_CHARS) };
   });
   if (clean.at(-1).role !== 'user') throw new HttpError(400, 'Die letzte Nachricht muss von dir sein.');
+  const turnNo = Number.isInteger(turn) && turn >= 0 && turn < 1000 ? turn : null;
   limit(req.user.id);
+
+  // Verlauf speichern: deine Frage sofort, die Antwort am Ende
+  const save = (s, content, status = 'done', error = null) => (turnNo === null ? null : run(
+    `INSERT INTO messages (chat_id, turn, side, content, status, error, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(chat_id, turn, side) DO UPDATE SET content = excluded.content, status = excluded.status, error = excluded.error`,
+    row.id, turnNo, s, content, status, error, Date.now(),
+  ).catch((e) => console.error('Verlauf speichern fehlgeschlagen:', e.message)));
+  await save(-1, clean.at(-1).content);
+  await run('UPDATE chats SET updated_at = ? WHERE id = ?', Date.now(), row.id);
 
   res.set({
     'Content-Type': 'application/x-ndjson; charset=utf-8',
@@ -85,21 +96,105 @@ chat.post('/stream', wrap(async (req, res) => {
   const controller = new AbortController();
   res.on('close', () => { if (!res.writableFinished) controller.abort(); });
 
+  let text = '';
   try {
     await streamChat({
       model,
       messages: clean,
       signal: controller.signal,
-      onText: (t) => res.write(`${JSON.stringify({ t })}\n`),
+      onText: (t) => { text += t; res.write(`${JSON.stringify({ t })}\n`); },
     });
     res.write(`${JSON.stringify({ done: true })}\n`);
+    await save(side === 1 ? 1 : 0, text, text ? 'done' : 'error', text ? null : 'Das Modell hat keine Antwort geliefert.');
   } catch (err) {
-    if (!controller.signal.aborted) {
+    if (controller.signal.aborted) {
+      await save(side === 1 ? 1 : 0, text, text ? 'done' : 'stopped');
+    } else {
       console.error(`Stream-Fehler (${model}):`, err.message);
-      res.write(`${JSON.stringify({ error: err.message || 'Das Modell konnte nicht antworten.' })}\n`);
+      const message = err.message || 'Das Modell konnte nicht antworten.';
+      res.write(`${JSON.stringify({ error: message })}\n`);
+      await save(side === 1 ? 1 : 0, text, 'error', message);
     }
   }
   res.end();
+}));
+
+// ── Verlauf ───────────────────────────────────────────────────────
+chat.get('/list', wrap(async (req, res) => {
+  const rows = await all(
+    'SELECT id, title, mode, COALESCE(updated_at, created_at) AS updated FROM chats WHERE user_id = ? ORDER BY updated DESC LIMIT 200',
+    req.user.id,
+  );
+  res.json({ chats: rows.map((r) => ({ id: r.id, title: r.title || 'Chat', mode: r.mode, updated: r.updated })) });
+}));
+
+// ── Bestenliste (Elo aus den Battle-Stimmen) ──────────────────────
+let board = { at: 0, data: null };
+chat.get('/leaderboard', wrap(async (req, res) => {
+  if (board.data && Date.now() - board.at < 60_000) return res.json(board.data);
+  const rows = await all("SELECT model_a, model_b, winner FROM chats WHERE mode = 'battle' AND winner IS NOT NULL AND model_b IS NOT NULL ORDER BY voted_at");
+  const stats = new Map();
+  const entry = (id) => {
+    const key = modelKey(id);
+    if (!stats.has(key)) stats.set(key, { id, rating: 1000, votes: 0, wins: 0 });
+    return stats.get(key);
+  };
+  for (const r of rows) {
+    const a = entry(r.model_a);
+    const b = entry(r.model_b);
+    const expectedA = 1 / (1 + 10 ** ((b.rating - a.rating) / 400));
+    const scoreA = r.winner === 'a' ? 1 : r.winner === 'b' ? 0 : 0.5; // Unentschieden & „beide schlecht“ = halbe Punkte
+    a.rating += 32 * (scoreA - expectedA);
+    b.rating -= 32 * (scoreA - expectedA);
+    a.votes++; b.votes++;
+    if (r.winner === 'a') a.wins++;
+    if (r.winner === 'b') b.wins++;
+  }
+  const models = await Promise.all([...stats.values()].map(async (m) => ({
+    ...(await describeModel(m.id)), rating: Math.round(m.rating), votes: m.votes, wins: m.wins,
+  })));
+  models.sort((x, y) => y.rating - x.rating || y.votes - x.votes);
+  board = { at: Date.now(), data: { models, totalVotes: rows.length } };
+  res.json(board.data);
+}));
+
+// Einen gespeicherten Chat laden (Battle-Modelle bleiben geheim, bis abgestimmt wurde)
+chat.get('/:id', wrap(async (req, res) => {
+  const row = await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
+  if (!row) throw new HttpError(404, 'Chat nicht gefunden.');
+  const msgs = await all('SELECT turn, side, content, status, error FROM messages WHERE chat_id = ? ORDER BY turn, side', row.id);
+  const sides = row.mode === 'direct' ? 1 : 2;
+  const turns = [];
+  for (const m of msgs) {
+    turns[m.turn] ??= { user: '', answers: Array.from({ length: sides }, () => ({ text: '', status: 'stopped', error: null })) };
+    if (m.side < 0) turns[m.turn].user = m.content;
+    else if (m.side < sides) turns[m.turn].answers[m.side] = { text: m.content, status: m.status, error: m.error };
+  }
+  const ids = [row.model_a, row.model_b].filter(Boolean);
+  const names = await Promise.all(ids.map(displayName));
+  const reveal = row.mode !== 'battle' || row.winner;
+  res.json({
+    id: row.id,
+    mode: row.mode,
+    title: row.title || 'Chat',
+    winner: row.winner,
+    models: row.mode === 'battle' ? null : ids,
+    labels: reveal ? names : null,
+    turns: turns.filter((t) => t && t.user),
+  });
+}));
+
+chat.delete('/:id', wrap(async (req, res) => {
+  const row = await get('SELECT id FROM chats WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
+  if (!row) throw new HttpError(404, 'Chat nicht gefunden.');
+  await run('DELETE FROM messages WHERE chat_id = ?', row.id);
+  // Battle-Stimmen bleiben für die Bestenliste erhalten, nur der Inhalt wird gelöscht
+  if (row && (await get('SELECT winner FROM chats WHERE id = ?', row.id))?.winner) {
+    await run("UPDATE chats SET user_id = 0, title = NULL WHERE id = ?", row.id);
+  } else {
+    await run('DELETE FROM chats WHERE id = ?', row.id);
+  }
+  res.json({ ok: true });
 }));
 
 // Abstimmen (einmal pro Chat). Gibt die Modellnamen zurück → Auflösung im Battle.
@@ -110,6 +205,7 @@ chat.post('/vote', wrap(async (req, res) => {
   if (!row || !row.model_b) throw new HttpError(404, 'Chat nicht gefunden.');
   if (!row.winner) {
     await run('UPDATE chats SET winner = ?, voted_at = ? WHERE id = ?', winner, Date.now(), row.id);
+    board.at = 0; // Bestenliste neu berechnen
   }
   res.json({ models: [await displayName(row.model_a), await displayName(row.model_b)], winner: row.winner ?? winner });
 }));
