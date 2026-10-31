@@ -61,7 +61,7 @@ await client.batch([
 ], 'write');
 
 // Spalten, die später dazugekommen sind (bestehende Datenbanken nachrüsten)
-for (const [column, type] of [['title', 'TEXT'], ['updated_at', 'INTEGER']]) {
+for (const [column, type] of [['title', 'TEXT'], ['updated_at', 'INTEGER'], ['modality', 'TEXT']]) {
   try { await client.execute(`ALTER TABLE chats ADD COLUMN ${column} ${type}`); } catch { /* gibt es schon */ }
 }
 

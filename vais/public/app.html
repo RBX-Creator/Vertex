@@ -67,6 +67,7 @@
     <div class="dock">
       <div class="dock-inner">
         <div class="mode-menu" id="mode-menu" role="menu" hidden></div>
+        <div class="mode-menu" id="modality-menu" role="menu" hidden></div>
         <section class="suggest" id="suggest" aria-label="Vorschläge">
           <p class="suggest-label">Los geht's</p>
           <div class="suggest-track" id="suggest-track"></div>
@@ -88,6 +89,7 @@
           <div class="composer-bar">
             <div class="controls">
               <button type="button" class="ctrl" id="mode-btn" aria-haspopup="true" aria-expanded="false" aria-controls="mode-menu"></button>
+              <button type="button" class="ctrl" id="modality-btn" aria-haspopup="true" aria-expanded="false" aria-controls="modality-menu"></button>
               <button type="button" class="ctrl model-chip" data-slot="0" hidden></button>
               <button type="button" class="ctrl model-chip" data-slot="1" hidden></button>
             </div>
@@ -161,6 +163,19 @@
         </button>
       </div>
       <div class="modal-body md" id="expand-body"></div>
+    </div>
+  </div>
+
+  <!-- Vorschau für HTML-Code -->
+  <div class="modal" id="preview" hidden>
+    <div class="modal-panel preview-panel" role="dialog" aria-modal="true" aria-label="Vorschau">
+      <div class="modal-head">
+        <span class="card-label">Vorschau</span>
+        <button class="card-btn" data-close aria-label="Schließen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <iframe id="preview-frame" title="Vorschau" sandbox="allow-scripts allow-forms allow-modals allow-popups"></iframe>
     </div>
   </div>
 

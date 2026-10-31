@@ -4,6 +4,7 @@ KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand:
 - **Login** mit E-Mail-Bestätigung
 - **Chat** in drei Modi: **Battle** (2 anonyme Modelle, Namen erst nach der Abstimmung), **Side by Side** (2 Modelle deiner Wahl), **Direkt** (1 Modell)
 - Antworten nebeneinander (PC) bzw. zum Wischen (Handy), Abstimmen mit „A ist besser“, Unentschieden, Beide schlecht, „B ist besser“
+- **Art der Anfrage** (zweites Menü): Auto, Text, Code (mit Vorschau für erstellte Webseiten), Websuche; Bild und Video folgen
 - **Seitenleiste** mit gespeichertem Chat-Verlauf (suchen, öffnen, löschen)
 - **Bestenliste**: Elo-Wertung aus allen Battle-Stimmen (Unentschieden und „beide schlecht“ zählen halb)
 

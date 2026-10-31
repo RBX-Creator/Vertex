@@ -7,6 +7,9 @@ import { listModels, findModel, streamChat, displayName, describeModel, modelKey
 const MAX_MESSAGES = 40;          // so viele Nachrichten gehen max. ans Modell
 const MAX_CHARS = 20_000;         // pro Nachricht
 const WINNERS = new Set(['a', 'b', 'tie', 'bad']);
+// Art der Anfrage → welche Modelle passen
+const MODALITY_CAP = { auto: 'text', text: 'text', code: 'code', web: 'web' };
+const CODE_PROMPT = 'Du bist ein erfahrener Entwickler. Antworte in der Sprache des Nutzers. Wenn eine Webseite, ein Spiel oder eine App gewünscht ist, liefere eine vollständige, lauffähige einzelne HTML-Datei (CSS und JavaScript eingebettet) in genau einem ```html-Codeblock und erkläre danach kurz, was sie macht.';
 
 export const chat = Router();
 
@@ -34,10 +37,11 @@ chat.get('/models', wrap(async (req, res) => {
 // Neuen Chat anlegen. Im Battle wählt der Server zwei zufällige Modelle und verrät sie erst nach der Abstimmung.
 chat.post('/start', wrap(async (req, res) => {
   const { mode, models = [], title } = req.body ?? {};
+  const modality = MODALITY_CAP[req.body?.modality] ? req.body.modality : 'auto';
   let picked;
   if (mode === 'battle') {
-    const all = (await listModels()).filter((m) => m.caps.includes('text'));
-    if (all.length < 2) throw new HttpError(503, 'Gerade sind nicht genug Modelle verfügbar.');
+    const all = (await listModels()).filter((m) => m.caps.includes(MODALITY_CAP[modality]));
+    if (all.length < 2) throw new HttpError(503, modality === 'web' ? 'Für ein Websuche-Battle sind gerade nicht genug Such-Modelle verfügbar.' : 'Gerade sind nicht genug Modelle verfügbar.');
     const i = Math.floor(Math.random() * all.length);
     let j = Math.floor(Math.random() * (all.length - 1));
     if (j >= i) j++;
@@ -54,8 +58,8 @@ chat.post('/start', wrap(async (req, res) => {
   const id = randomBytes(12).toString('base64url');
   const now = Date.now();
   await run(
-    'INSERT INTO chats (id, user_id, mode, model_a, model_b, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    id, req.user.id, mode, picked[0], picked[1] ?? null, String(title ?? '').trim().slice(0, 80) || 'Neuer Chat', now, now,
+    'INSERT INTO chats (id, user_id, mode, modality, model_a, model_b, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    id, req.user.id, mode, modality, picked[0], picked[1] ?? null, String(title ?? '').trim().slice(0, 80) || 'Neuer Chat', now, now,
   );
   res.json({ id, models: mode === 'battle' ? null : await Promise.all(picked.map(displayName)) });
 }));
@@ -100,7 +104,7 @@ chat.post('/stream', wrap(async (req, res) => {
   try {
     await streamChat({
       model,
-      messages: clean,
+      messages: row.modality === 'code' ? [{ role: 'system', content: CODE_PROMPT }, ...clean] : clean,
       signal: controller.signal,
       onText: (t) => { text += t; res.write(`${JSON.stringify({ t })}\n`); },
     });
@@ -178,6 +182,7 @@ chat.get('/:id', wrap(async (req, res) => {
   res.json({
     id: row.id,
     mode: row.mode,
+    modality: row.modality || 'auto',
     title: row.title || 'Chat',
     winner: row.winner,
     models: row.mode === 'battle' ? null : ids,

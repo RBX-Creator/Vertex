@@ -131,6 +131,7 @@ const DEMO_MODELS = [
   { id: 'demo:cirrus', provider: 'demo', upstream: 'cirrus', name: 'cirrus-demo', maker: 'VAIs Demo', icon: null, caps: ['text', 'code'] },
   { id: 'demo:dune', provider: 'demo', upstream: 'dune', name: 'dune-demo', maker: 'VAIs Demo', icon: null, caps: ['text'] },
   { id: 'demo:echo', provider: 'demo', upstream: 'echo', name: 'echo-search-demo', maker: 'VAIs Demo', icon: null, caps: ['web'] },
+  { id: 'demo:fjord', provider: 'demo', upstream: 'fjord', name: 'fjord-search-demo', maker: 'VAIs Demo', icon: null, caps: ['web'] },
 ];
 
 const ORDER = { gemini: 0, groq: 1, openrouter: 2 };
@@ -244,7 +245,10 @@ const sleep = (ms, signal) => new Promise((resolve, reject) => {
 async function demoStream({ name, messages, signal, onText }) {
   const last = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
   const quote = last.length > 120 ? `${last.slice(0, 120)}…` : last;
-  const text = `Hallo! Ich bin **${name}**, ein Platzhalter-Modell.\n\nDu hast geschrieben: „${quote}“\n\nSobald ein API-Schlüssel eingetragen ist, antworten hier echte KI-Modelle.`;
+  const code = messages[0]?.role === 'system';
+  const text = code
+    ? `Hier ist eine kleine Demo-Seite von **${name}**:\n\n\`\`\`html\n<!doctype html>\n<html><body style="font-family:sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#f4f2ee">\n<h1>Hallo von ${name} 👋</h1>\n</body></html>\n\`\`\`\n\nTippe auf **Vorschau**, um sie anzusehen.`
+    : `Hallo! Ich bin **${name}**, ein Platzhalter-Modell.\n\nDu hast geschrieben: „${quote}“\n\nSobald ein API-Schlüssel eingetragen ist, antworten hier echte KI-Modelle.`;
   await sleep(300 + Math.random() * 500, signal);
   for (const piece of text.match(/\S+\s*|\s+/g)) {
     await sleep(18 + Math.random() * 40, signal);

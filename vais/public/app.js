@@ -17,6 +17,25 @@ const ICON = {
   stop: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>',
 };
 
+// Zweites Menü: Art der Anfrage (wie „Modality“ bei Arena), von oben nach unten
+const MODALITIES = {
+  video: { label: 'Video', desc: 'Videos erstellen', soon: true },
+  image: { label: 'Bild', desc: 'Bilder erstellen', soon: true },
+  web: { label: 'Websuche', desc: 'Mit aktuellen Infos aus dem Internet', cap: 'web' },
+  code: { label: 'Code', desc: 'Webseiten und Apps programmieren', cap: 'code' },
+  text: { label: 'Text', desc: 'Chatten mit Text-Modellen', cap: 'text' },
+  auto: { label: 'Auto', desc: 'Wählt automatisch passende Modelle', cap: 'text' },
+};
+Object.assign(ICON, {
+  'm-video': svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="m10 9 5 3-5 3z"/>'),
+  'm-image': svg('<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><circle cx="15.5" cy="8.5" r="1.8"/><path d="m3.5 17 5-5 5 5 2-2 5 5"/>'),
+  'm-web': svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"/>'),
+  'm-code': svg('<path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/>'),
+  'm-text': svg('<path d="M5 5h14M12 5v15M9 20h6"/>'),
+  'm-auto': svg('<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>'),
+  preview: svg('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>'),
+});
+
 const MODES = {
   battle: { label: 'Battle', desc: '2 anonyme Modelle im Vergleich' },
   sxs: { label: 'Side by Side', desc: '2 Modelle deiner Wahl vergleichen' },
@@ -75,12 +94,14 @@ function modelLogo(m) {
 // ── Zustand ───────────────────────────────────────────────────────
 const state = {
   mode: store.get('vais.mode', 'battle'),
+  modality: store.get('vais.modality', 'auto'),
   picks: store.get('vais.picks', [null, null]),
   models: [],
   chat: null, // { id, mode, labels, names, winner, turns: [{ user, answers: [{ text, status, error }] }] }
   controllers: new Set(),
 };
 if (!MODES[state.mode]) state.mode = 'battle';
+if (!MODALITIES[state.modality] || MODALITIES[state.modality].soon) state.modality = 'auto';
 
 const el = {
   stage: $('#stage'),
@@ -97,6 +118,8 @@ const el = {
   prompt: $('#prompt'),
   send: $('#send'),
   modeBtn: $('#mode-btn'),
+  modalityBtn: $('#modality-btn'),
+  modalityMenu: $('#modality-menu'),
   modeMenu: $('#mode-menu'),
   chips: [...document.querySelectorAll('.model-chip')],
   vote: $('#vote'),
@@ -113,6 +136,8 @@ const modelById = (id) => state.models.find((m) => m.id === id);
 function renderControls() {
   el.modeBtn.innerHTML = ICON[state.mode] + ICON.chev;
   el.modeBtn.setAttribute('aria-label', `Modus: ${MODES[state.mode].label}`);
+  el.modalityBtn.innerHTML = ICON[`m-${state.modality}`] + ICON.chev;
+  el.modalityBtn.setAttribute('aria-label', `Art: ${MODALITIES[state.modality].label}`);
   el.chips.forEach((chip, slot) => {
     const show = state.mode === 'sxs' || (state.mode === 'direct' && slot === 0);
     chip.hidden = !show;
@@ -140,7 +165,7 @@ function toggleModeMenu(open = el.modeMenu.hidden) {
   if (open) $('.mode-item[aria-checked="true"]', el.modeMenu)?.focus();
 }
 
-el.modeBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleModeMenu(); });
+el.modeBtn.addEventListener('click', (e) => { e.stopPropagation(); el.modalityMenu.hidden = true; toggleModeMenu(); });
 el.modeMenu.addEventListener('click', (e) => {
   const item = e.target.closest('[data-mode]');
   if (!item) return;
@@ -150,6 +175,49 @@ el.modeMenu.addEventListener('click', (e) => {
   state.mode = mode;
   store.set('vais.mode', mode);
   if (state.chat) { resetChat(); toast(`Neuer Chat: ${MODES[mode].label}`); }
+  renderControls();
+  el.prompt.focus();
+});
+
+// ── Art der Anfrage (Auto, Text, Code, Websuche …) ─────────────────
+const currentCap = () => MODALITIES[state.modality].cap;
+
+function renderModalityMenu() {
+  el.modalityMenu.innerHTML = Object.entries(MODALITIES).map(([key, m]) => `
+    <button type="button" class="mode-item${m.soon ? ' soon' : ''}" role="menuitemradio" aria-checked="${key === state.modality}" aria-disabled="${!!m.soon}" data-modality="${key}">
+      ${ICON[`m-${key}`]}<span><b>${m.label}${m.soon ? ' <em>bald</em>' : ''}</b><small>${m.desc}</small></span>${key === state.modality ? ICON.check.replace('<svg ', '<svg class="check" ') : '<span></span>'}
+    </button>`).join('');
+}
+
+function toggleModalityMenu(open = el.modalityMenu.hidden) {
+  if (open) { renderModalityMenu(); toggleModeMenu(false); }
+  el.modalityMenu.hidden = !open;
+  el.modalityBtn.setAttribute('aria-expanded', String(open));
+  if (open) $('.mode-item[aria-checked="true"]', el.modalityMenu)?.focus();
+}
+
+// Gewählte Modelle passend zur Art machen (z. B. bei „Websuche“ nur Such-Modelle)
+function fitPicks() {
+  const cap = currentCap();
+  const fitting = state.models.filter((m) => m.caps.includes(cap));
+  [0, 1].forEach((slot) => {
+    if (modelById(state.picks[slot])?.caps.includes(cap)) return;
+    state.picks[slot] = fitting.find((m) => m.id !== state.picks[1 - slot])?.id ?? state.picks[slot];
+  });
+}
+
+el.modalityBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleModalityMenu(); });
+el.modalityMenu.addEventListener('click', (e) => {
+  const item = e.target.closest('[data-modality]');
+  if (!item) return;
+  const key = item.dataset.modality;
+  if (MODALITIES[key].soon) return toast(`${MODALITIES[key].label} kommt bald`);
+  toggleModalityMenu(false);
+  if (key === state.modality) return;
+  state.modality = key;
+  store.set('vais.modality', key);
+  fitPicks();
+  if (state.chat) { resetChat(); toast(`Neuer Chat: ${MODALITIES[key].label}`); }
   renderControls();
   el.prompt.focus();
 });
@@ -187,8 +255,7 @@ document.querySelectorAll('.cap-tab').forEach((tab) => tab.addEventListener('cli
 function openSheet(slot) {
   sheetSlot = slot;
   el.search.value = '';
-  const current = modelById(state.picks[slot]);
-  sheetCap = current?.caps.includes('text') || !current ? 'text' : current.caps[0];
+  sheetCap = currentCap();
   renderModelList();
   el.sheet.hidden = false;
   requestAnimationFrame(() => (matchMedia('(pointer: fine)').matches ? el.search : $('.model-opt.selected', el.list) ?? el.search)?.focus());
@@ -321,6 +388,7 @@ function renderTurn(turnIndex) {
               <div class="card-actions">
                 <button class="card-btn" data-act="regen" aria-label="Neu generieren" title="Neu generieren">${ICON.regen}</button>
                 <button class="card-btn" data-act="copy" aria-label="Kopieren" title="Kopieren">${ICON.copy}</button>
+                <button class="card-btn" data-act="preview" aria-label="Vorschau" title="Vorschau" hidden>${ICON.preview}</button>
                 <button class="card-btn" data-act="expand" aria-label="Vollbild" title="Vollbild">${ICON.expand}</button>
               </div>
             </header>
@@ -376,6 +444,7 @@ function updateCard(turnIndex, side) {
   $('[data-act="regen"]', card).disabled = !isLast || a.status === 'streaming';
   $('[data-act="copy"]', card).disabled = !a.text;
   $('[data-act="expand"]', card).disabled = !a.text;
+  $('[data-act="preview"]', card).hidden = !(a.status === 'done' && htmlBlock(a.text));
 
   const body = $('.card-body', card);
   if (a.status === 'error') {
@@ -474,7 +543,7 @@ async function send() {
       const missing = state.picks.slice(0, need).findIndex((id) => !modelById(id));
       if (missing !== -1) return openSheet(missing);
     }
-    const body = { mode: state.mode, title: text.slice(0, 80) };
+    const body = { mode: state.mode, modality: state.modality, title: text.slice(0, 80) };
     if (state.mode === 'sxs') body.models = state.picks.slice(0, 2);
     if (state.mode === 'direct') body.models = [state.picks[0]];
     el.send.disabled = true;
@@ -564,6 +633,12 @@ el.thread.addEventListener('click', async (e) => {
     } catch {
       toast('Kopieren nicht möglich');
     }
+  } else if (act === 'preview') {
+    const code = htmlBlock(a.text);
+    if (!code) return;
+    $('#preview-frame').srcdoc = code;
+    $('#preview').hidden = false;
+    $('#preview [data-close]').focus();
   } else if (act === 'expand') {
     $('#expand-title').textContent = labelFor(state.chat, side);
     $('#expand-body').innerHTML = markdown(a.text);
@@ -576,6 +651,15 @@ el.thread.addEventListener('click', async (e) => {
     await runSide(turnIndex, side);
     if (state.chat === chat) afterTurn();
   }
+});
+
+// Letzten ```html-Codeblock einer Antwort finden (für die Vorschau)
+function htmlBlock(text) {
+  const blocks = [...text.matchAll(/```html[^\n]*\n([\s\S]*?)```/gi)];
+  return blocks.length ? blocks.at(-1)[1] : null;
+}
+$('#preview').addEventListener('click', (e) => {
+  if (e.target.closest('[data-close]')) { $('#preview').hidden = true; $('#preview-frame').srcdoc = ''; }
 });
 
 $('#expand').addEventListener('click', (e) => { if (e.target.closest('[data-close]')) $('#expand').hidden = true; });
@@ -615,11 +699,14 @@ el.form.addEventListener('submit', (e) => {
 // ── Menüs schließen ───────────────────────────────────────────────
 document.addEventListener('click', (e) => {
   if (!el.modeMenu.hidden && !el.modeMenu.contains(e.target)) toggleModeMenu(false);
+  if (!el.modalityMenu.hidden && !el.modalityMenu.contains(e.target)) toggleModalityMenu(false);
   if (!$('#account-menu').hidden && !$('.account').contains(e.target)) toggleAccount(false);
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (!el.drawer.hidden) closeDrawer();
+  if (!$('#preview').hidden) { $('#preview').hidden = true; $('#preview-frame').srcdoc = ''; }
+  else if (!el.modalityMenu.hidden) { toggleModalityMenu(false); el.modalityBtn.focus(); }
+  else if (!el.drawer.hidden) closeDrawer();
   else if (!$('#expand').hidden) $('#expand').hidden = true;
   else if (!el.sheet.hidden) closeSheet();
   else if (!el.modeMenu.hidden) { toggleModeMenu(false); el.modeBtn.focus(); }
@@ -685,6 +772,7 @@ async function loadChat(id) {
     turns: data.turns,
   };
   state.mode = data.mode;
+  if (MODALITIES[data.modality] && !MODALITIES[data.modality].soon) state.modality = data.modality;
   if (data.models?.every((m) => modelById(m))) data.models.forEach((m, i) => { state.picks[i] = m; });
   el.thread.innerHTML = '';
   el.vote.hidden = true;
@@ -844,6 +932,7 @@ async function init() {
   // Gespeicherte Auswahl prüfen, sonst die ersten Modelle nehmen
   state.picks = [0, 1].map((i) => (modelById(state.picks[i]) ? state.picks[i] : state.models[i]?.id ?? null));
   if (state.picks[0] && state.picks[0] === state.picks[1]) state.picks[1] = state.models.find((m) => m.id !== state.picks[0])?.id ?? null;
+  fitPicks();
   renderControls();
   route();
 }
