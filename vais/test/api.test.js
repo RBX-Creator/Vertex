@@ -357,3 +357,29 @@ test('Inkognito-Chats tauchen nirgends auf und verschwinden beim Verlassen', asy
   await c.json('/api/chat/forget', { chatId: start.data.id });
   assert.equal((await c.json(`/api/chat/${start.data.id}`)).status, 404);
 });
+
+test('Team-Chat: nur für Admins und Mods, KI antwortet auf @KI', async () => {
+  const normal = await signUp('nomod@example.com');
+  assert.equal((await normal.json('/api/groups')).status, 404);
+  const mod = await signUp('teammod@example.com');
+  const a = client();
+  await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
+  const mid = (await a.json('/api/admin/users?q=teammod')).data.users[0].id;
+  await a.json('/api/admin/role', { userId: mid, role: 'mod' });
+  const staff = (await a.json('/api/groups/staff')).data.staff;
+  assert.ok(staff.some((s) => s.id === mid));
+  const g = await a.json('/api/groups', { name: 'Team', memberIds: [mid, 999999] });
+  assert.equal(g.status, 200);
+  assert.equal((await mod.json('/api/groups')).data.groups[0].unread, 1); // Willkommens-Nachricht
+  await mod.json(`/api/groups/${g.data.id}/messages`, { text: 'Hallo zusammen' });
+  const r = await a.json(`/api/groups/${g.data.id}/messages`, { text: '@KI fass das kurz zusammen' });
+  assert.equal(r.data.ai, true);
+  let msgs = [];
+  for (let i = 0; i < 20; i++) {
+    msgs = (await a.json(`/api/groups/${g.data.id}/messages?after=0`)).data.messages;
+    if (msgs.filter((m) => m.ai).length >= 2) break;
+    await new Promise((res) => setTimeout(res, 200));
+  }
+  assert.deepEqual(msgs.map((m) => (m.ai ? 'AI' : m.name)), ['AI', 'teammod', 'admin', 'AI']);
+  assert.equal((await normal.json(`/api/groups/${g.data.id}/messages`)).status, 404);
+});

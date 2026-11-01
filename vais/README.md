@@ -39,6 +39,8 @@ KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand:
 - **✨ Nachricht verbessern**, **wischbare Tabellen** auf dem Handy
 - **Rollen**: Admins machen Nutzer zu **Mods** (sperren, Webseiten entfernen, Übersicht – keine Schlüssel/Limits/Einstellungen)
 - **Mitteilungen** vom Admin an alle oder bestimmte Personen (Push + Hinweis in der App, mit „gelesen“-Zähler)
+- **Team-Chat** (nur Admins und Mods): Gruppen, live, die KI antwortet auf **@KI**, Benachrichtigungen bei neuen Nachrichten
+- **Inkognito-Chats** (werden nicht gespeichert, verschwinden beim Verlassen) und **„Was ist neu?“** nach Updates (`public/changelog.js`)
 - **Admin-Seite** (`/admin`, nur für `ADMIN_EMAILS`): Limits und Kosten einstellen, eigenes Limit pro Nutzer, Verbrauch zurücksetzen, API-Schlüssel verwalten, Nutzerzahlen, Fragen pro Tag, beliebte Modelle, Fehlerprotokoll, Nutzer sperren/entsperren, Bestenliste zurücksetzen (rückgängig machbar)
 - **Datenschutz** (`/datenschutz`) und **Impressum** (`/impressum`) mit Betreiber-Angaben aus `OWNER_NAME`, `OWNER_EMAIL`, `IMPRESSUM_ADDRESS`
 - **Bestenliste**: Elo-Wertung aus allen Battle-Stimmen, getrennt nach Alle/Text/Code/Websuche, mit Siegquote (Unentschieden und „beide schlecht“ zählen halb)

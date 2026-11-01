@@ -7,6 +7,7 @@ const { auth, currentUser } = await import('./src/auth.js');
 const { mailConfigured } = await import('./src/mailer.js');
 const { chat, share } = await import('./src/chat.js');
 const { admin } = await import('./src/admin.js');
+const { groups } = await import('./src/groups.js');
 const { serveSite } = await import('./src/sites.js');
 await import('./src/alarm.js');
 const { serveDict } = await import('./src/ui-i18n.js');
@@ -82,6 +83,7 @@ app.use('/api/auth', auth);
 app.use('/api/share', share);
 app.use('/api/chat', chat);
 app.use('/api/admin', admin);
+app.use('/api/groups', groups);
 
 // Seiten: nicht eingeloggte Besucher landen beim Login
 const page = (name) => new URL(`./public/${name}`, import.meta.url).pathname;

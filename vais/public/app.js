@@ -2,6 +2,7 @@ import { t, LANG, LOCALE, LANGUAGES, EXTRA_LANGS, translateDom, setLang, getThem
 import { markdown, enhance } from './render.js';
 import { startTour, tourDone } from './tour.js';
 import { CHANGES, LATEST } from './changelog.js';
+import { openTeam, refreshTeamBadge } from './team.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 translateDom();
@@ -2151,6 +2152,7 @@ function go(hash) {
 
 async function route() {
   const h = location.hash;
+  if (h.startsWith('#g/')) return; // Team-Chat (öffnet sich als eigenes Fenster)
   if (h === '#bestenliste') return showBoard();
   if (h === '#statistik') return showStats();
   if (h.startsWith('#c/')) {
@@ -3016,6 +3018,13 @@ async function init() {
   avatar.textContent = user.email[0].toUpperCase();
   avatar.setAttribute('aria-label', `${t('Konto', 'Account')}: ${user.email}`);
   $('#menu-email').textContent = user.email;
+  const staff = !!(user.admin || user.mod);
+  $('#d-team').hidden = !staff;
+  if (staff) {
+    $('#d-team').addEventListener('click', () => { closeDrawer(); openTeam(null, { toast }); });
+    refreshTeamBadge();
+    if (location.hash.startsWith('#g/')) openTeam(decodeURIComponent(location.hash.slice(3)), { toast });
+  }
   ['#open-admin', '#d-admin', '#set-admin'].forEach((sel) => {
     $(sel).hidden = !(user.admin || user.mod);
     if (user.mod) $(sel).querySelector('span')?.replaceChildren(t('Moderation', 'Moderation'));

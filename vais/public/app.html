@@ -191,6 +191,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="14" width="4" height="6" rx="1"/><rect x="10" y="9" width="4" height="11" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>
         <span data-en="Leaderboard">Bestenliste</span>
       </button>
+      <button class="drawer-item" id="d-team" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c.6-3 3-5 6-5s5.4 2 6 5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14c2.5 0 4.4 1.6 5 4"/></svg>
+        <span data-en="Team chat">Team-Chat</span><i class="team-unread" data-team-unread hidden></i>
+      </button>
       <a class="drawer-item" id="d-admin" href="/admin" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>
         <span data-en="Admin panel">Admin-Bereich</span>
@@ -476,6 +480,38 @@
         </section>
       </div>
     </div>
+  </div>
+
+  <div class="team" id="team" hidden role="dialog" aria-modal="true" aria-labelledby="team-title">
+    <header class="team-head">
+      <button class="round-btn" id="team-back" type="button" hidden aria-label="Zurück" data-en-aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <div class="team-head-text"><h2 id="team-title" data-en="Team chat">Team-Chat</h2><small id="team-sub" data-en="Only for admins and mods">Nur für Admins und Mods</small></div>
+      <button class="round-btn" id="team-members-btn" type="button" hidden aria-label="Mitglieder" data-en-aria-label="Members"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c.6-3 3-5 6-5s5.4 2 6 5"/><path d="M19 8v6M16 11h6"/></svg></button>
+      <button class="round-btn" id="team-close" type="button" aria-label="Schließen" data-en-aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </header>
+    <section data-pane="list" class="team-pane">
+      <button type="button" class="btn team-new" id="team-new" data-en="+ New group">+ Neue Gruppe</button>
+      <ul class="team-list" id="team-list"></ul>
+    </section>
+    <section data-pane="create" class="team-pane" hidden>
+      <form id="team-create" class="team-create">
+        <label class="team-label" for="team-name" data-en="Name">Name</label>
+        <input class="input" id="team-name" maxlength="50" placeholder="z. B. VAIs-Team" data-en-placeholder="e.g. VAIs team">
+        <p class="team-label" data-en="Invite">Einladen</p>
+        <ul class="team-pick" id="team-pick"></ul>
+        <button class="btn" type="submit" data-en="Create group">Gruppe erstellen</button>
+      </form>
+    </section>
+    <section data-pane="chat" class="team-pane team-chat" hidden>
+      <ol class="team-msgs" id="team-msgs"></ol>
+      <p class="team-thinking" id="team-thinking" hidden><span class="gen-dots"></span> <span data-en="VAIs is writing …">VAIs schreibt …</span></p>
+      <form class="team-form" id="team-form">
+        <button type="button" class="team-ki" id="team-ki" title="KI erwähnen" data-en-title="Mention the AI">@KI</button>
+        <textarea class="input" id="team-input" rows="1" maxlength="4000" placeholder="Nachricht an die Gruppe …" data-en-placeholder="Message the group …"></textarea>
+        <button type="submit" class="tr-send" aria-label="Senden" data-en-aria-label="Send">→</button>
+      </form>
+    </section>
+    <section data-pane="members" class="team-pane" hidden><div id="team-members"></div></section>
   </div>
 
   <div class="tr" id="tr" hidden role="dialog" aria-modal="true" aria-labelledby="tr-title">
