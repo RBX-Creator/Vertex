@@ -3,6 +3,12 @@ import { t } from './i18n.js';
 
 export const CHANGES = () => [
   {
+    id: 10, date: '2026-11-01',
+    items: [
+      ['📽️', t('Präsentationen mit Agent X', 'Presentations with Agent X'), t('Sag „Mach mir eine Präsentation über …“ – Agent X recherchiert und baut schöne Folien. Wischen zum Blättern, 📝 für Sprechernotizen, mit 🌐 als Link teilen.', 'Say “Make me a presentation about …” – Agent X researches and builds beautiful slides. Swipe to flip, 📝 for speaker notes, share as a link with 🌐.')],
+    ],
+  },
+  {
     id: 9, date: '2026-11-01',
     items: [
       ['🗣️', t('Bessere Spracherkennung', 'Better speech recognition'), t('Mikrofon und Übersetzer erkennen Sprache jetzt genauer.', 'Microphone and translator now recognise speech more accurately.')],

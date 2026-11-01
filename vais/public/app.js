@@ -5,6 +5,7 @@ import { CHANGES, LATEST } from './changelog.js';
 import { openTeam, refreshTeamBadge } from './team.js';
 import { Listener, canRecord, toText, setAudioSession, hasAudioSession } from './listen.js';
 import { OnlineVoice } from './voice-out.js';
+import { buildDeck, parseSlides } from './deck.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 translateDom();
@@ -718,9 +719,11 @@ function updateCard(turnIndex, side) {
   } else if (part || (codeChat() && a.status === 'streaming')) {
     // Webseite: Code als kompakter Datei-Chip statt riesigem Codeblock, dazu Fortschritt
     const lines = part ? part.code.split('\n').filter((l, i, all) => l || i < all.length - 1).length : 0;
-    const chip = part ? `<button type="button" class="code-chip" data-act="code">${ICON['m-code']}<span>index.html</span><small>${lines} ${t('Zeilen', 'lines')}</small></button>` : '';
+    const chip = !part ? '' : part.slides
+      ? `<button type="button" class="code-chip deck-chip" data-act="preview"><span class="chip-emoji">📽️</span><span>${escapeHtml(part.title)}</span><small>${part.slides} ${t('Folien', 'slides')}</small></button>`
+      : `<button type="button" class="code-chip" data-act="code">${ICON['m-code']}<span>index.html</span><small>${lines} ${t('Zeilen', 'lines')}</small></button>`;
     const gen = a.status === 'streaming'
-      ? `<p class="gen"><span class="gen-dots"></span><span class="shimmer">${part ? t('Baut …', 'Building …') : t('Generiert …', 'Generating …')}</span>${a.startedAt ? ` <small data-since="${a.startedAt}"></small>` : ''}</p>`
+      ? `<p class="gen"><span class="gen-dots"></span><span class="shimmer">${part?.slides ? t('Erstellt Folien …', 'Creating slides …') : part ? t('Baut …', 'Building …') : t('Generiert …', 'Generating …')}</span>${a.startedAt ? ` <small data-since="${a.startedAt}"></small>` : ''}</p>`
       : '';
     const err = a.status === 'error' ? '<p class="card-error"></p>' : '';
     body.innerHTML = `${part?.before.trim() ? markdown(part.before) : (!part && a.text ? markdown(a.text) : '')}${chip}${part?.after.trim() ? markdown(part.after) : ''}${gen}${err}`;
@@ -2144,7 +2147,7 @@ const codeChat = () => state.chat?.modality === 'code';
 // Letzte HTML-Webseite in einer Antwort finden – auch während sie noch geschrieben wird
 function websitePart(text = '') {
   const fence = /^[ \t]*```([\w-]*)[^\n]*$/gm;
-  const isHtml = (lang, code) => lang === 'html' || lang === 'htm' || (!lang && /^\s*<(!doctype|html)/i.test(code));
+  const isHtml = (lang, code) => lang === 'html' || lang === 'htm' || (!lang && /^\s*<(!doctype|html)/i.test(code)) || lang === 'slides';
   let open = null;
   let found = null;
   let m;
@@ -2162,11 +2165,29 @@ function websitePart(text = '') {
     if (isHtml(open.lang, code)) found = { ...open, code, end: text.length, done: false };
   }
   if (!found) return null;
+  if (found.lang === 'slides') {
+    // Präsentation: Folien-Quelltext → fertige Präsentations-Seite
+    const deck = deckFor(found.code);
+    if (!deck) return null;
+    return { before: text.slice(0, found.start), code: deck.html, src: found.code, slides: deck.count, title: deck.title, after: text.slice(found.end), done: found.done };
+  }
   // Nur ganze Seiten zeigen wir als Webseite; kleine Schnipsel nur im Code-Modus
   if (!codeChat() && !/<(!doctype|html|body)/i.test(found.code)) return null;
   return { before: text.slice(0, found.start), code: found.code, after: text.slice(found.end), done: found.done };
 }
 const htmlBlock = (text) => { const p = websitePart(text); return p?.done ? p.code : null; };
+// Präsentation bauen (zwischengespeichert, weil beim Streamen oft neu gezeichnet wird)
+let deckCache = { src: null, deck: null };
+function deckFor(src) {
+  if (deckCache.src === src) return deckCache.deck;
+  let deck = null;
+  try {
+    const parsed = parseSlides(src);
+    if (parsed.slides.length && window.marked?.Marked) deck = { html: buildDeck(src, { Marked: window.marked.Marked }), count: parsed.slides.length, title: parsed.title };
+  } catch { deck = null; }
+  deckCache = { src, deck };
+  return deck;
+}
 
 const BRICKS = '<span class="bricks"><i></i><i></i><i></i><i></i><i></i><i></i></span>';
 
@@ -2186,9 +2207,14 @@ function renderBuild(card, a, part) {
   box.classList.toggle('ready', !!ready);
   const secs = a.buildMs ? ` · ${(a.buildMs / 1000).toFixed(1)} s` : '';
   box.innerHTML = `
-    <span class="build-icon">${ready ? ICON['m-code'] : BRICKS.replace('bricks', 'bricks live')}</span>
-    <span class="build-text"><b>${ready ? t('Webseite fertig', 'Website ready') : t('Baut …', 'Building …')}</b><small>${ready ? `${t('Tippe, um sie anzusehen', 'Tap to view it')}${secs}` : t('Vorschau bald verfügbar', 'Preview available soon')}</small></span>
+    <span class="build-icon">${part?.slides ? '<span class="deck-icon">📽️</span>' : ready ? ICON['m-code'] : BRICKS.replace('bricks', 'bricks live')}</span>
+    <span class="build-text"><b>${part?.slides
+    ? (ready ? t('Präsentation fertig', 'Presentation ready') : t('Erstellt Folien …', 'Creating slides …'))
+    : (ready ? t('Webseite fertig', 'Website ready') : t('Baut …', 'Building …'))}</b><small>${part?.slides
+    ? (ready ? `${t('Tippe zum Präsentieren', 'Tap to present')} · ${part.slides} ${t('Folien', 'slides')}` : `${part.slides} ${t('Folien', 'slides')}`)
+    : (ready ? `${t('Tippe, um sie anzusehen', 'Tap to view it')}${secs}` : t('Vorschau bald verfügbar', 'Preview available soon'))}</small></span>
     ${ready ? ICON.preview : ''}`;
+  box.classList.toggle('deck-build', !!part?.slides);
 }
 
 // Laufende Zeit („Baut … 12.3 s“)
@@ -2266,7 +2292,7 @@ function refreshPreview() {
     $('.bricks', build).classList.toggle('live', working);
   }
   if (pv.tab === 'code') {
-    const code = part?.code ?? '';
+    const code = part?.src ?? part?.code ?? '';
     if (pv.code !== code) {
       const pre = $('pre', codeBox);
       const stick = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
@@ -2290,7 +2316,7 @@ $('#preview-download').addEventListener('click', () => {
   const part = websitePart(previewAnswer()?.text ?? '');
   if (!part?.code) return;
   const url = URL.createObjectURL(new Blob([part.code], { type: 'text/html' }));
-  const link = Object.assign(document.createElement('a'), { href: url, download: 'index.html' });
+  const link = Object.assign(document.createElement('a'), { href: url, download: part.slides ? `${(part.title || 'praesentation').replace(/[^\wäöüß -]/gi, '').trim().replace(/\s+/g, '-').slice(0, 40) || 'praesentation'}.html` : 'index.html' });
   document.body.append(link);
   link.click();
   link.remove();

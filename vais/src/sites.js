@@ -8,6 +8,8 @@ import { t } from './i18n.js';
 import { HttpError, wrap } from './auth.js';
 import { OWNER } from './config.js';
 import { checkText } from './safety.js';
+import { Marked } from 'marked';
+import { buildDeck, parseSlides } from '../public/deck.js';
 
 await run(`CREATE TABLE IF NOT EXISTS sites (
   id TEXT PRIMARY KEY,
@@ -29,9 +31,12 @@ const MAX_HTML = 600_000;
 // Die (letzte) komplette HTML-Seite aus einer Antwort holen
 export function htmlFrom(text = '') {
   let found = null;
-  for (const m of String(text).matchAll(/```(html?|)[^\n]*\n([\s\S]*?)```/gi)) {
+  for (const m of String(text).matchAll(/```(html?|slides|)[^\n]*\n([\s\S]*?)```/gi)) {
     const code = m[2];
-    if (m[1] || /^\s*<(!doctype|html)/i.test(code)) found = code;
+    if (m[1].toLowerCase() === 'slides') {
+      // Präsentation → fertige Seite mit Folien
+      if (parseSlides(code).slides.length) found = buildDeck(code, { Marked });
+    } else if (m[1] || /^\s*<(!doctype|html)/i.test(code)) found = code;
   }
   return found && /<(!doctype|html|body)/i.test(found) ? found.trim() : null;
 }

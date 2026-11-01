@@ -1019,6 +1019,8 @@ body { overflow: hidden; }
 }
 .code-chip svg { width: 18px; height: 18px; }
 .code-chip small { color: var(--muted); font-family: var(--sans); font-size: 13px; }
+.code-chip .chip-emoji { font-size: 17px; line-height: 1; }
+.code-chip span:not(.chip-emoji) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
 /* ── Vorschau-Sheet ────────────────────────────────────── */
 .psheet { position: fixed; inset: 0; z-index: 60; }
@@ -1857,3 +1859,6 @@ body.incognito .composer { border-style: dashed; border-color: var(--border-stro
 .limit-list li .lim-icon { flex: none; display: grid; place-items: center; width: 22px; }
 .limit-list li .lim-text { flex: 1; }
 .voice-tools { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+/* Präsentationen */
+.code-chip.deck-chip { font-family: var(--sans); font-weight: 600; max-width: 100%; }
+.build-icon .deck-icon { font-size: 22px; line-height: 1; }
