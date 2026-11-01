@@ -134,3 +134,17 @@ body.admin { background: var(--bg); color: var(--text); font-family: var(--sans)
 .adm-fb-bar { height: 6px; }
 .adm-fb li small { color: var(--muted); font-size: 12px; }
 a.adm-btn { text-decoration: none; display: inline-flex; align-items: center; }
+.adm-card[hidden] { display: none; }
+.adm-pill.mod { color: var(--series-1); }
+.adm-input.wide { width: 100%; text-align: left; margin-bottom: 8px; font: inherit; }
+textarea.adm-input { resize: vertical; min-height: 80px; line-height: 1.45; }
+.adm-target { display: flex; gap: 16px; flex-wrap: wrap; margin: 4px 0 10px; font-size: 14px; }
+.adm-target label { display: flex; align-items: center; gap: 6px; }
+.adm-pick { margin-bottom: 10px; }
+.adm-picklist { list-style: none; margin: 8px 0 0; padding: 0; max-height: 220px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; }
+.adm-picklist li { padding: 8px 12px; border-top: 1px solid var(--border); font-size: 14px; }
+.adm-picklist li:first-child { border-top: 0; }
+.adm-picklist label { display: flex; align-items: center; gap: 8px; }
+#ann-history { margin-top: 14px; }
+.adm-user-row { flex-wrap: wrap; row-gap: 8px; }
+.adm-user-row .adm-user { flex: 1 1 60%; }

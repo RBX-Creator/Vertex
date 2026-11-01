@@ -51,7 +51,7 @@
       <ol class="adm-events" id="events"></ol>
     </section>
 
-    <section class="adm-card">
+    <section class="adm-card" data-admin-only>
       <h2 data-en="Alarms">Warnungen</h2>
       <label class="adm-switch">
         <span><b data-en="Notify me on my phone">Benachrichtigung aufs Handy</b><small data-en="When a key is full or invalid, a whole provider is full, or many errors happen at once. At most once per hour per warning. Notifications must be allowed in the app settings.">Wenn ein Schlüssel voll oder ungültig ist, ein ganzer Anbieter voll ist oder viele Fehler auf einmal passieren. Höchstens einmal pro Stunde je Warnung. In den App-Einstellungen müssen Benachrichtigungen erlaubt sein.</small></span>
@@ -60,7 +60,7 @@
       <div class="adm-row"><button class="adm-btn" id="alarm-test" type="button" data-en="Send test alarm">Test-Warnung senden</button><a class="adm-btn" href="/status" target="_blank" rel="noopener" data-en="Public status page">Öffentliche Status-Seite</a></div>
     </section>
 
-    <section class="adm-card">
+    <section class="adm-card" data-admin-only>
       <h2 data-en="Youth protection">Jugendschutz</h2>
       <label class="adm-switch">
         <span><b data-en="Check requests">Anfragen prüfen</b><small data-en="A free check model (Llama Guard) blocks violence, hate, sexual content, weapons and self-harm – including image prompts and published websites. For self-harm, help numbers are shown.">Ein kostenloses Prüf-Modell (Llama Guard) blockt Gewalt, Hass, sexuelle Inhalte, Waffen und Selbstverletzung – auch bei Bildern und veröffentlichten Webseiten. Bei Selbstverletzung werden Hilfe-Nummern gezeigt.</small></span>
@@ -68,7 +68,7 @@
       </label>
     </section>
 
-    <section class="adm-card">
+    <section class="adm-card" data-admin-only>
       <h2 data-en="Daily limit &amp; costs">Tageslimit &amp; Kosten</h2>
       <p class="adm-sub" data-en="Every user gets points per day. Each answer costs points – this way enough is left for everyone. Resets at midnight (German time).">Jeder Nutzer bekommt Punkte pro Tag. Jede Antwort kostet Punkte – so bleibt für alle genug übrig. Neu um Mitternacht (deutsche Zeit).</p>
       <form class="adm-form" id="limits-form" novalidate>
@@ -78,7 +78,7 @@
       </form>
     </section>
 
-    <section class="adm-card">
+    <section class="adm-card" data-admin-only>
       <h2 data-en="API keys">API-Schlüssel</h2>
       <p class="adm-sub" data-en="The main key is used first. If it is full, the backup keys take over one after another. If a whole provider is full, a model from another provider answers (marked “⚡ Backup”). Keys are only shown shortened.">Zuerst wird der Haupt-Schlüssel benutzt. Ist er voll, springen die Notfall-Schlüssel der Reihe nach ein. Ist ein ganzer Anbieter voll, antwortet ein Modell von einem anderen Anbieter (markiert mit „⚡ Notfall“). Schlüssel werden nur gekürzt angezeigt.</p>
       <div id="keys"></div>
@@ -88,6 +88,26 @@
         <button class="adm-btn primary" type="submit" data-en="Add">Hinzufügen</button>
       </form>
       <p class="adm-hint" data-en="The key is tested before it is saved.">Der Schlüssel wird vor dem Speichern getestet.</p>
+    </section>
+
+    <section class="adm-card" data-admin-only>
+      <h2 data-en="Send a message">Mitteilung senden</h2>
+      <p class="adm-sub" data-en="Arrives as a notification on the phone (if allowed) and appears in the app the next time it is opened.">Kommt als Benachrichtigung aufs Handy (wenn erlaubt) und erscheint beim nächsten Öffnen in der App.</p>
+      <form class="adm-form" id="ann-form" novalidate>
+        <input class="adm-input wide" id="ann-title" maxlength="80" placeholder="Titel, z. B. Neu bei VAIs 🎉" data-en-placeholder="Title, e.g. New on VAIs 🎉">
+        <textarea class="adm-input wide" id="ann-body" maxlength="1000" rows="3" placeholder="Deine Nachricht …" data-en-placeholder="Your message …"></textarea>
+        <div class="adm-target">
+          <label><input type="radio" name="ann-target" value="all" checked> <span data-en="To everyone">An alle</span></label>
+          <label><input type="radio" name="ann-target" value="users"> <span data-en="To specific people">An bestimmte Personen</span></label>
+        </div>
+        <div class="adm-pick" id="ann-pick" hidden>
+          <input class="adm-search" id="ann-q" type="search" placeholder="E-Mail suchen …" data-en-placeholder="Search email …" autocomplete="off">
+          <ul class="adm-picklist" id="ann-list"></ul>
+          <p class="adm-hint" id="ann-chosen"></p>
+        </div>
+        <button class="adm-btn primary" type="submit" data-en="Send">Senden</button>
+      </form>
+      <ul class="adm-events" id="ann-history"></ul>
     </section>
 
     <section class="adm-card">
@@ -102,7 +122,7 @@
       <ul class="adm-users" id="sites"></ul>
     </section>
 
-    <section class="adm-card">
+    <section class="adm-card" data-admin-only>
       <h2 data-en="Leaderboard">Bestenliste</h2>
       <p class="adm-sub" id="board-state"></p>
       <div class="adm-row">

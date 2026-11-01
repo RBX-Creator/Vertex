@@ -75,6 +75,22 @@ try { await client.execute('ALTER TABLE users ADD COLUMN daily_limit INTEGER'); 
 try { await client.execute('ALTER TABLE users ADD COLUMN instructions TEXT'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE users ADD COLUMN memory_off INTEGER'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE users ADD COLUMN plan_off INTEGER'); } catch { /* gibt es schon */ }
+try { await client.execute('ALTER TABLE users ADD COLUMN role TEXT'); } catch { /* gibt es schon */ }
+
+// Mitteilungen vom Admin an alle oder bestimmte Nutzer
+await client.execute(`CREATE TABLE IF NOT EXISTS announcements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  target TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+)`);
+await client.execute(`CREATE TABLE IF NOT EXISTS announcement_reads (
+  user_id INTEGER NOT NULL,
+  ann_id INTEGER NOT NULL,
+  read_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, ann_id)
+)`);
 
 // Gedächtnis von Agent X: kurze Fakten über den Nutzer
 await client.execute(`CREATE TABLE IF NOT EXISTS memories (

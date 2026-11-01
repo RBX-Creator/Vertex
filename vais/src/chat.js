@@ -623,6 +623,20 @@ chat.post('/unshare', wrap(async (req, res) => {
 }));
 
 // ── Meine Statistik ───────────────────────────────────────────────
+// ── Mitteilungen vom Admin: ungelesene anzeigen ──────────────────
+chat.get('/announcements', wrap(async (req, res) => {
+  const rows = await all(`SELECT a.id, a.title, a.body, a.target, a.created_at FROM announcements a
+    WHERE a.created_at > ? AND NOT EXISTS (SELECT 1 FROM announcement_reads r WHERE r.ann_id = a.id AND r.user_id = ?)
+    ORDER BY a.id LIMIT 20`, Math.max(Number(req.user.created_at) - 7 * 24 * 3600 * 1000, Date.now() - 60 * 24 * 3600 * 1000), req.user.id);
+  const mine = rows.filter((a) => a.target === 'all' || JSON.parse(a.target).includes(Number(req.user.id)));
+  res.json({ announcements: mine.slice(0, 5).map((a) => ({ id: Number(a.id), title: a.title, body: a.body, created: Number(a.created_at) })) });
+}));
+chat.post('/announcements/read', wrap(async (req, res) => {
+  const id = Number(req.body?.id);
+  if (Number.isInteger(id)) await run('INSERT OR IGNORE INTO announcement_reads (user_id, ann_id, read_at) VALUES (?, ?, ?)', req.user.id, id, Date.now());
+  res.json({ ok: true });
+}));
+
 // ── Prompt-Verbesserer (✨): macht aus einer kurzen Frage eine klare, gute Anfrage ──
 chat.post('/improve', wrap(async (req, res) => {
   const text = String(req.body?.text ?? '').trim().slice(0, 4000);

@@ -2928,6 +2928,27 @@ $('#set-delete').addEventListener('submit', async (e) => {
   }
 });
 
+// ── Mitteilungen vom Admin (einmal anzeigen, dann als gelesen merken) ──
+async function showAnnouncements() {
+  let list = [];
+  try {
+    const res = await fetch('/api/chat/announcements');
+    if (!res.ok) return;
+    list = (await res.json()).announcements ?? [];
+  } catch { return; }
+  const sheet = $('#ann-sheet');
+  const next = () => {
+    const a = list.shift();
+    if (!a) { sheet.hidden = true; return; }
+    $('#ann-title').textContent = a.title;
+    $('#ann-body').textContent = a.body;
+    $('#ann-date').textContent = new Date(a.created).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+    sheet.hidden = false;
+    $('#ann-ok').onclick = () => { post('/api/chat/announcements/read', { id: a.id }).catch(() => {}); next(); };
+  };
+  next();
+}
+
 // ── Start ─────────────────────────────────────────────────────────
 async function init() {
   let user;
@@ -2947,7 +2968,11 @@ async function init() {
   avatar.textContent = user.email[0].toUpperCase();
   avatar.setAttribute('aria-label', `${t('Konto', 'Account')}: ${user.email}`);
   $('#menu-email').textContent = user.email;
-  ['#open-admin', '#d-admin', '#set-admin'].forEach((sel) => { $(sel).hidden = !user.admin; });
+  ['#open-admin', '#d-admin', '#set-admin'].forEach((sel) => {
+    $(sel).hidden = !(user.admin || user.mod);
+    if (user.mod) $(sel).querySelector('span')?.replaceChildren(t('Moderation', 'Moderation'));
+  });
+  if (user.mod && $('#set-admin')) $('#set-admin').textContent = t('Moderation öffnen', 'Open moderation');
   $('#d-avatar').textContent = user.email[0].toUpperCase();
   $('#d-email').textContent = user.email;
   $('#set-email').textContent = user.email;
@@ -2974,6 +2999,7 @@ async function init() {
   renderControls();
   await route();
   if (!tourDone() && !offline && !location.hash) setTimeout(startTour, 500);
+  else if (!offline) setTimeout(showAnnouncements, 800);
 }
 
 $('#set-tour').addEventListener('click', () => {

@@ -78,11 +78,17 @@ function boardState(resetAt) {
   $('#undo-board').hidden = !resetAt;
 }
 
+let role = 'admin';
+let annLoaded = false;
 async function load() {
   $('#refresh').classList.add('spin');
   try {
     const d = await api('overview');
     $('#demo').hidden = !d.demo;
+    role = d.role;
+    document.querySelectorAll('[data-admin-only]').forEach((el) => { el.hidden = role !== 'admin'; });
+    $('.adm-badge').textContent = role === 'admin' ? 'Admin' : 'Mod';
+    if (role === 'admin' && !annLoaded) { annLoaded = true; loadAnnHistory(); }
     tiles(d.counts);
     perDay(d.perDay);
     models(d.models, d.modes);
@@ -119,12 +125,13 @@ async function loadUsers() {
         <div class="adm-user-row">
           <span class="adm-user"><b>${esc(u.email)}</b>
             <small>${t('seit', 'since')} ${new Date(u.created).toLocaleDateString(LOCALE)} · ${num(u.chats)} Chats${u.lastActive ? ` · ${t('aktiv', 'active')} ${when(u.lastActive)}` : ''}${u.verified ? '' : ` · ${t('nicht bestätigt', 'not verified')}`}</small></span>
-          ${u.admin ? '<span class="adm-pill">Admin</span>' : `<button class="adm-btn small${u.blocked ? '' : ' danger'}" data-block="${u.id}" data-to="${u.blocked ? '0' : '1'}" data-email="${esc(u.email)}">${u.blocked ? t('Entsperren', 'Unblock') : t('Sperren', 'Block')}</button>`}
+          ${u.mod ? '<span class="adm-pill mod">Mod</span>' : ''}
+          ${u.admin ? '<span class="adm-pill">Admin</span>' : `${role === 'admin' ? `<button class="adm-btn small" data-role="${u.id}" data-to="${u.mod ? '' : 'mod'}" data-email="${esc(u.email)}">${u.mod ? t('Mod entziehen', 'Remove mod') : t('Zum Mod machen', 'Make mod')}</button>` : ''}${u.mod && role !== 'admin' ? '' : `<button class="adm-btn small${u.blocked ? '' : ' danger'}" data-block="${u.id}" data-to="${u.blocked ? '0' : '1'}" data-email="${esc(u.email)}">${u.blocked ? t('Entsperren', 'Unblock') : t('Sperren', 'Block')}</button>`}`}
         </div>
         <div class="adm-use">
           <span class="adm-bar${u.percent >= 100 ? ' full' : ''}"><i style="width:${u.limit === null ? 0 : u.percent}%"></i></span>
           <span class="adm-use-text">${u.limit === null ? '∞' : `${u.percent} %`} · ${esc(limitText)}</span>
-          ${u.admin ? '' : `<button class="adm-link" data-edit="${u.id}" data-custom="${u.custom ?? ''}">${t('Limit', 'Limit')}</button>`}
+          ${u.admin || role !== 'admin' ? '' : `<button class="adm-link" data-edit="${u.id}" data-custom="${u.custom ?? ''}">${t('Limit', 'Limit')}</button>`}
           ${u.used ? `<button class="adm-link" data-reset="${u.id}">${t('Auf 0 %', 'Reset')}</button>` : ''}
         </div>
       </li>`;
@@ -135,6 +142,13 @@ async function loadUsers() {
 }
 $('#user-q').addEventListener('input', () => { clearTimeout(qTimer); qTimer = setTimeout(loadUsers, 250); });
 $('#users').addEventListener('click', async (e) => {
+  const roleBtn = e.target.closest('[data-role]');
+  if (roleBtn) {
+    const make = roleBtn.dataset.to === 'mod';
+    if (!confirm(make ? t(`${roleBtn.dataset.email} zum Moderator machen? Mods können Nutzer sperren, Webseiten entfernen und die Übersicht sehen – aber keine Schlüssel, Limits oder Einstellungen ändern.`, `Make ${roleBtn.dataset.email} a moderator? Mods can block users, remove websites and see the overview – but cannot change keys, limits or settings.`) : t(`${roleBtn.dataset.email} die Mod-Rolle entziehen?`, `Remove the mod role from ${roleBtn.dataset.email}?`))) return;
+    try { await api('role', { userId: Number(roleBtn.dataset.role), role: make ? 'mod' : null }); toast(make ? t('Ist jetzt Mod ✓', 'Is now a mod ✓') : t('Mod-Rolle entzogen.', 'Mod role removed.')); loadUsers(); } catch (err) { toast(err.message); }
+    return;
+  }
   const edit = e.target.closest('[data-edit]');
   if (edit) return openLimitEditor(edit);
   const reset = e.target.closest('[data-reset]');
@@ -266,6 +280,54 @@ $('#keys').addEventListener('click', async (e) => {
   try { renderKeys((await api('keys/remove', { provider: btn.dataset.provider, id: btn.dataset.rmKey })).providers); toast(t('Entfernt.', 'Removed.')); } catch (err) { toast(err.message); }
 });
 
+// ── Mitteilungen ─────────────────────────────────────────────────
+const chosen = new Map(); // id → E-Mail
+function paintChosen() {
+  $('#ann-chosen').textContent = chosen.size ? `${t('Ausgewählt', 'Selected')}: ${[...chosen.values()].join(', ')}` : t('Noch niemand ausgewählt.', 'Nobody selected yet.');
+}
+async function loadPick() {
+  try {
+    const { users } = await api(`users?q=${encodeURIComponent($('#ann-q').value.trim())}`);
+    $('#ann-list').innerHTML = users.map((u) => `<li><label><input type="checkbox" data-pick="${u.id}" data-email="${esc(u.email)}"${chosen.has(u.id) ? ' checked' : ''}> <span>${esc(u.email)}</span></label></li>`).join('') || `<li class="adm-empty">${t('Niemand gefunden.', 'Nobody found.')}</li>`;
+  } catch (err) { toast(err.message); }
+}
+document.querySelectorAll('input[name="ann-target"]').forEach((r) => r.addEventListener('change', () => {
+  const some = document.querySelector('input[name="ann-target"]:checked').value === 'users';
+  $('#ann-pick').hidden = !some;
+  if (some) { loadPick(); paintChosen(); }
+}));
+let pickTimer;
+$('#ann-q').addEventListener('input', () => { clearTimeout(pickTimer); pickTimer = setTimeout(loadPick, 250); });
+$('#ann-list').addEventListener('change', (e) => {
+  const box = e.target.closest('[data-pick]');
+  if (!box) return;
+  if (box.checked) chosen.set(Number(box.dataset.pick), box.dataset.email); else chosen.delete(Number(box.dataset.pick));
+  paintChosen();
+});
+$('#ann-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const target = document.querySelector('input[name="ann-target"]:checked').value;
+  const title = $('#ann-title').value.trim();
+  const body = $('#ann-body').value.trim();
+  if (!title || !body) return toast(t('Bitte Titel und Text ausfüllen.', 'Please fill in title and text.'));
+  const who = target === 'all' ? t('alle Nutzer', 'all users') : t(`${chosen.size} Personen`, `${chosen.size} people`);
+  if (!confirm(t(`Mitteilung an ${who} senden?`, `Send message to ${who}?`))) return;
+  const btn = e.currentTarget.querySelector('button[type=submit]');
+  btn.disabled = true;
+  try {
+    const d = await api('announce', { title, body, target, userIds: [...chosen.keys()] });
+    toast(t(`Gesendet ✓ – erreicht ${d.reach} Personen, ${d.pushed} Benachrichtigungen`, `Sent ✓ – reaches ${d.reach} people, ${d.pushed} notifications`));
+    $('#ann-title').value = ''; $('#ann-body').value = ''; chosen.clear(); paintChosen();
+    loadAnnHistory(); load();
+  } catch (err) { toast(err.message); } finally { btn.disabled = false; }
+});
+async function loadAnnHistory() {
+  try {
+    const { announcements } = await api('announcements');
+    $('#ann-history').innerHTML = announcements.map((a) => `<li class="admin"><span class="adm-ev-kind">📢</span><span class="adm-ev-text"><b>${esc(a.title)}</b> – ${esc(a.body.slice(0, 80))}${a.body.length > 80 ? '…' : ''}<br><small>${a.all ? t('an alle', 'to everyone') : t(`an ${a.count}`, `to ${a.count}`)} · ${t(`${a.reads} gelesen`, `${a.reads} read`)}</small></span><time>${when(a.created)}</time></li>`).join('');
+  } catch { /* egal */ }
+}
+
 // ── Bewertungen ──────────────────────────────────────────────────
 const REASON_LABEL = {
   wrong: t('falsch', 'wrong'), misunderstood: t('nicht verstanden', 'misunderstood'), long: t('zu lang', 'too long'), short: t('zu kurz', 'too short'),
@@ -299,8 +361,7 @@ async function loadSitesAdmin() {
 $('#sites').addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-rm-site]');
   if (!btn || !confirm(t('Diese Webseite entfernen?', 'Remove this website?'))) return;
-  try { await api('sites/remove', { id: btn.dataset.rmSite }); toast(t('Entfernt.', 'Removed.')); loadSitesAdmin();
-loadFeedback(); } catch (err) { toast(err.message); }
+  try { await api('sites/remove', { id: btn.dataset.rmSite }); toast(t('Entfernt.', 'Removed.')); loadSitesAdmin(); } catch (err) { toast(err.message); }
 });
 
 // ── Bestenliste ──────────────────────────────────────────────────
@@ -311,11 +372,13 @@ $('#reset-board').addEventListener('click', async () => {
 $('#undo-board').addEventListener('click', async () => {
   try { boardState((await api('reset-board', { undo: true })).boardResetAt); toast(t('Alte Stimmen zählen wieder.', 'Old votes count again.')); load(); } catch (err) { toast(err.message); }
 });
-$('#refresh').addEventListener('click', () => { load(); loadUsers(); loadKeys(); });
+$('#refresh').addEventListener('click', () => { load(); loadUsers(); if (role === 'admin') loadKeys(); });
 
 translateDom();
-load();
-loadLimits();
-loadKeys();
-loadUsers();
-loadSitesAdmin();
+// Erst die Rolle kennen (Admin oder Mod), dann den Rest laden
+load().then(() => {
+  loadUsers();
+  loadSitesAdmin();
+  loadFeedback();
+  if (role === 'admin') { loadLimits(); loadKeys(); }
+});

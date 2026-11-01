@@ -3,7 +3,7 @@ import { randomBytes, randomInt, scrypt, timingSafeEqual, createHash } from 'nod
 import { promisify } from 'node:util';
 import { get, run, purgeChats } from './db.js';
 import { t } from './i18n.js';
-import { isAdmin } from './config.js';
+import { isAdmin, isMod } from './config.js';
 import { sendCode } from './mailer.js';
 
 const scryptAsync = promisify(scrypt);
@@ -114,7 +114,7 @@ export async function currentUser(req) {
   const token = readCookie(req);
   if (!token) return null;
   return (await get(`
-    SELECT u.id, u.email, u.created_at FROM sessions s
+    SELECT u.id, u.email, u.created_at, u.role FROM sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.token_hash = ? AND s.expires_at > ? AND (u.blocked IS NULL OR u.blocked = 0)
   `, sha256(token), Date.now())) ?? null;
@@ -122,13 +122,14 @@ export async function currentUser(req) {
 
 // ── Einfaches Rate-Limit pro IP ───────────────────────────────────
 const hits = new Map();
+const AUTH_RATE_LIMIT = Math.max(10, Number(process.env.AUTH_RATE_LIMIT) || 60); // Anfragen pro IP in 10 Minuten
 function rateLimit(req, res, next) {
   const now = Date.now();
   const windowMs = 10 * 60 * 1000;
   const list = (hits.get(req.ip) || []).filter((t) => now - t < windowMs);
   list.push(now);
   hits.set(req.ip, list);
-  if (list.length > 60) return res.status(429).json({ error: t('Zu viele Anfragen. Bitte warte ein paar Minuten.', 'Too many requests. Please wait a few minutes.') });
+  if (list.length > AUTH_RATE_LIMIT) return res.status(429).json({ error: t('Zu viele Anfragen. Bitte warte ein paar Minuten.', 'Too many requests. Please wait a few minutes.') });
   next();
 }
 setInterval(() => {
@@ -291,6 +292,7 @@ auth.post('/delete', wrap(async (req, res) => {
   await run('DELETE FROM push_subs WHERE user_id = ?', me.id).catch(() => {});
   await run('DELETE FROM reminders WHERE user_id = ?', me.id).catch(() => {});
   await run('DELETE FROM sites WHERE user_id = ?', me.id).catch(() => {});
+  await run('DELETE FROM announcement_reads WHERE user_id = ?', me.id).catch(() => {});
   await run('DELETE FROM codes WHERE email = ?', me.email);
   await run('DELETE FROM users WHERE id = ?', me.id);
   res.clearCookie(COOKIE, { path: '/' });
@@ -366,7 +368,7 @@ auth.get('/google/callback', async (req, res) => {
 auth.get('/me', wrap(async (req, res) => {
   const user = await currentUser(req);
   if (!user) return res.status(401).json({ error: t('Nicht angemeldet.', 'Not signed in.') });
-  res.json({ user: { email: user.email, admin: isAdmin(user) || undefined } });
+  res.json({ user: { email: user.email, admin: isAdmin(user) || undefined, mod: isMod(user) || undefined } });
 }));
 
 // Fehler einheitlich als JSON zurückgeben

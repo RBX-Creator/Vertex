@@ -10,3 +10,7 @@ export const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || OWNER.email)
   .split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
 
 export const isAdmin = (user) => !!user && ADMIN_EMAILS.includes(String(user.email).toLowerCase());
+
+// Moderatoren: vom Admin ernannt (Spalte users.role = 'mod')
+export const isMod = (user) => !!user && user.role === 'mod' && !isAdmin(user);
+export const isStaff = (user) => isAdmin(user) || isMod(user);

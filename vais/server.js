@@ -12,7 +12,7 @@ await import('./src/alarm.js');
 const { serveDict } = await import('./src/ui-i18n.js');
 const { statusPage } = await import('./src/status.js');
 const { demoMode, tempImage } = await import('./src/models.js');
-const { OWNER, isAdmin } = await import('./src/config.js');
+const { OWNER, isStaff } = await import('./src/config.js');
 const { readFile } = await import('node:fs/promises');
 
 // Abstürze vermeiden: unerwartete Fehler nur protokollieren
@@ -94,7 +94,7 @@ app.get('/', async (req, res) => {
 app.get('/admin', async (req, res) => {
   const user = await currentUser(req);
   if (!user) return res.redirect('/login');
-  if (!isAdmin(user)) return res.redirect('/');
+  if (!isStaff(user)) return res.redirect('/');
   noCache(res);
   res.sendFile(page('admin.html'));
 });

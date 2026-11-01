@@ -12,7 +12,7 @@ let server;
 let log = '';
 
 before(async () => {
-  const env = { ...process.env, PORT, DATABASE_URL: `file:${join(mkdtempSync(join(tmpdir(), 'vais-api-')), 'api.db')}`, ADMIN_EMAILS: 'admin@example.com' };
+  const env = { ...process.env, PORT, DATABASE_URL: `file:${join(mkdtempSync(join(tmpdir(), 'vais-api-')), 'api.db')}`, ADMIN_EMAILS: 'admin@example.com', AUTH_RATE_LIMIT: '1000' };
   for (const k of ['OPENROUTER_API_KEY', 'GROQ_API_KEY', 'GEMINI_API_KEY', 'CEREBRAS_API_KEY', 'MISTRAL_API_KEY', 'BREVO_API_KEY', 'SMTP_HOST', 'GOOGLE_CLIENT_ID']) delete env[k];
   server = spawn(process.execPath, ['server.js'], { cwd: new URL('..', import.meta.url).pathname, env, stdio: ['ignore', 'pipe', 'pipe'] });
   server.stdout.on('data', (d) => { log += d; });
@@ -306,4 +306,42 @@ test('Admin-Warnung landet im Protokoll', async () => {
   assert.equal((await a.json('/api/admin/alarms/test', {})).status, 200);
   const events = (await a.json('/api/admin/overview')).data.events;
   assert.ok(events.some((e) => e.kind === 'alarm' && /Test-Alarm/.test(e.detail)));
+});
+
+test('Mods: dürfen moderieren, aber keine Admin-Einstellungen', async () => {
+  const friend = await signUp('friend@example.com');
+  const target = await signUp('troll@example.com');
+  const a = client();
+  await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
+  const users = (await a.json('/api/admin/users')).data.users;
+  const fid = users.find((u) => u.email === 'friend@example.com').id;
+  const tid = users.find((u) => u.email === 'troll@example.com').id;
+  assert.equal((await a.json('/api/admin/role', { userId: fid, role: 'mod' })).status, 200);
+  assert.equal((await friend.json('/api/auth/me')).data.user.mod, true);
+  assert.equal((await friend.json('/api/admin/overview')).data.role, 'mod');
+  assert.equal((await friend.json('/api/admin/limits', { limits: { daily: 5 } })).status, 403);
+  assert.equal((await friend.json('/api/admin/keys')).status, 403);
+  assert.equal((await friend.json('/api/admin/announce', { title: 'x', body: 'y' })).status, 403);
+  assert.equal((await friend.json('/api/admin/block', { userId: tid, blocked: true })).status, 200);
+  assert.equal((await target.json('/api/chat/list')).status, 401);
+  await a.json('/api/admin/block', { userId: tid, blocked: false });
+  assert.equal((await a.json('/api/admin/role', { userId: fid, role: null })).status, 200);
+  assert.equal((await friend.json('/api/admin/overview')).status, 404);
+});
+
+test('Mitteilungen erreichen alle bzw. nur ausgewählte Personen', async () => {
+  const one = await signUp('ann1@example.com');
+  const two = await signUp('ann2@example.com');
+  const a = client();
+  await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
+  assert.equal((await a.json('/api/admin/announce', { title: 'Hallo alle', body: 'Neues Update!' })).status, 200);
+  const users = (await a.json('/api/admin/users?q=ann1')).data.users;
+  assert.equal((await a.json('/api/admin/announce', { title: 'Nur für dich', body: 'Psst', target: 'users', userIds: [users[0].id] })).status, 200);
+  const l1 = (await one.json('/api/chat/announcements')).data.announcements.map((x) => x.title);
+  const l2 = (await two.json('/api/chat/announcements')).data.announcements.map((x) => x.title);
+  assert.deepEqual(l1, ['Hallo alle', 'Nur für dich']);
+  assert.deepEqual(l2, ['Hallo alle']);
+  const first = (await one.json('/api/chat/announcements')).data.announcements[0];
+  await one.json('/api/chat/announcements/read', { id: first.id });
+  assert.deepEqual((await one.json('/api/chat/announcements')).data.announcements.map((x) => x.title), ['Nur für dich']);
 });
