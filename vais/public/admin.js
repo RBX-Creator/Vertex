@@ -1,5 +1,6 @@
 // Admin-Seite von VAIs
 import { t, LOCALE, translateDom } from './i18n.js';
+import { renderChart } from './render.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -37,20 +38,80 @@ function tiles(c) {
     <div class="adm-tile${warn ? ' warn' : ''}"><span class="adm-tile-label">${esc(label)}</span><b>${num(value)}</b><small>${esc(sub)}</small></div>`).join('');
 }
 
-function perDay(rows) {
-  const max = Math.max(1, ...rows.map((r) => r.n));
-  $('#per-day').innerHTML = rows.map((r, i) => {
-    const d = new Date(`${r.day}T12:00:00`);
-    const label = d.toLocaleDateString(LOCALE, { weekday: 'short', day: 'numeric', month: 'numeric' });
-    const show = i === rows.length - 1 || r.n === max;
-    return `<div class="adm-col" tabindex="0" aria-label="${esc(label)}: ${r.n}">
-      <span class="adm-col-val"${show && r.n ? '' : ' hidden'}>${num(r.n)}</span>
-      <span class="adm-col-bar" style="height:${Math.max(r.n ? 3 : 0, (r.n / max) * 100)}%"></span>
-      <span class="adm-tip">${esc(label)}: <b>${num(r.n)}</b></span>
-      <small>${i % 2 === rows.length % 2 ? '' : d.getDate()}</small>
-    </div>`;
+// ── Dashboard: Verlauf, Tageszeit, Modi ─────────────────────────────
+const METRICS = [
+  ['questions', () => t('Fragen', 'Questions')],
+  ['active', () => t('Aktive Nutzer', 'Active users')],
+  ['newUsers', () => t('Neue Nutzer', 'New users')],
+  ['errors', () => t('Fehler', 'Errors')],
+];
+const dash = { days: 30, metric: 'questions', data: null };
+const shortDay = (key) => new Date(`${key}T12:00:00`).toLocaleDateString(LOCALE, { day: 'numeric', month: 'numeric' });
+function drawHistory() {
+  const d = dash.data;
+  if (!d) return;
+  $('#metrics').innerHTML = METRICS.map(([key, label]) => {
+    const total = key === 'active' ? d.totals.active : d.totals[key];
+    return `<button type="button" class="adm-metric${key === 'errors' && total ? ' warn' : ''}" data-metric="${key}" aria-pressed="${dash.metric === key}"><small>${esc(label())}</small><b>${num(total)}</b></button>`;
   }).join('');
+  const label = METRICS.find(([k]) => k === dash.metric)[1]();
+  const fig = renderChart({
+    type: d.days <= 7 ? 'bar' : 'line',
+    maxLabels: 120,
+    integer: true,
+    labels: d.perDay.map((r) => shortDay(r.day)),
+    series: dash.metric === 'errors'
+      ? [{ name: t('Fehler', 'Errors'), data: d.perDay.map((r) => r.errors) }, { name: t('Ersatz-Modelle', 'Fallbacks'), data: d.perDay.map((r) => r.fallbacks) }, { name: t('Geblockt', 'Blocked'), data: d.perDay.map((r) => r.blocked) }]
+      : [{ name: label, data: d.perDay.map((r) => r[dash.metric]) }],
+  });
+  $('#history-chart').replaceChildren(...(fig ? [fig] : []));
+  const hours = renderChart({ type: 'bar', integer: true, labels: d.hours.map((_, h) => `${h}`), series: [{ name: t('Fragen', 'Questions'), data: d.hours }] });
+  $('#hours-chart').replaceChildren(...(hours ? [hours] : []));
+  const peak = d.hours.indexOf(Math.max(...d.hours));
+  $('#hours-sub').textContent = d.totals.questions
+    ? t(`Am meisten los um ${peak} Uhr (deutsche Zeit, letzte ${d.days} Tage)`, `Busiest at ${peak}:00 (German time, last ${d.days} days)`)
+    : t('Noch keine Fragen in diesem Zeitraum.', 'No questions in this period yet.');
+  const pie = d.modes.length ? renderChart({ type: 'pie', title: t('Modi', 'Modes'), labels: d.modes.map((m) => MODE[m.mode] ?? m.mode), series: [{ name: t('Chats', 'Chats'), data: d.modes.map((m) => m.n) }] }) : null;
+  if (pie) pie.classList.add('adm-pie');
+  $('#modes').replaceChildren(...(pie ? [pie] : []));
 }
+async function loadStats() {
+  try {
+    dash.data = await api(`stats?days=${dash.days}`);
+    drawHistory();
+  } catch (err) { toast(err.message); }
+}
+$('#range').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-days]');
+  if (!b) return;
+  dash.days = Number(b.dataset.days);
+  document.querySelectorAll('#range [data-days]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  loadStats();
+});
+$('#metrics').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-metric]');
+  if (!b) return;
+  dash.metric = b.dataset.metric;
+  drawHistory();
+});
+
+// ── Wartungsmodus ──────────────────────────────────────────────────
+function paintMaint(m) {
+  $('#maint-on').checked = !!m.on;
+  if (document.activeElement !== $('#maint-msg')) $('#maint-msg').value = m.message || '';
+  $('#maint-state').textContent = m.on
+    ? t(`🛠️ An seit ${when(m.since)} – nur Admins und Mods können chatten.`, `🛠️ On since ${when(m.since)} – only admins and mods can chat.`)
+    : t('Aus – alle können VAIs normal nutzen.', 'Off – everyone can use VAIs normally.');
+}
+async function saveMaint(on) {
+  try {
+    paintMaint(await api('maintenance', { on, message: $('#maint-msg').value }));
+    toast(on ? t('Wartungsmodus ist an.', 'Maintenance mode is on.') : t('Wartungsmodus ist aus.', 'Maintenance mode is off.'));
+    load();
+  } catch (err) { toast(err.message); $('#maint-on').checked = !on; }
+}
+$('#maint-on').addEventListener('change', (e) => saveMaint(e.target.checked));
+$('#maint-save').addEventListener('click', () => saveMaint($('#maint-on').checked));
 
 function models(list, modes) {
   const max = Math.max(1, ...list.map((m) => m.n));
@@ -58,7 +119,6 @@ function models(list, modes) {
     <li><span class="adm-bar-name">${esc(m.name || m.id)}<small>${esc(m.maker || '')}</small></span>
       <span class="adm-bar"><i style="width:${(m.n / max) * 100}%"></i></span><b>${num(m.n)}</b></li>`).join('')
     : `<li class="adm-empty">${t('Noch keine Antworten.', 'No answers yet.')}</li>`;
-  $('#modes').textContent = modes.length ? `${t('Modi', 'Modes')}: ${modes.map((m) => `${MODE[m.mode] ?? m.mode} ${num(m.n)}`).join(' · ')}` : '';
 }
 
 function events(list, busy) {
@@ -90,8 +150,9 @@ async function load() {
     $('.adm-badge').textContent = role === 'admin' ? 'Admin' : 'Mod';
     if (role === 'admin' && !annLoaded) { annLoaded = true; loadAnnHistory(); }
     tiles(d.counts);
-    perDay(d.perDay);
     models(d.models, d.modes);
+    loadStats();
+    if (role === 'admin') api('maintenance').then(paintMaint).catch(() => {});
     events(d.events, d.busy);
     boardState(d.boardResetAt);
     $('#safety-on').checked = d.safety !== false;

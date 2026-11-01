@@ -88,6 +88,21 @@ const store = {
   get(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
   set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* egal */ } },
 };
+// ── Wartungsmodus: Hinweis oben (der Admin schaltet ihn im Admin-Bereich ein) ──
+async function checkMaintenance() {
+  try {
+    const r = await fetch('/api/chat/maintenance');
+    if (!r.ok) return;
+    const m = await r.json();
+    $('#maint-text').textContent = m.on
+      ? (m.staff ? t(`Wartungsmodus ist an – nur Admins und Mods können gerade chatten. (${m.message})`, `Maintenance mode is on – only admins and mods can chat right now. (${m.message})`) : m.message)
+      : '';
+    $('#maint-banner').hidden = !m.on;
+  } catch { /* offline */ }
+}
+setTimeout(checkMaintenance, 600);
+setInterval(() => { if (document.visibilityState === 'visible') checkMaintenance(); }, 90_000);
+
 // ── Offline: letzte Chats auf dem Gerät, damit man sie ohne Internet lesen kann ──
 const OFFLINE_KEY = 'vais_offline_v1';
 const OFFLINE_CHATS = 25;

@@ -27,16 +27,29 @@
     <section class="adm-tiles" id="tiles" aria-label="Kennzahlen" data-en-aria-label="Key figures"></section>
 
     <section class="adm-card">
-      <h2 data-en="Questions per day">Fragen pro Tag</h2>
-      <p class="adm-sub" data-en="Last 14 days">Letzte 14 Tage</p>
-      <div class="adm-cols" id="per-day"></div>
+      <div class="adm-card-head">
+        <h2 data-en="History">Verlauf</h2>
+        <div class="adm-seg" id="range" role="group" aria-label="Zeitraum" data-en-aria-label="Period">
+          <button type="button" data-days="7" data-en="7 d">7 T</button>
+          <button type="button" data-days="30" aria-pressed="true" data-en="30 d">30 T</button>
+          <button type="button" data-days="90" data-en="90 d">90 T</button>
+        </div>
+      </div>
+      <div class="adm-metrics" id="metrics" role="group" aria-label="Kennzahl" data-en-aria-label="Metric"></div>
+      <div id="history-chart"></div>
+    </section>
+
+    <section class="adm-card">
+      <h2 data-en="Time of day">Tageszeit</h2>
+      <p class="adm-sub" id="hours-sub" data-en="When questions are asked (German time)">Wann gefragt wird (deutsche Zeit)</p>
+      <div id="hours-chart"></div>
     </section>
 
     <section class="adm-card">
       <h2 data-en="Popular models">Beliebte Modelle</h2>
       <p class="adm-sub" data-en="Answers in the last 30 days">Antworten der letzten 30 Tage</p>
       <ol class="adm-bars" id="models"></ol>
-      <p class="adm-sub adm-modes" id="modes"></p>
+      <div class="adm-modes" id="modes"></div>
     </section>
 
     <section class="adm-card">
@@ -49,6 +62,19 @@
       <h2 data-en="Problems">Probleme</h2>
       <p class="adm-sub" id="busy"></p>
       <ol class="adm-events" id="events"></ol>
+    </section>
+
+    <section class="adm-card" data-admin-only>
+      <h2 data-en="Maintenance mode">Wartungsmodus</h2>
+      <label class="adm-switch">
+        <span><b data-en="Pause VAIs">VAIs pausieren</b><small data-en="Nobody except admins and mods can start chats or generate anything. Everyone sees your message at the top of the app and on the status page. Reading old chats still works.">Niemand außer Admins und Mods kann dann chatten oder etwas erstellen. Alle sehen oben in der App und auf der Status-Seite deinen Hinweis. Alte Chats lesen geht weiter.</small></span>
+        <input type="checkbox" id="maint-on" role="switch">
+      </label>
+      <div class="adm-row">
+        <input class="adm-input adm-grow" id="maint-msg" maxlength="200" placeholder="z. B. Neue Funktionen kommen – gleich wieder da! 🚀" data-en-placeholder="e.g. New features coming – back soon! 🚀">
+        <button class="adm-btn" id="maint-save" type="button" data-en="Save text">Text speichern</button>
+      </div>
+      <p class="adm-sub" id="maint-state"></p>
     </section>
 
     <section class="adm-card" data-admin-only>

@@ -12,6 +12,7 @@ import { clearBoards } from './chat.js';
 import { listAllSites, removeSite } from './sites.js';
 import { safetyOn, setSafety } from './safety.js';
 import { alarmsOn, setAlarms, alarm } from './alarm.js';
+import { maintenance, forgetMaintenance } from './maintenance.js';
 
 export const admin = Router();
 
@@ -83,6 +84,63 @@ admin.get('/overview', wrap(async (req, res) => {
     safety: await safetyOn(),
     alarms: await alarmsOn(),
   });
+}));
+
+// ── Dashboard: Verlauf (pro Tag), Tageszeit, Modi ─────────────────────
+const BERLIN_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' });
+const BERLIN_HOUR = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Berlin', hour: '2-digit', hourCycle: 'h23' });
+admin.get('/stats', wrap(async (req, res) => {
+  const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
+  const now = Date.now();
+  const since = now - (days + 1) * DAY;
+  const keys = Array.from({ length: days }, (_, i) => BERLIN_DAY.format(new Date(now - (days - 1 - i) * DAY)));
+  const rows = Object.fromEntries(keys.map((k) => [k, { day: k, questions: 0, active: new Set(), newUsers: 0, errors: 0, fallbacks: 0, blocked: 0 }]));
+  const [msgs, users, events] = await Promise.all([
+    all('SELECT m.created_at, c.user_id FROM messages m JOIN chats c ON c.id = m.chat_id WHERE m.side = -1 AND m.created_at >= ?', since),
+    all('SELECT created_at FROM users WHERE created_at >= ?', since),
+    all("SELECT kind, created_at FROM events WHERE kind IN ('error', 'fallback', 'blocked') AND created_at >= ?", since),
+  ]);
+  const hours = Array(24).fill(0);
+  const activeAll = new Set();
+  for (const m of msgs) {
+    const at = new Date(Number(m.created_at));
+    const r = rows[BERLIN_DAY.format(at)];
+    if (!r) continue;
+    r.questions++;
+    r.active.add(Number(m.user_id));
+    activeAll.add(Number(m.user_id));
+    hours[Number(BERLIN_HOUR.format(at)) % 24]++;
+  }
+  for (const u of users) { const r = rows[BERLIN_DAY.format(new Date(Number(u.created_at)))]; if (r) r.newUsers++; }
+  for (const e of events) {
+    const r = rows[BERLIN_DAY.format(new Date(Number(e.created_at)))];
+    if (r) r[e.kind === 'error' ? 'errors' : e.kind === 'fallback' ? 'fallbacks' : 'blocked']++;
+  }
+  const modes = await all('SELECT mode, COUNT(*) n FROM chats WHERE created_at >= ? GROUP BY mode ORDER BY n DESC', now - days * DAY);
+  const perDay = keys.map((k) => ({ ...rows[k], active: rows[k].active.size }));
+  res.json({
+    days,
+    perDay,
+    hours,
+    modes: modes.map((m) => ({ mode: m.mode, n: n(m) })),
+    totals: {
+      questions: perDay.reduce((a, r) => a + r.questions, 0),
+      active: activeAll.size,
+      newUsers: perDay.reduce((a, r) => a + r.newUsers, 0),
+      errors: perDay.reduce((a, r) => a + r.errors, 0),
+    },
+  });
+}));
+
+// ── Wartungsmodus: nur Admins und Mods können dann chatten ─────────────
+admin.get('/maintenance', wrap(async (req, res) => res.json(await maintenance())));
+admin.post('/maintenance', adminOnly, wrap(async (req, res) => {
+  const on = !!req.body?.on;
+  const message = String(req.body?.message ?? '').trim().slice(0, 200);
+  await setSetting('maintenance', JSON.stringify({ on, message, since: on ? Date.now() : null }));
+  forgetMaintenance();
+  await logEvent('admin', null, on ? `Wartungsmodus an${message ? `: ${message}` : ''}` : 'Wartungsmodus aus');
+  res.json(await maintenance());
 }));
 
 admin.get('/users', wrap(async (req, res) => {

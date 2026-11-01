@@ -1,4 +1,6 @@
 import express, { Router } from 'express';
+import { maintenance, maintenanceText, blockDuringMaintenance } from './maintenance.js';
+import { isStaff } from './config.js';
 import { randomBytes, createHash } from 'node:crypto';
 import { get, run, all, purgeChats, getSetting, logEvent } from './db.js';
 import { t } from './i18n.js';
@@ -68,6 +70,13 @@ chat.use(wrap(async (req, res, next) => {
   req.user = await currentUser(req);
   if (!req.user) throw new HttpError(401, t('Bitte melde dich erneut an.', 'Please sign in again.'));
   next();
+}));
+
+chat.use(blockDuringMaintenance);
+// Wartungsmodus für die App (Hinweis oben anzeigen)
+chat.get('/maintenance', wrap(async (req, res) => {
+  const m = await maintenance();
+  res.json({ on: !!m.on, message: m.on ? maintenanceText(m) : '', staff: isStaff(req.user) });
 }));
 
 chat.use('/profile', profile);

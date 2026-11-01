@@ -225,7 +225,7 @@ function el(tag, attrs = {}, text) {
   return n;
 }
 export function renderChart(spec) {
-  const labels = Array.isArray(spec?.labels) ? spec.labels.slice(0, 40).map(String) : [];
+  const labels = Array.isArray(spec?.labels) ? spec.labels.slice(0, Math.min(120, Number(spec?.maxLabels) || 40)).map(String) : [];
   let series = Array.isArray(spec?.series) ? spec.series : Array.isArray(spec?.data) ? [{ name: spec.title ?? '', data: spec.data }] : [];
   series = series.slice(0, 8).map((s) => ({ name: String(s?.name ?? ''), data: labels.map((_, i) => Number(s?.data?.[i]) || 0) }));
   if (!labels.length || !series.length) return null;
@@ -276,7 +276,8 @@ export function renderChart(spec) {
     });
   } else {
     const L = 74; const Rm = 12; const T = series.length > 1 ? 52 : 18; const B = 56;
-    const max = niceMax(Math.max(...series.flatMap((s) => s.data), 0));
+    let max = niceMax(Math.max(...series.flatMap((s) => s.data), 0));
+    if (spec.integer) max = Math.max(4, Math.ceil(max / 4) * 4); // Zählwerte: nur ganze Zahlen an der Achse
     const min = Math.min(0, ...series.flatMap((s) => s.data));
     const span = max - min || 1;
     const y = (v) => T + (H - T - B) * (1 - (v - min) / span);

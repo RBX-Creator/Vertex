@@ -1,6 +1,7 @@
 // Öffentliche Status-Seite (/status): Welche Modelle sind gerade frei, welche voll?
 // Zeigt keine Schlüssel und keine Nutzerdaten.
 import { get } from './db.js';
+import { maintenance, maintenanceText } from './maintenance.js';
 import { lang } from './i18n.js';
 import { listModels, demoMode } from './models.js';
 
@@ -28,7 +29,8 @@ async function snapshot() {
   const state = total === 0 ? 'down' : free === 0 ? 'down' : free < total * 0.5 ? 'partial' : 'ok';
   const a = Number(answers?.n ?? 0);
   const e = Number(errors?.n ?? 0);
-  return { state, free, total, demo: demoMode, providers: list, last24h: { answers: a, errors: e, successRate: a + e ? Math.round((a / (a + e)) * 1000) / 10 : 100 }, checkedAt: new Date().toISOString() };
+  const m = await maintenance();
+  return { state: m.on ? 'maintenance' : state, maintenance: m.on ? maintenanceText(m) : null, free, total, demo: demoMode, providers: list, last24h: { answers: a, errors: e, successRate: a + e ? Math.round((a / (a + e)) * 1000) / 10 : 100 }, checkedAt: new Date().toISOString() };
 }
 
 export async function statusPage(req, res) {
@@ -41,6 +43,7 @@ export async function statusPage(req, res) {
     ok: ['✓', T('Alles läuft', 'All systems running')],
     partial: ['!', T('Einige Modelle sind gerade voll', 'Some models are busy right now')],
     down: ['✕', T('Gerade sind alle Modelle voll', 'All models are busy right now')],
+    maintenance: ['🛠', T('Wartung', 'Maintenance')],
   }[data.state];
   const time = new Date().toLocaleTimeString(en ? 'en-US' : 'de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
   const html = `<!doctype html>
@@ -60,9 +63,9 @@ export async function statusPage(req, res) {
 <main class="st-main">
   <a class="brand st-brand" href="/" aria-label="VAIs"><span class="st-mark" aria-hidden="true"></span><span>VAIs</span></a>
   <h1>${T('Status', 'Status')}</h1>
-  <section class="st-hero ${data.state}">
+  <section class="st-hero ${data.state === 'maintenance' ? 'partial' : data.state}">
     <span class="st-icon" aria-hidden="true">${head[0]}</span>
-    <div><b>${esc(head[1])}</b><small>${T(`${data.free} von ${data.total} Modellen frei`, `${data.free} of ${data.total} models available`)} · ${T('Stand', 'As of')} ${time}</small></div>
+    <div><b>${esc(head[1])}</b>${data.maintenance ? `<small>${esc(data.maintenance)}</small>` : ''}<small>${T(`${data.free} von ${data.total} Modellen frei`, `${data.free} of ${data.total} models available`)} · ${T('Stand', 'As of')} ${time}</small></div>
   </section>
   ${data.demo ? `<p class="st-note">${T('Demo-Modus: Es sind noch keine KI-Schlüssel eingetragen.', 'Demo mode: no AI keys configured yet.')}</p>` : ''}
   <section class="st-stats">

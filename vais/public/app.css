@@ -1470,6 +1470,8 @@ a.menu-item { color: inherit; text-decoration: none; box-sizing: border-box; }
 }
 .offline-banner[hidden] { display: none; }
 .offline-banner svg { width: 16px; height: 16px; flex: none; }
+.maint-banner { background: color-mix(in oklab, var(--warning, #d9822b) 16%, var(--surface-2)); color: var(--text); border-radius: 14px; text-align: center; line-height: 1.35; }
+.maint-banner[hidden] { display: none; }
 .is-offline .composer { opacity: .6; }
 .is-offline .card-btn[data-act="regen"], .is-offline .turn-user [data-act="edit"], .is-offline .followups { display: none; }
 
