@@ -229,10 +229,13 @@ test('Agent X arbeitet weiter, wenn die Verbindung abbricht – „Stopp“ häl
 test('Webseiten veröffentlichen – abgeschottet vom Rest', async () => {
   const c = await signUp('site@example.com');
   const start = await c.json('/api/chat/start', { mode: 'agent', modality: 'auto', title: 'Seite' });
-  await stream(c, start.data.id, 'Bau mir eine Webseite mit Zähler');
-  const pub = await c.json('/api/chat/sites/publish', { chatId: start.data.id, turn: 0, side: 0 });
+  const plan = await stream(c, start.data.id, 'Bau mir eine Webseite mit Zähler');
+  assert.match(plan.text, /```plan/); // Agent X zeigt erst einen Plan
+  const res = await c.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 1, messages: [{ role: 'user', content: 'Bau mir eine Webseite mit Zähler' }, { role: 'assistant', content: plan.text }, { role: 'user', content: 'Ja, leg los!' }], display: { text: 'Ja, leg los!' } });
+  await res.text();
+  const pub = await c.json('/api/chat/sites/publish', { chatId: start.data.id, turn: 1, side: 0 });
   assert.equal(pub.status, 200, JSON.stringify(pub.data));
-  const again = await c.json('/api/chat/sites/publish', { chatId: start.data.id, turn: 0, side: 0 });
+  const again = await c.json('/api/chat/sites/publish', { chatId: start.data.id, turn: 1, side: 0 });
   assert.equal(again.data.id, pub.data.id); // gleicher Link
   const page = await fetch(BASE + pub.data.path);
   assert.equal(page.status, 200);

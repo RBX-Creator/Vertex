@@ -63,6 +63,23 @@ export function enhance(root) {
     const pre = code.parentElement;
     if (pre.parentElement?.classList.contains('codeblock')) return;
     const lang = (code.className.match(/language-([\w+#.-]+)/) || [])[1] || '';
+    if (lang === 'plan') {
+      // Plan von Agent X: Schritte als Karte, darunter „Los geht’s“ / „Ändern“
+      const steps = code.textContent.split('\n').map((l) => l.replace(/^\s*(\d+[.)]|[-*•])\s*/, '').trim()).filter(Boolean).slice(0, 12);
+      const card = document.createElement('div');
+      card.className = 'plan-card';
+      const head = document.createElement('p');
+      head.className = 'plan-head';
+      head.textContent = t('Plan', 'Plan');
+      const ol = document.createElement('ol');
+      for (const step of steps) ol.append(Object.assign(document.createElement('li'), { textContent: step }));
+      const acts = document.createElement('div');
+      acts.className = 'plan-acts';
+      acts.innerHTML = `<button type="button" class="plan-go" data-plan="go">${t('✓ Los geht’s', '✓ Go ahead')}</button><button type="button" class="plan-edit" data-plan="edit">${t('✏️ Ändern', '✏️ Change')}</button>`;
+      card.append(head, ol, acts);
+      pre.replaceWith(card);
+      return;
+    }
     if (lang === 'chart') {
       // Diagramm statt Code (solange das JSON noch unvollständig ist: Platzhalter)
       let spec = null;

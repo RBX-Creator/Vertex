@@ -1713,3 +1713,25 @@ a.site-open { display: flex; justify-content: center; text-decoration: none; box
 .fb-reasons p { width: 100%; margin: 0 0 2px; font-size: 13px; color: var(--muted); }
 .fb-chip { padding: 6px 11px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; transition: background .15s, border-color .15s; }
 .fb-chip[aria-pressed='true'] { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+
+/* ── Plan von Agent X ─────────────────────────────────────────────── */
+.plan-card { margin: 10px 0; padding: 14px 16px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.plan-head { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.plan-card ol { margin: 0 0 12px; padding-left: 22px; display: grid; gap: 6px; }
+.plan-card li { padding-left: 2px; }
+.plan-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.plan-acts button { padding: 9px 14px; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); }
+.plan-acts .plan-go { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+.plan-acts button:active { transform: scale(.97); }
+
+/* ── Kamera-Menü am „+“ ───────────────────────────────────────────── */
+.attach-menu { position: fixed; z-index: 40; display: grid; gap: 2px; padding: 6px; min-width: 200px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 12px 30px rgba(0, 0, 0, .2); animation: pop .18s ease both; }
+.attach-menu[hidden] { display: none; }
+.attach-menu button { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 0; border-radius: 10px; background: none; color: var(--text); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+.attach-menu button:hover { background: var(--surface-2); }
+
+/* ── QR-Codes ─────────────────────────────────────────────────────── */
+.qr { margin: 12px auto 8px; display: grid; justify-items: center; gap: 6px; }
+.qr[hidden] { display: none; }
+.qr img { width: 160px; height: 160px; padding: 8px; border-radius: 14px; background: #fff; }
+.qr figcaption { font-size: 12px; color: var(--muted); }

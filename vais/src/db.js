@@ -74,6 +74,7 @@ try { await client.execute('ALTER TABLE users ADD COLUMN blocked INTEGER'); } ca
 try { await client.execute('ALTER TABLE users ADD COLUMN daily_limit INTEGER'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE users ADD COLUMN instructions TEXT'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE users ADD COLUMN memory_off INTEGER'); } catch { /* gibt es schon */ }
+try { await client.execute('ALTER TABLE users ADD COLUMN plan_off INTEGER'); } catch { /* gibt es schon */ }
 
 // Gedächtnis von Agent X: kurze Fakten über den Nutzer
 await client.execute(`CREATE TABLE IF NOT EXISTS memories (

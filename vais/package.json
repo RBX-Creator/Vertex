@@ -25,6 +25,7 @@
     "marked": "^15.0.12",
     "nodemailer": "^7.0.0",
     "pdfjs-dist": "^4.10.38",
+    "qrcode": "^1.5.4",
     "web-push": "^3.6.7"
   }
 }

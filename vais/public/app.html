@@ -133,6 +133,11 @@
               </button>
               <input type="file" id="attach-input" multiple hidden
                 accept="image/*,.pdf,application/pdf,.txt,.md,.csv,.json,.js,.mjs,.ts,.tsx,.jsx,.py,.html,.htm,.css,.xml,.yml,.yaml,.java,.c,.h,.cpp,.cs,.go,.rs,.php,.rb,.sql,.lua,.sh,.log,.ini,.toml">
+              <input type="file" id="camera-input" accept="image/*" capture="environment" hidden>
+              <div class="attach-menu" id="attach-menu" hidden role="menu">
+                <button type="button" role="menuitem" data-attach="camera"><span aria-hidden="true">📷</span><span data-en="Take photo">Foto aufnehmen</span></button>
+                <button type="button" role="menuitem" data-attach="file"><span aria-hidden="true">📎</span><span data-en="Image or file">Bild oder Datei</span></button>
+              </div>
               <button type="button" class="ctrl" id="mode-btn" aria-haspopup="true" aria-expanded="false" aria-controls="mode-menu"></button>
               <button type="button" class="ctrl" id="modality-btn" aria-haspopup="true" aria-expanded="false" aria-controls="modality-menu"></button>
               <button type="button" class="ctrl model-chip" data-slot="0" hidden></button>
@@ -295,6 +300,7 @@
         <input class="input" id="share-link" readonly aria-label="Link">
         <button type="button" class="btn" id="share-copy" data-en="Copy link">Link kopieren</button>
       </div>
+      <figure class="qr" id="share-qr" hidden><img alt="QR-Code"><figcaption data-en="Scan to open">Zum Öffnen scannen</figcaption></figure>
       <button type="button" class="btn" id="share-create" data-en="Create link">Link erstellen</button>
       <button type="button" class="btn ghost-btn" id="share-native" hidden data-en="Share …">Teilen …</button>
       <button type="button" class="link danger-link" id="share-stop" hidden data-en="Stop sharing">Teilen beenden</button>
@@ -316,6 +322,7 @@
         <input class="input" id="site-link" readonly aria-label="Link">
         <button type="button" class="btn" id="site-copy" data-en="Copy link">Link kopieren</button>
       </div>
+      <figure class="qr" id="site-qr" hidden><img alt="QR-Code"><figcaption data-en="Scan to open">Zum Öffnen scannen</figcaption></figure>
       <a class="btn ghost-btn site-open" id="site-open" target="_blank" rel="noopener" data-en="Open website">Webseite öffnen</a>
       <button type="button" class="btn ghost-btn" id="site-native" hidden data-en="Share …">Teilen …</button>
       <button type="button" class="link danger-link" id="site-stop" data-en="Take offline">Offline nehmen</button>
@@ -365,6 +372,10 @@
             <input type="checkbox" id="set-memory-on" role="switch">
           </label>
           <ul class="mem-list" id="set-memories"></ul>
+          <label class="set-switch">
+            <span><b data-en="Agent X: plan first">Agent X: erst ein Plan</b><small data-en="For big tasks Agent X first shows a short plan that you confirm or change.">Bei großen Aufgaben zeigt Agent X zuerst einen kurzen Plan, den du bestätigst oder änderst.</small></span>
+            <input type="checkbox" id="set-plan-on" role="switch" checked>
+          </label>
           <button type="button" class="btn ghost-btn" id="set-memory-clear" hidden data-en="Forget everything">Alles vergessen</button>
         </section>
 

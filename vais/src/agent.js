@@ -185,6 +185,9 @@ function systemPrompt(personal = {}) {
       'Du hast ein Gedächtnis: Erzählt der Nutzer etwas Dauerhaftes über sich (Name, Alter, Hobbys, Schule/Beruf, Vorlieben, Projekte, wie er angesprochen werden will) oder bittet er dich, dir etwas zu merken, speichere es mit remember – kurz, in der dritten Person (z. B. „Heißt Leeam, mag Grok“). Speichere nichts Sensibles (Passwörter, Gesundheit, Adressen) und nichts Vorübergehendes.',
       personal.memories?.length ? `Was du über den Nutzer weißt:\n${personal.memories.map((m) => `- ${m.text}`).join('\n')}\nNutze das natürlich, ohne es ständig zu erwähnen.` : 'Du weißt noch nichts über den Nutzer.',
     ] : []),
+    ...(personal.planFirst ? [
+      'PLAN ZUERST: Bei GROSSEN Aufgaben (eine Webseite/App/ein Spiel bauen, eine Recherche mit mehreren Teilen, ein langer Text) und wenn im Gespräch noch KEIN Plan von dir bestätigt wurde: Benutze KEINE Werkzeuge. Antworte nur mit einem kurzen Plan in einem Block ```plan (3–7 nummerierte Schritte, je eine kurze Zeile) und darunter genau einer Frage, ob du so loslegen sollst. Bei kleinen Fragen antwortest du direkt ohne Plan. Hat der Nutzer den Plan bestätigt oder geändert, führst du ihn sofort aus.',
+    ] : []),
     ...(personal.summary ? [`Zusammenfassung des bisherigen Gesprächs (ältere Nachrichten werden nicht mehr mitgeschickt):\n${personal.summary}`] : []),
     ...(personal.instructions ? [`So möchte der Nutzer, dass du antwortest (aus seinen Einstellungen):\n"""\n${personal.instructions}\n"""`] : []),
     'Antworte in der Sprache des Nutzers, klar gegliedert mit Markdown. Wenn du Quellen genutzt hast, liste sie am Ende unter „Quellen“ als Links auf.',
@@ -651,7 +654,7 @@ const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 
 export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, personal = {}, onRemember = null, onReminder = null }) {
   onReact('👀'); // „hab’s gesehen, bin dran“
-  if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null, reminder: onReminder });
+  if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, planFirst: personal.planFirst });
   const model = await pickModel(AGENT_PREFERENCE);
   if (!model) throw new Error(t('Agent X braucht einen Groq-Schlüssel (GROQ_API_KEY), damit er Werkzeuge benutzen kann.', 'Agent X needs a Groq key (GROQ_API_KEY) to use tools.'));
 
@@ -729,11 +732,12 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   return finish(final.content);
 }
 
-async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onReact, signal, remember, reminder }) {
+async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onReact, signal, remember, reminder, planFirst }) {
   const lastMsg = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
   const q = Array.isArray(lastMsg) ? lastMsg.filter((p) => p.type === 'text').map((p) => p.text).join(' ') : String(lastMsg);
   const pics = Array.isArray(lastMsg) ? lastMsg.filter((p) => p.type === 'image_url').length : 0;
-  const site = /webseite|website|seite|app|spiel|game|html/i.test(q);
+  const planned = messages.some((m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('```plan'));
+  const site = /webseite|website|seite|app|spiel|game|html/i.test(q) || (planned && /leg los|go ahead|\bja\b|\byes\b/i.test(q));
   const rem = q.match(/erinnere mich in (\d+) minuten? an (.+)/i);
   if (rem && reminder) {
     onStep({ kind: 'reminder', text: rem[2] });
@@ -748,6 +752,10 @@ async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onR
     await remember(fact);
     onReact('👍');
     return emitText(`**Agent X (Demo)** – gemerkt: „${fact}“.`, onText, signal);
+  }
+  if (site && planFirst && !planned) {
+    await sleep(300);
+    return emitText('Gute Idee! So würde ich vorgehen:\n\n```plan\n1. Aufbau und Farben festlegen\n2. Startbereich mit großer Überschrift\n3. Zähler-Knopf mit Animation\n4. Fürs Handy anpassen\n5. Seite prüfen und verbessern\n```\n\nSoll ich so loslegen?', onText, signal, 6, 8);
   }
   await emitText(`Der Nutzer möchte: „${q.slice(0, 80)}“. ${site ? 'Ich baue eine Webseite, prüfe sie und verbessere sie.' : 'Ich suche parallel, schlage in Wikipedia nach, lese eine Quelle und rechne nach.'}`, onReasoning, signal, 2, 40);
   if (pics) { await sleep(400); onStep({ kind: 'look', text: pics === 1 ? '1 Bild' : `${pics} Bilder` }); }

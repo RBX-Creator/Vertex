@@ -104,6 +104,16 @@ app.get('/login', async (req, res) => {
   res.sendFile(page('login.html'));
 });
 
+// QR-Code (nur für Links zu VAIs selbst)
+const QRCode = (await import('qrcode')).default;
+app.get('/qr', async (req, res) => {
+  let url;
+  try { url = new URL(String(req.query.url ?? '')); } catch { return res.status(400).end(); }
+  if (url.host !== req.get('host') || !/^https?:$/.test(url.protocol)) return res.status(400).end();
+  const svg = await QRCode.toString(url.href, { type: 'svg', margin: 1, errorCorrectionLevel: 'M', color: { dark: '#111111', light: '#ffffff' } });
+  res.set('Cache-Control', 'public, max-age=86400').type('image/svg+xml').send(svg);
+});
+
 // Öffentliche Status-Seite: welche Modelle gerade frei sind
 app.get('/status', statusPage);
 app.get('/api/status', statusPage);

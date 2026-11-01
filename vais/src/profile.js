@@ -9,10 +9,10 @@ export const MAX_MEMORIES = 60;
 const MAX_MEMORY_CHARS = 240;
 
 export async function personalFor(userId) {
-  const u = await get('SELECT instructions, memory_off FROM users WHERE id = ?', userId);
+  const u = await get('SELECT instructions, memory_off, plan_off FROM users WHERE id = ?', userId);
   const memoryOn = !u?.memory_off;
   const memories = memoryOn ? await all('SELECT id, text FROM memories WHERE user_id = ? ORDER BY id', userId) : [];
-  return { instructions: String(u?.instructions ?? '').trim(), memoryOn, memories: memories.map((m) => ({ id: Number(m.id), text: m.text })) };
+  return { instructions: String(u?.instructions ?? '').trim(), memoryOn, planFirst: !u?.plan_off, memories: memories.map((m) => ({ id: Number(m.id), text: m.text })) };
 }
 
 export async function remember(userId, raw) {
@@ -44,7 +44,8 @@ profile.get('/', wrap(async (req, res) => {
 }));
 
 profile.post('/', wrap(async (req, res) => {
-  const { instructions, memoryOn } = req.body ?? {};
+  const { instructions, memoryOn, planFirst } = req.body ?? {};
+  if (planFirst !== undefined) await run('UPDATE users SET plan_off = ? WHERE id = ?', planFirst ? null : 1, req.user.id);
   if (instructions !== undefined) {
     const text = String(instructions ?? '').trim();
     if (text.length > MAX_INSTRUCTIONS) throw new HttpError(400, t(`Höchstens ${MAX_INSTRUCTIONS} Zeichen.`, `At most ${MAX_INSTRUCTIONS} characters.`));

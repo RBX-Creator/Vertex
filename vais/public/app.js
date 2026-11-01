@@ -988,6 +988,24 @@ async function loadExtras(chat, index) {
 
 const clearFollowups = () => el.thread.querySelectorAll('.followups').forEach((n) => n.remove());
 
+// Plan von Agent X bestätigen oder ändern (nur beim neuesten Plan)
+el.thread.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-plan]');
+  if (!btn) return;
+  const turnNode = btn.closest('.turn');
+  if (!state.chat || Number(turnNode?.dataset.index) !== state.chat.turns.length - 1) return toast(t('Das ist ein älterer Plan.', 'That is an older plan.'));
+  if (busy()) return;
+  if (btn.dataset.plan === 'go') {
+    el.prompt.value = t('Ja, leg los mit dem Plan!', 'Yes, go ahead with the plan!');
+    send();
+  } else {
+    el.prompt.value = t('Ändere den Plan: ', 'Change the plan: ');
+    autosize();
+    el.prompt.focus();
+    el.prompt.setSelectionRange(el.prompt.value.length, el.prompt.value.length);
+  }
+});
+
 // Erstelltes Bild bearbeiten: als Anhang für die nächste Nachricht übernehmen
 el.thread.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-pic-edit]');
@@ -1845,7 +1863,27 @@ function renderTray() {
   });
 }
 
-$('#attach-btn').addEventListener('click', () => $('#attach-input').click());
+// „+“: auf dem Handy Auswahl zwischen Kamera und Datei, am Computer direkt die Datei
+const attachMenu = $('#attach-menu');
+$('#attach-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!matchMedia('(pointer: coarse)').matches) return $('#attach-input').click();
+  attachMenu.hidden = !attachMenu.hidden;
+  if (!attachMenu.hidden) {
+    // Das Eingabefeld schneidet überstehende Teile ab → Menü frei über dem Knopf platzieren
+    const r = e.currentTarget.getBoundingClientRect();
+    attachMenu.style.left = `${Math.max(8, r.left)}px`;
+    attachMenu.style.bottom = `${window.innerHeight - r.top + 8}px`;
+  }
+});
+attachMenu.addEventListener('click', (e) => {
+  const opt = e.target.closest('[data-attach]');
+  if (!opt) return;
+  attachMenu.hidden = true;
+  $(opt.dataset.attach === 'camera' ? '#camera-input' : '#attach-input').click();
+});
+document.addEventListener('click', (e) => { if (!attachMenu.hidden && !attachMenu.contains(e.target)) attachMenu.hidden = true; });
+$('#camera-input').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; el.prompt.focus(); });
 $('#attach-input').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; el.prompt.focus(); });
 // Bilder einfügen (Strg+V) und per Drag & Drop
 el.prompt.addEventListener('paste', (e) => {
@@ -2326,6 +2364,14 @@ function paintShare() {
   $('#share-stop').hidden = !shared;
   $('#share-native').hidden = !shared || !navigator.share;
   $('#share-link').value = shareUrl;
+  paintQr('#share-qr', shared ? shareUrl : '');
+}
+// QR-Code zum Scannen (wird auf dem Server erzeugt)
+function paintQr(sel, url) {
+  const box = $(sel);
+  if (!box) return;
+  box.hidden = !url;
+  if (url) box.querySelector('img').src = `/qr?url=${encodeURIComponent(url)}`;
 }
 
 async function openShare() {
@@ -2479,6 +2525,7 @@ async function loadProfile() {
     $('#set-instr').value = profileData.instructions ?? '';
     countInstr();
     $('#set-memory-on').checked = profileData.memoryOn;
+    $('#set-plan-on').checked = profileData.planFirst !== false;
     renderMemories();
   } catch { /* offline */ }
 }
@@ -2509,6 +2556,9 @@ $('#set-memory-on').addEventListener('change', async (e) => {
     if (profileData) profileData.memoryOn = e.target.checked;
     renderMemories();
   } catch (err) { toast(err.message); e.target.checked = !e.target.checked; }
+});
+$('#set-plan-on').addEventListener('change', async (e) => {
+  try { await post('/api/chat/profile', { planFirst: e.target.checked }); } catch (err) { toast(err.message); e.target.checked = !e.target.checked; }
 });
 $('#set-memories').addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-mem]');
@@ -2603,6 +2653,7 @@ function showSite(site) {
   $('#site-link').value = url;
   $('#site-open').href = url;
   $('#site-native').hidden = !navigator.share;
+  paintQr('#site-qr', url);
   siteSheet.hidden = false;
   $('#site-link').select();
 }
