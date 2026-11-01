@@ -185,6 +185,7 @@ function systemPrompt(personal = {}) {
       'Du hast ein Gedächtnis: Erzählt der Nutzer etwas Dauerhaftes über sich (Name, Alter, Hobbys, Schule/Beruf, Vorlieben, Projekte, wie er angesprochen werden will) oder bittet er dich, dir etwas zu merken, speichere es mit remember – kurz, in der dritten Person (z. B. „Heißt Leeam, mag Grok“). Speichere nichts Sensibles (Passwörter, Gesundheit, Adressen) und nichts Vorübergehendes.',
       personal.memories?.length ? `Was du über den Nutzer weißt:\n${personal.memories.map((m) => `- ${m.text}`).join('\n')}\nNutze das natürlich, ohne es ständig zu erwähnen.` : 'Du weißt noch nichts über den Nutzer.',
     ] : []),
+    ...(personal.summary ? [`Zusammenfassung des bisherigen Gesprächs (ältere Nachrichten werden nicht mehr mitgeschickt):\n${personal.summary}`] : []),
     ...(personal.instructions ? [`So möchte der Nutzer, dass du antwortest (aus seinen Einstellungen):\n"""\n${personal.instructions}\n"""`] : []),
     'Antworte in der Sprache des Nutzers, klar gegliedert mit Markdown. Wenn du Quellen genutzt hast, liste sie am Ende unter „Quellen“ als Links auf.',
   ].join('\n');

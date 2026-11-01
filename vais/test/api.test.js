@@ -177,3 +177,17 @@ test('Daten herunterladen und Chats sortieren', async () => {
   assert.equal(data.chats.length, 1);
   assert.ok(data.chats[0].turns[0].answers[0].text.length > 0);
 });
+
+test('Sehr lange Chats werden zusammengefasst statt abzubrechen', async () => {
+  const c = await signUp('long@example.com');
+  const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
+  const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'Lang' });
+  const messages = [];
+  for (let i = 0; i < 12; i++) messages.push({ role: 'user', content: `Frage ${i}: ${'bla '.repeat(500)}` }, { role: 'assistant', content: `Antwort ${i}: ${'text '.repeat(500)}` });
+  messages.push({ role: 'user', content: 'Und jetzt die letzte Frage' });
+  const res = await c.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 0, messages, display: { text: 'Und jetzt die letzte Frage' } });
+  const lines = (await res.text()).trim().split('\n').map((l) => JSON.parse(l));
+  const note = lines.find((l) => l.summarized);
+  assert.ok(note && note.summarized > 10, 'Hinweis „zusammengefasst“ kommt');
+  assert.ok(lines.some((l) => l.done));
+});

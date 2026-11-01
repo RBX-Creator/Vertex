@@ -633,6 +633,14 @@ function updateCard(turnIndex, side) {
     $('[data-act="like"]', foot).hidden = $('[data-act="dislike"]', foot).hidden = !a.text && !pics.length;
   }
 
+  // Hinweis, wenn ältere Nachrichten zusammengefasst wurden
+  let sumNote = $('.sum-note', card);
+  if (a.summarized && !sumNote) {
+    sumNote = document.createElement('p');
+    sumNote.className = 'sum-note';
+    sumNote.textContent = t(`📝 Der Chat ist lang – ${a.summarized} ältere Nachrichten wurden zusammengefasst, damit alles reinpasst.`, `📝 This chat is long – ${a.summarized} older messages were summarized so everything fits.`);
+    $('.card-body', card).before(sumNote);
+  } else if (!a.summarized) sumNote?.remove();
   const body = $('.card-body', card);
   const part = websitePart(a.text);
   renderBuild(card, a, part);
@@ -779,7 +787,7 @@ function scheduleUpdate(turnIndex, side) {
 async function runSide(turnIndex, side) {
   const chat = state.chat;
   const a = chat.turns[turnIndex].answers[side];
-  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, images: [], reaction: null, fallback: null, startedAt: Date.now(), buildMs: 0 });
+  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, images: [], reaction: null, fallback: null, summarized: null, startedAt: Date.now(), buildMs: 0 });
   paintReactions(turnIndex);
   updateCard(turnIndex, side);
 
@@ -833,6 +841,7 @@ async function runSide(turnIndex, side) {
           if (a.reaction && a.reaction !== '👀') haptic('tap');
         }
         if (msg.fallback) { a.fallback = msg.fallback; scheduleUpdate(turnIndex, side); }
+        if (msg.summarized) { a.summarized = msg.summarized; scheduleUpdate(turnIndex, side); }
         if (msg.done) finished = true;
       }
     }

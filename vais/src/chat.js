@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { get, run, all, purgeChats, getSetting, logEvent } from './db.js';
 import { t } from './i18n.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
@@ -12,7 +12,7 @@ import { pickAvailable, isBusy } from './models.js';
 import { generateImage, editImage, helperModel, complete } from './models.js';
 import { listModels, findModel, streamChat, displayName, describeModel, modelKey, demoMode } from './models.js';
 
-const MAX_MESSAGES = 40;          // so viele Nachrichten gehen max. ans Modell
+const MAX_MESSAGES = 120;         // so viele Nachrichten nehmen wir an (ältere werden zusammengefasst)
 const MAX_CHARS = 20_000;         // pro Nachricht
 const WINNERS = new Set(['a', 'b', 'tie', 'bad']);
 const MAX_IMAGES = 4;               // so viele Bilder gehen max. ans Modell (die neuesten)
@@ -143,6 +143,46 @@ chat.post('/start', wrap(async (req, res) => {
   res.json({ id, models: mode === 'battle' ? null : await Promise.all(picked.map(displayName)) });
 }));
 
+// ── Lange Chats: ältere Nachrichten zusammenfassen, damit nichts zu groß wird ──
+const HISTORY_BUDGET = 24_000; // Zeichen, die wir höchstens als Verlauf schicken
+const sizeOf = (m) => (typeof m.content === 'string' ? m.content.length
+  : (m.content ?? []).reduce((n, p) => n + (p.type === 'text' ? String(p.text ?? '').length : 1500), 0));
+const plain = (m) => (typeof m.content === 'string' ? m.content : (m.content ?? []).filter((p) => p.type === 'text').map((p) => p.text).join(' ') + ' [Bild]');
+async function fitHistory(row, messages) {
+  const total = messages.reduce((n, m) => n + sizeOf(m), 0);
+  if (total <= HISTORY_BUDGET || messages.length <= 3) return { messages, summary: null, summarized: 0 };
+  // Die neuesten Nachrichten behalten (mind. die letzte Frage), den Rest zusammenfassen
+  const keep = [];
+  let used = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const s = sizeOf(messages[i]);
+    if (keep.length >= 1 && used + s > HISTORY_BUDGET * 0.6) break;
+    keep.unshift(messages[i]);
+    used += s;
+  }
+  while (keep.length > 1 && keep[0].role !== 'user') keep.shift();
+  const older = messages.slice(0, messages.length - keep.length);
+  if (!older.length) return { messages: keep, summary: null, summarized: 0 };
+  const key = createHash('sha256').update(older.map((m) => `${m.role}:${plain(m).slice(0, 400)}`).join('|')).digest('base64url').slice(0, 24);
+  if (row.summary && row.summary_key === key) return { messages: keep, summary: row.summary, summarized: older.length };
+  const transcript = older.map((m) => `${m.role === 'user' ? 'Nutzer' : 'KI'}: ${plain(m).replace(/```[\s\S]*?(```|$)/g, '[Code]').slice(0, 2500)}`).join('\n').slice(-30_000);
+  let summary = '';
+  if (demoMode) summary = `Bisher ging es um: ${older.filter((m) => m.role === 'user').map((m) => plain(m).slice(0, 60)).join(' · ')}`;
+  else {
+    const model = await helperModel();
+    if (model) {
+      try {
+        const msg = await complete({ model: model.id, messages: [{ role: 'user', content: `Fasse dieses bisherige Gespräch zwischen Nutzer und KI knapp zusammen (höchstens 200 Wörter, Stichpunkte). Behalte alle wichtigen Fakten, Entscheidungen, Namen, Zahlen, Wünsche und offene Aufgaben. Schreib in der Sprache des Gesprächs.\n\n${transcript}` }] });
+        summary = String(msg.content ?? '').trim().slice(0, 4000);
+      } catch (err) { console.error('Zusammenfassung fehlgeschlagen:', err.message); }
+    }
+  }
+  if (!summary) summary = transcript.slice(-3000); // Notlösung: das Ende des Verlaufs
+  await run('UPDATE chats SET summary = ?, summary_key = ? WHERE id = ?', summary, key, row.id).catch(() => {});
+  return { messages: keep, summary, summarized: older.length };
+}
+const summaryPrompt = (summary) => (summary ? `Zusammenfassung des bisherigen Gesprächs (ältere Nachrichten, die nicht mehr mitgeschickt werden):\n${summary}` : null);
+
 // Eine einzige Systemnachricht vorne (manche Anbieter mögen keine mehreren)
 function withSystem(parts, messages) {
   const text = parts.filter(Boolean).join('\n\n');
@@ -193,6 +233,9 @@ chat.post('/stream', wrap(async (req, res) => {
   }
   // Ältere Bilder für Modelle ohne Bild-Fähigkeit nicht mitschicken
   if (!hasImages) clean = flatten(clean);
+  // Sehr lange Chats: ältere Nachrichten zusammenfassen
+  const fitted = row.modality === 'image' ? { messages: clean, summary: null, summarized: 0 } : await fitHistory(row, clean);
+  clean = fitted.messages;
   const turnNo = Number.isInteger(turn) && turn >= 0 && turn < 1000 ? turn : null;
   const L = await limitSettings();
   limit(req.user.id, L.burst);
@@ -226,13 +269,14 @@ chat.post('/stream', wrap(async (req, res) => {
   let thinkMs = 0;
   let reaction = null; // Emoji-Reaktion von Agent X auf deine Nachricht
   let fallback = null; // Notfall-Modell, falls das gewählte voll war
+  const summarized = fitted.summarized || null;
   const save = (s, content, status = 'done', error = null, attachments = null) => (turnNo === null ? null : run(
     `INSERT INTO messages (chat_id, turn, side, content, status, error, meta, attachments, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(chat_id, turn, side) DO UPDATE SET content = excluded.content, status = excluded.status, error = excluded.error,
        meta = excluded.meta, attachments = COALESCE(excluded.attachments, messages.attachments)`,
     row.id, turnNo, s, content, status, error,
-    s >= 0 && (steps.length || thinking || sources.size || images.length || reaction || fallback)
-      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, sources: [...sources.values()], images, reaction, fallback }) : null,
+    s >= 0 && (steps.length || thinking || sources.size || images.length || reaction || fallback || summarized)
+      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, sources: [...sources.values()], images, reaction, fallback, summarized }) : null,
     attachments, Date.now(),
   ).catch((e) => console.error('Verlauf speichern fehlgeschlagen:', e.message)));
   // Deine Frage so speichern, wie sie angezeigt wird (Text + Anhänge), nicht als Modell-Format
@@ -249,6 +293,7 @@ chat.post('/stream', wrap(async (req, res) => {
     'X-Accel-Buffering': 'no',
   });
   res.flushHeaders();
+  if (summarized) res.write(`${JSON.stringify({ summarized })}\n`);
 
   const controller = new AbortController();
   res.on('close', () => { if (!res.writableFinished) controller.abort(); });
@@ -276,7 +321,7 @@ chat.post('/stream', wrap(async (req, res) => {
           onReasoning,
           onSources,
           onReact,
-          personal,
+          personal: { ...personal, summary: fitted.summary },
           onRemember: (fact) => remember(req.user.id, fact),
           onReminder: (args) => addReminder(req.user.id, args.text, args.when, args.in_minutes),
           onStep: (step) => { steps.push(step); res.write(`${JSON.stringify({ step })}\n`); },
@@ -306,7 +351,7 @@ chat.post('/stream', wrap(async (req, res) => {
           }
           await streamChat({
             model,
-            messages: withSystem([row.modality === 'code' ? CODE_PROMPT : null, custom], clean),
+            messages: withSystem([row.modality === 'code' ? CODE_PROMPT : null, custom, summaryPrompt(fitted.summary)], clean),
             signal: controller.signal,
             onText,
             onReasoning,
@@ -631,7 +676,7 @@ async function loadChatData(row, { forShare = false } = {}) {
         text: m.content, status: m.status, error: m.error,
         steps: meta.steps ?? [], thinking: forShare ? '' : meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0,
         feedback: forShare ? 0 : m.feedback ?? 0, sources: meta.sources ?? [], images: meta.images ?? [],
-        reaction: meta.reaction ?? null, fallback: meta.fallback ?? null,
+        reaction: meta.reaction ?? null, fallback: meta.fallback ?? null, summarized: meta.summarized ?? null,
       };
     }
   }
