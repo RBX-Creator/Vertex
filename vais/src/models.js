@@ -8,21 +8,117 @@
 // zusätzlich kostenpflichtige OpenRouter-Modelle frei (braucht Guthaben bei OpenRouter).
 
 import { t } from './i18n.js';
+import { getSetting, setSetting } from './db.js';
 
 const MAX_OUTPUT_TOKENS = 8192;
 const IDLE_TIMEOUT = 90_000; // so lange darf ein Modell schweigen, bevor wir abbrechen
 const SEARCH_SUFFIX = '#search'; // Variante mit eingebauter Websuche (Groq gpt-oss)
 
-const PROVIDERS = {
-  openrouter: { key: process.env.OPENROUTER_API_KEY?.trim(), base: 'https://openrouter.ai/api/v1', label: 'OpenRouter', env: 'OPENROUTER_API_KEY' },
-  gemini: { key: process.env.GEMINI_API_KEY?.trim(), base: 'https://generativelanguage.googleapis.com/v1beta/openai', label: 'Google AI Studio', env: 'GEMINI_API_KEY' },
-  groq: { key: process.env.GROQ_API_KEY?.trim(), base: 'https://api.groq.com/openai/v1', label: 'Groq', env: 'GROQ_API_KEY' },
-  cerebras: { key: process.env.CEREBRAS_API_KEY?.trim(), base: 'https://api.cerebras.ai/v1', label: 'Cerebras', env: 'CEREBRAS_API_KEY' },
-  mistral: { key: process.env.MISTRAL_API_KEY?.trim(), base: 'https://api.mistral.ai/v1', label: 'Mistral', env: 'MISTRAL_API_KEY' },
-};
-const EXTRA = (process.env.OPENROUTER_EXTRA_MODELS || '').split(',').map((s) => s.trim()).filter(Boolean);
+// Schlüssel: pro Anbieter mehrere möglich – aus Render (z. B. GROQ_API_KEY, auch mit Komma getrennt,
+// sowie GROQ_API_KEY_2 … GROQ_API_KEY_9) und zusätzlich im Admin-Bereich eingetragene.
+// Ist ein Schlüssel voll, springt automatisch der nächste ein.
+function envKeys(name) {
+  const raw = [process.env[name], ...Array.from({ length: 8 }, (_, i) => process.env[`${name}_${i + 2}`])];
+  return [...new Set(raw.flatMap((v) => String(v ?? '').split(/[\s,]+/)).map((k) => k.trim()).filter(Boolean))];
+}
+const SAVED_KEYS = 'api_keys';
+let adminKeys = {};
+try { adminKeys = JSON.parse(await getSetting(SAVED_KEYS, '{}')) || {}; } catch { adminKeys = {}; }
 
-export const demoMode = !Object.values(PROVIDERS).some((p) => p.key);
+const PROVIDER_LIST = {
+  openrouter: { base: 'https://openrouter.ai/api/v1', label: 'OpenRouter', env: 'OPENROUTER_API_KEY' },
+  gemini: { base: 'https://generativelanguage.googleapis.com/v1beta/openai', label: 'Google AI Studio', env: 'GEMINI_API_KEY' },
+  groq: { base: 'https://api.groq.com/openai/v1', label: 'Groq', env: 'GROQ_API_KEY' },
+  cerebras: { base: 'https://api.cerebras.ai/v1', label: 'Cerebras', env: 'CEREBRAS_API_KEY' },
+  mistral: { base: 'https://api.mistral.ai/v1', label: 'Mistral', env: 'MISTRAL_API_KEY' },
+};
+const PROVIDERS = Object.fromEntries(Object.entries(PROVIDER_LIST).map(([name, p]) => {
+  const fromEnv = envKeys(p.env);
+  return [name, {
+    ...p,
+    name,
+    fromEnv,
+    get keys() { return [...new Set([...fromEnv, ...(adminKeys[name] ?? [])])]; },
+    get key() { return freeKeys(name)[0] ?? this.keys[0]; }, // ein gerade freier Schlüssel
+  }];
+}));
+
+// Wann ein Schlüssel wieder geht: 'k:<anbieter>:<schlüssel>' (ganzer Schlüssel) oder 'm:<modell>:<schlüssel>' (nur dieses Modell)
+const keyCooldown = new Map();
+const nextMidnightUtc = () => { const d = new Date(); d.setUTCHours(24, 0, 0, 0); return d.getTime(); };
+function freeKeys(provider, model = null) {
+  const now = Date.now();
+  return PROVIDERS[provider].keys.filter((k) => (keyCooldown.get(`k:${provider}:${k}`) ?? 0) <= now
+    && (!model || (keyCooldown.get(`m:${model}:${k}`) ?? 0) <= now));
+}
+function markKey(provider, model, key, status, message) {
+  const now = Date.now();
+  if (status === 429 && isDailyLimit(message)) keyCooldown.set(`k:${provider}:${key}`, nextMidnightUtc());
+  else if (status === 401 || status === 403) keyCooldown.set(`k:${provider}:${key}`, now + 60 * 60 * 1000);
+  else if (status === 429) keyCooldown.set(`m:${model}:${key}`, now + 90 * 1000);
+}
+const maskKey = (k) => `${k.slice(0, 4)}…${k.slice(-4)}`;
+
+// Anfrage schicken; bei „voll“ (429) oder „ungültig“ (401/403) sofort mit dem nächsten Schlüssel nochmal
+async function withKeys(provider, model, send) {
+  const p = PROVIDERS[provider];
+  const tried = new Set();
+  for (;;) {
+    const key = freeKeys(provider, model).find((k) => !tried.has(k)) ?? (tried.size ? null : p.keys[0]);
+    if (!key) throw new Error(t('Dieses Modell ist gerade nicht verfügbar.', 'This model is not available right now.'));
+    tried.add(key);
+    const res = await send(key);
+    if (res.ok || ![401, 403, 429].includes(res.status)) return res;
+    const body = await res.clone().json().catch(() => ({}));
+    const err = Array.isArray(body) ? body[0]?.error : body?.error;
+    markKey(provider, model, key, res.status, err?.message);
+    if (!freeKeys(provider, model).some((k) => !tried.has(k))) return res; // kein Ersatz mehr → normaler Fehler
+    console.log(`${p.label}: Schlüssel ${maskKey(key)} ist voll/ungültig (${res.status}) – nehme den nächsten.`);
+  }
+}
+
+// Für den Admin-Bereich: Schlüssel (nur gekürzt) und ihr Zustand
+export function keyStatus() {
+  const now = Date.now();
+  return Object.values(PROVIDERS).map((p) => ({
+    provider: p.name,
+    label: p.label,
+    env: p.env,
+    keys: p.keys.map((k) => {
+      const until = keyCooldown.get(`k:${p.name}:${k}`) ?? 0;
+      const limited = [...keyCooldown.entries()].some(([id, ts]) => id.startsWith('m:') && id.endsWith(`:${k}`) && ts > now);
+      return { id: maskKey(k), source: p.fromEnv.includes(k) ? 'render' : 'admin', until: until > now ? until : null, state: until > now ? 'full' : limited ? 'partly' : 'ok' };
+    }),
+  }));
+}
+
+async function testKey(provider, key) {
+  const p = PROVIDERS[provider];
+  const url = provider === 'gemini' ? `https://generativelanguage.googleapis.com/v1beta/models?pageSize=1&key=${encodeURIComponent(key)}`
+    : provider === 'openrouter' ? `${p.base}/key` : `${p.base}/models`;
+  const res = await fetch(url, { headers: provider === 'gemini' ? {} : { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15_000) });
+  return res.ok;
+}
+export async function addKey(provider, raw) {
+  const key = String(raw ?? '').trim();
+  if (!PROVIDERS[provider]) throw new Error(t('Unbekannter Anbieter.', 'Unknown provider.'));
+  if (!/^[\w.\-:]{16,300}$/.test(key)) throw new Error(t('Das sieht nicht wie ein Schlüssel aus.', 'That does not look like a key.'));
+  if (PROVIDERS[provider].keys.includes(key)) throw new Error(t('Diesen Schlüssel gibt es schon.', 'This key already exists.'));
+  if (!(await testKey(provider, key).catch(() => false))) throw new Error(t('Der Schlüssel funktioniert nicht – bitte prüfen.', 'The key does not work – please check it.'));
+  adminKeys = { ...adminKeys, [provider]: [...(adminKeys[provider] ?? []), key] };
+  await setSetting(SAVED_KEYS, JSON.stringify(adminKeys));
+  delete cache[provider];
+  return maskKey(key);
+}
+export async function removeKey(provider, id) {
+  const list = adminKeys[provider] ?? [];
+  const next = list.filter((k) => maskKey(k) !== id);
+  if (next.length === list.length) throw new Error(t('Nur im Admin-Bereich eingetragene Schlüssel lassen sich hier löschen.', 'Only keys added in the admin area can be removed here.'));
+  adminKeys = { ...adminKeys, [provider]: next };
+  await setSetting(SAVED_KEYS, JSON.stringify(adminKeys));
+  delete cache[provider];
+}
+export const demoMode = !Object.values(PROVIDERS).some((p) => p.keys.length);
 
 // Bilder: Pollinations funktioniert ohne Schlüssel (wenige Modelle); mit POLLINATIONS_API_KEY gibt es mehr.
 // Mit DISABLE_FREE_IMAGES=true lässt sich der Bild-Modus abschalten.
@@ -215,7 +311,7 @@ export async function listModels() {
   const sources = Object.entries(PROVIDERS).map(([name, p]) => [name, p, () => LISTERS[name](p)]);
   if (IMAGES.enabled) sources.push(['pollinations', { ...IMAGES, key: 'free' }, listImageModels]);
   const lists = await Promise.all(sources.map(async ([name, p, lister]) => {
-    if (!p.key) return [];
+    if (!p.key && !p.keys?.length) return [];
     const c = cache[name];
     if (c?.list.length && Date.now() - c.at < 30 * 60 * 1000) return c.list;
     try {
@@ -236,15 +332,16 @@ const cooldown = new Map(); // 'p:<anbieter>' oder Modell-ID → bis wann
 const providerOf = (id) => id.split(':')[0];
 export function isBusy(id) {
   const now = Date.now();
-  return (cooldown.get(`p:${providerOf(id)}`) ?? 0) > now || (cooldown.get(id) ?? 0) > now;
+  const provider = providerOf(id);
+  if (PROVIDERS[provider] && PROVIDERS[provider].keys.length && !freeKeys(provider, id).length) return true; // alle Schlüssel voll
+  return (cooldown.get(`p:${provider}`) ?? 0) > now || (cooldown.get(id) ?? 0) > now;
 }
-const isDailyLimit = (msg = '') => /per[- ]?day|daily|tageslimit|quota/i.test(msg);
+const isDailyLimit = (msg = '') => /per[- ]?day|daily|tageslimit|quota|TPD|RPD/i.test(msg);
 function markFailed(id, status, message) {
   const now = Date.now();
-  const midnightUtc = new Date(); midnightUtc.setUTCHours(24, 0, 0, 0);
-  if (status === 429 && isDailyLimit(message)) cooldown.set(`p:${providerOf(id)}`, midnightUtc.getTime());
-  else if (status === 401 || status === 403) cooldown.set(`p:${providerOf(id)}`, now + 10 * 60 * 1000);
-  else if (status === 429) cooldown.set(id, now + 90 * 1000);
+  // Tageslimit und ungültige Schlüssel merkt sich die Schlüssel-Verwaltung (withKeys) pro Schlüssel
+  if ((status === 429 && isDailyLimit(message)) || status === 401 || status === 403) return;
+  if (status === 429) cooldown.set(id, now + 90 * 1000);
   else if (status === 404) cooldown.set(id, now + 60 * 60 * 1000);
   else cooldown.set(id, now + 60 * 1000);
 }
@@ -344,13 +441,13 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
   if (search) upstream = upstream.slice(0, -SEARCH_SUFFIX.length);
   if (provider === 'demo') return demoStream({ name: `${upstream}-demo`, messages, signal, onText, onReasoning });
   const p = PROVIDERS[provider];
-  if (!p?.key) throw new Error(t('Dieses Modell ist gerade nicht verfügbar.', 'This model is not available right now.'));
+  if (!p?.keys.length) throw new Error(t('Dieses Modell ist gerade nicht verfügbar.', 'This model is not available right now.'));
 
-  const headers = { Authorization: `Bearer ${p.key}`, 'Content-Type': 'application/json' };
-  if (provider === 'openrouter') {
-    headers['HTTP-Referer'] = process.env.APP_URL || 'https://vais.onrender.com';
-    headers['X-Title'] = 'VAIs';
-  }
+  const headersFor = (key) => ({
+    Authorization: `Bearer ${key}`,
+    'Content-Type': 'application/json',
+    ...(provider === 'openrouter' ? { 'HTTP-Referer': process.env.APP_URL || 'https://vais.onrender.com', 'X-Title': 'VAIs' } : {}),
+  });
   // Abbrechen, wenn das Modell zu lange nichts liefert (hängt sonst ewig)
   const idle = new AbortController();
   let idleTimer;
@@ -366,10 +463,10 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
   }
 
   async function streamFrom() {
-  const res = await fetch(`${p.base}/chat/completions`, {
+  const res = await withKeys(provider, model, (key) => fetch(`${p.base}/chat/completions`, {
     method: 'POST',
     signal: signal ? AbortSignal.any([signal, idle.signal]) : idle.signal,
-    headers,
+    headers: headersFor(key),
     body: JSON.stringify({
       model: upstream,
       messages,
@@ -377,7 +474,7 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
       ...tokenLimit(provider, upstream),
       ...(search ? { tools: [{ type: 'browser_search' }], tool_choice: 'auto' } : {}),
     }),
-  });
+  }));
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -476,21 +573,23 @@ export async function complete({ model, messages, tools, signal }) {
   const search = upstream.endsWith(SEARCH_SUFFIX);
   if (search) upstream = upstream.slice(0, -SEARCH_SUFFIX.length);
   const p = PROVIDERS[provider];
-  if (!p?.key) throw new Error(t('Dieses Modell ist gerade nicht verfügbar.', 'This model is not available right now.'));
-  const headers = { Authorization: `Bearer ${p.key}`, 'Content-Type': 'application/json' };
-  if (provider === 'openrouter') { headers['HTTP-Referer'] = process.env.APP_URL || 'https://vais.onrender.com'; headers['X-Title'] = 'VAIs'; }
+  if (!p?.keys.length) throw new Error(t('Dieses Modell ist gerade nicht verfügbar.', 'This model is not available right now.'));
   const allTools = [...(tools ?? []), ...(search ? [{ type: 'browser_search' }] : [])];
-  const res = await fetch(`${p.base}/chat/completions`, {
+  const res = await withKeys(provider, model, (key) => fetch(`${p.base}/chat/completions`, {
     method: 'POST',
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(90_000)]) : AbortSignal.timeout(90_000),
-    headers,
+    headers: {
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      ...(provider === 'openrouter' ? { 'HTTP-Referer': process.env.APP_URL || 'https://vais.onrender.com', 'X-Title': 'VAIs' } : {}),
+    },
     body: JSON.stringify({
       model: upstream,
       messages,
       ...tokenLimit(provider, upstream),
       ...(allTools.length ? { tools: allTools, tool_choice: 'auto' } : {}),
     }),
-  });
+  }));
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const err = Array.isArray(body) ? body[0]?.error : body?.error;

@@ -100,18 +100,46 @@ let qTimer;
 async function loadUsers() {
   try {
     const { users } = await api(`users?q=${encodeURIComponent($('#user-q').value.trim())}`);
-    $('#users').innerHTML = users.length ? users.map((u) => `
-      <li class="${u.blocked ? 'blocked' : ''}">
-        <span class="adm-user"><b>${esc(u.email)}</b>
-          <small>${t('seit', 'since')} ${new Date(u.created).toLocaleDateString(LOCALE)} · ${num(u.chats)} Chats${u.lastActive ? ` · ${t('aktiv', 'active')} ${when(u.lastActive)}` : ''}${u.verified ? '' : ` · ${t('nicht bestätigt', 'not verified')}`}</small></span>
-        ${u.admin ? '<span class="adm-pill">Admin</span>' : `<button class="adm-btn small${u.blocked ? '' : ' danger'}" data-block="${u.id}" data-to="${u.blocked ? '0' : '1'}" data-email="${esc(u.email)}">${u.blocked ? t('Entsperren', 'Unblock') : t('Sperren', 'Block')}</button>`}
-      </li>`).join('') : `<li class="adm-empty">${t('Niemand gefunden.', 'Nobody found.')}</li>`;
+    $('#users').innerHTML = users.length ? users.map((u) => {
+      const limitText = u.limit === null ? t('unbegrenzt', 'unlimited') : `${num(u.used)} / ${num(u.limit)} ${t('Punkte', 'points')}${u.custom !== null && u.custom !== -1 ? ` (${t('eigenes Limit', 'custom')})` : ''}`;
+      return `
+      <li class="${u.blocked ? 'blocked' : ''}" data-user="${u.id}">
+        <div class="adm-user-row">
+          <span class="adm-user"><b>${esc(u.email)}</b>
+            <small>${t('seit', 'since')} ${new Date(u.created).toLocaleDateString(LOCALE)} · ${num(u.chats)} Chats${u.lastActive ? ` · ${t('aktiv', 'active')} ${when(u.lastActive)}` : ''}${u.verified ? '' : ` · ${t('nicht bestätigt', 'not verified')}`}</small></span>
+          ${u.admin ? '<span class="adm-pill">Admin</span>' : `<button class="adm-btn small${u.blocked ? '' : ' danger'}" data-block="${u.id}" data-to="${u.blocked ? '0' : '1'}" data-email="${esc(u.email)}">${u.blocked ? t('Entsperren', 'Unblock') : t('Sperren', 'Block')}</button>`}
+        </div>
+        <div class="adm-use">
+          <span class="adm-bar${u.percent >= 100 ? ' full' : ''}"><i style="width:${u.limit === null ? 0 : u.percent}%"></i></span>
+          <span class="adm-use-text">${u.limit === null ? '∞' : `${u.percent} %`} · ${esc(limitText)}</span>
+          ${u.admin ? '' : `<button class="adm-link" data-edit="${u.id}" data-custom="${u.custom ?? ''}">${t('Limit', 'Limit')}</button>`}
+          ${u.used ? `<button class="adm-link" data-reset="${u.id}">${t('Auf 0 %', 'Reset')}</button>` : ''}
+        </div>
+      </li>`;
+    }).join('') : `<li class="adm-empty">${t('Niemand gefunden.', 'Nobody found.')}</li>`;
   } catch (err) {
     toast(err.message);
   }
 }
 $('#user-q').addEventListener('input', () => { clearTimeout(qTimer); qTimer = setTimeout(loadUsers, 250); });
 $('#users').addEventListener('click', async (e) => {
+  const edit = e.target.closest('[data-edit]');
+  if (edit) return openLimitEditor(edit);
+  const reset = e.target.closest('[data-reset]');
+  if (reset) {
+    try { await api('reset-usage', { userId: Number(reset.dataset.reset) }); toast(t('Verbrauch auf 0 % gesetzt.', 'Usage reset to 0 %.')); loadUsers(); } catch (err) { toast(err.message); }
+    return;
+  }
+  const save = e.target.closest('[data-save-limit]');
+  if (save) {
+    const box = save.closest('.adm-limit-edit');
+    const mode = box.querySelector('input[name^="lm"]:checked')?.value;
+    const limit = mode === 'default' ? null : mode === 'unlimited' ? -1 : box.querySelector('.adm-input').value;
+    if (mode === 'custom' && limit === '') return toast(t('Bitte eine Zahl eingeben.', 'Please enter a number.'));
+    try { await api('user-limit', { userId: Number(save.dataset.saveLimit), limit }); toast(t('Limit gespeichert.', 'Limit saved.')); loadUsers(); } catch (err) { toast(err.message); }
+    return;
+  }
+  if (e.target.closest('[data-cancel-limit]')) return e.target.closest('.adm-limit-edit').remove();
   const btn = e.target.closest('[data-block]');
   if (!btn) return;
   const block = btn.dataset.to === '1';
@@ -127,6 +155,105 @@ $('#users').addEventListener('click', async (e) => {
   }
 });
 
+function openLimitEditor(btn) {
+  const li = btn.closest('li');
+  li.querySelector('.adm-limit-edit')?.remove();
+  const id = btn.dataset.edit;
+  const custom = btn.dataset.custom === '' ? null : Number(btn.dataset.custom);
+  const mode = custom === null ? 'default' : custom === -1 ? 'unlimited' : 'custom';
+  const box = document.createElement('div');
+  box.className = 'adm-limit-edit';
+  box.innerHTML = `
+    <label><input type="radio" name="lm${id}" value="default"${mode === 'default' ? ' checked' : ''}> ${t('Standard', 'Default')} (${num(limitsCache?.daily ?? 0)})</label>
+    <label><input type="radio" name="lm${id}" value="custom"${mode === 'custom' ? ' checked' : ''}> ${t('Eigenes:', 'Custom:')}
+      <input class="adm-input small" type="number" min="0" max="100000" inputmode="numeric" value="${mode === 'custom' ? custom : ''}" aria-label="${t('Punkte pro Tag', 'Points per day')}"></label>
+    <label><input type="radio" name="lm${id}" value="unlimited"${mode === 'unlimited' ? ' checked' : ''}> ${t('Unbegrenzt', 'Unlimited')}</label>
+    <div class="adm-row"><button class="adm-btn small primary" type="button" data-save-limit="${id}">${t('Speichern', 'Save')}</button><button class="adm-btn small" type="button" data-cancel-limit>${t('Abbrechen', 'Cancel')}</button></div>`;
+  box.querySelector('.adm-input').addEventListener('focus', () => { box.querySelector('input[value="custom"]').checked = true; });
+  li.append(box);
+}
+
+// ── Tageslimit & Kosten ──────────────────────────────────────────
+const LIMIT_LABELS = {
+  daily: [t('Punkte pro Tag', 'Points per day'), t('für jeden Nutzer', 'for every user')],
+  costText: [t('Normale Antwort', 'Normal answer'), t('Text/Code, pro Modell', 'text/code, per model')],
+  costWeb: [t('Websuche', 'Web search'), t('pro Antwort', 'per answer')],
+  costImage: [t('Bild', 'Image'), t('pro Bild', 'per image')],
+  costAgent: [t('Agent X', 'Agent X'), t('pro Auftrag', 'per task')],
+  costPremium: [t('Premium-Modell', 'Premium model'), t('kostet echtes Guthaben', 'costs real credit')],
+  paidDaily: [t('Premium pro Tag', 'Premium per day'), t('Antworten, zusätzlich', 'answers, extra cap')],
+  burst: [t('Schutz vor Spam', 'Spam protection'), t('Antworten in 5 Minuten', 'answers in 5 minutes')],
+};
+let limitsCache = null;
+function limitExample() {
+  const f = Object.fromEntries([...document.querySelectorAll('#limit-fields input')].map((i) => [i.name, Number(i.value) || 0]));
+  const per = (c) => (c ? Math.floor(f.daily / c) : '∞');
+  $('#limit-example').textContent = t(
+    `Damit schafft jeder pro Tag z. B. ${per(f.costText)} normale Antworten, ${per(f.costText * 2)} Battles, ${per(f.costAgent)} Agent-X-Aufträge oder ${per(f.costImage)} Bilder.`,
+    `That's e.g. ${per(f.costText)} normal answers, ${per(f.costText * 2)} battles, ${per(f.costAgent)} Agent X tasks or ${per(f.costImage)} images per day.`,
+  );
+}
+async function loadLimits() {
+  try {
+    const { limits, fields } = await api('limits');
+    limitsCache = limits;
+    $('#limit-fields').innerHTML = Object.keys(fields).map((k) => `
+      <label class="adm-field"><span><b>${esc(LIMIT_LABELS[k]?.[0] ?? k)}</b><small>${esc(LIMIT_LABELS[k]?.[1] ?? '')}</small></span>
+        <input class="adm-input small" type="number" name="${k}" min="${fields[k].min}" max="${fields[k].max}" inputmode="numeric" value="${limits[k]}"></label>`).join('');
+    limitExample();
+  } catch (err) { toast(err.message); }
+}
+$('#limit-fields').addEventListener('input', limitExample);
+$('#limits-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const limits = Object.fromEntries([...document.querySelectorAll('#limit-fields input')].map((i) => [i.name, Number(i.value)]));
+  try { limitsCache = (await api('limits', { limits })).limits; toast(t('Gespeichert.', 'Saved.')); loadUsers(); } catch (err) { toast(err.message); }
+});
+
+// ── API-Schlüssel ────────────────────────────────────────────────
+function renderKeys(providers) {
+  const STATE = { ok: t('frei', 'free'), partly: t('teilweise voll', 'partly full'), full: t('voll', 'full') };
+  $('#keys').innerHTML = providers.map((p) => `
+    <div class="adm-keys">
+      <p class="adm-keys-head"><b>${esc(p.label)}</b><small>${p.keys.length ? `${p.keys.length} ${p.keys.length === 1 ? t('Schlüssel', 'key') : t('Schlüssel', 'keys')}` : t('kein Schlüssel', 'no key')}</small></p>
+      ${p.keys.length ? `<ul>${p.keys.map((k) => `
+        <li><code>${esc(k.id)}</code>
+          <span class="adm-key-state ${k.state}">${STATE[k.state]}${k.until ? ` ${t('bis', 'until')} ${when(k.until)}` : ''}</span>
+          <small>${k.source === 'render' ? 'Render' : 'Admin'}</small>
+          ${k.source === 'admin' ? `<button class="adm-link danger" data-rm-key="${esc(k.id)}" data-provider="${p.provider}">${t('Entfernen', 'Remove')}</button>` : ''}
+        </li>`).join('')}</ul>` : ''}
+    </div>`).join('');
+  const sel = $('#key-provider');
+  if (!sel.options.length) sel.innerHTML = providers.map((p) => `<option value="${p.provider}"${p.provider === 'groq' ? ' selected' : ''}>${esc(p.label)}</option>`).join('');
+}
+async function loadKeys() {
+  try { renderKeys((await api('keys')).providers); } catch (err) { toast(err.message); }
+}
+$('#key-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const key = $('#key-value').value.trim();
+  if (!key) return toast(t('Bitte einen Schlüssel einfügen.', 'Please paste a key.'));
+  const btn = e.currentTarget.querySelector('button');
+  btn.disabled = true;
+  btn.textContent = t('Teste …', 'Testing …');
+  try {
+    const data = await api('keys', { provider: $('#key-provider').value, key });
+    $('#key-value').value = '';
+    renderKeys(data.providers);
+    toast(t('Schlüssel funktioniert und ist gespeichert ✓', 'Key works and is saved ✓'));
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = t('Hinzufügen', 'Add');
+  }
+});
+$('#keys').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-rm-key]');
+  if (!btn || !confirm(t(`Schlüssel ${btn.dataset.rmKey} entfernen?`, `Remove key ${btn.dataset.rmKey}?`))) return;
+  try { renderKeys((await api('keys/remove', { provider: btn.dataset.provider, id: btn.dataset.rmKey })).providers); toast(t('Entfernt.', 'Removed.')); } catch (err) { toast(err.message); }
+});
+
 // ── Bestenliste ──────────────────────────────────────────────────
 $('#reset-board').addEventListener('click', async () => {
   if (!confirm(t('Bestenliste wirklich zurücksetzen? Danach zählen nur neue Stimmen.', 'Really reset the leaderboard? Only new votes will count.'))) return;
@@ -135,8 +262,10 @@ $('#reset-board').addEventListener('click', async () => {
 $('#undo-board').addEventListener('click', async () => {
   try { boardState((await api('reset-board', { undo: true })).boardResetAt); toast(t('Alte Stimmen zählen wieder.', 'Old votes count again.')); load(); } catch (err) { toast(err.message); }
 });
-$('#refresh').addEventListener('click', () => { load(); loadUsers(); });
+$('#refresh').addEventListener('click', () => { load(); loadUsers(); loadKeys(); });
 
 translateDom();
 load();
+loadLimits();
+loadKeys();
 loadUsers();

@@ -1845,12 +1845,39 @@ $('#share-stop').addEventListener('click', async () => {
 $('#share-link').addEventListener('focus', (e) => e.target.select());
 
 // ── Meine Statistik ───────────────────────────────────────────────
+// Tagesverbrauch als Balken von 0 bis 100 %
+function renderUsage(u) {
+  const box = $('#usage-card');
+  if (!u) { box.hidden = true; return; }
+  const reset = new Date(u.resetsAt).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' });
+  const c = u.costs ?? {};
+  const costs = [
+    [t('Antwort', 'Answer'), c.text], ['Battle', (c.text ?? 0) * 2], [t('Websuche', 'Web search'), c.web],
+    [t('Bild', 'Image'), c.image], ['Agent X', c.agent],
+  ].filter(([, n]) => n !== undefined).map(([name, n]) => `<span>${name} <b>${n}</b></span>`).join('');
+  if (u.limit === null) {
+    box.innerHTML = `<div class="usage-top"><span>${t('Heute genutzt', 'Used today')}</span><b>∞</b></div>
+      <p class="usage-sub">${t('Du hast kein Tageslimit.', 'You have no daily limit.')} ${t(`Heute ${u.used} Punkte genutzt.`, `${u.used} points used today.`)}</p>`;
+  } else {
+    const level = u.percent >= 100 ? 'full' : u.percent >= 80 ? 'high' : '';
+    const note = level === 'full' ? t('Voll – um Mitternacht geht es weiter.', 'Full – resets at midnight.')
+      : level === 'high' ? t('Fast voll', 'Almost full') : t(`Wieder 0 % um ${reset} Uhr`, `Back to 0 % at ${reset}`);
+    box.innerHTML = `
+      <div class="usage-top"><span>${t('Heute genutzt', 'Used today')}</span><b>${u.percent} %</b></div>
+      <div class="usage-bar ${level}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${u.percent}" aria-label="${t('Tageslimit', 'Daily limit')}"><i style="width:${u.percent}%"></i></div>
+      <p class="usage-sub"><span>${t(`${u.used} von ${u.limit} Punkten`, `${u.used} of ${u.limit} points`)}</span><span class="usage-note ${level}">${note}</span></p>
+      <p class="usage-costs"><small>${t('Kosten in Punkten:', 'Cost in points:')}</small>${costs}</p>`;
+  }
+  box.hidden = false;
+}
+
 async function showStats() {
   if (state.chat) resetChat();
   showView('stats');
   const sub = $('#stats-sub');
   sub.textContent = t('Lädt …', 'Loading …');
   ['#stat-grid', '#stat-modes', '#stat-fav', '#stat-used'].forEach((sel) => { $(sel).innerHTML = ''; });
+  $('#usage-card').hidden = true;
   try {
     const res = await fetch('/api/chat/stats');
     if (res.status === 401) return location.replace('/login');
@@ -1863,6 +1890,7 @@ async function showStats() {
       [d.votes, t('Battle-Stimmen', 'Battle votes')],
       [d.likes, t('Antworten mit 👍', 'Answers with 👍')],
     ];
+    renderUsage(d.usage);
     $('#stat-grid').innerHTML = tiles.map(([n, label]) => `<div class="stat-tile"><b>${Number(n) || 0}</b><span>${label}</span></div>`).join('');
 
     const total = Object.values(d.modes).reduce((a, b) => a + b, 0);

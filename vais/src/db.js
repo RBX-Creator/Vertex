@@ -70,6 +70,15 @@ try { await client.execute('ALTER TABLE messages ADD COLUMN meta TEXT'); } catch
 try { await client.execute('ALTER TABLE messages ADD COLUMN feedback INTEGER'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE messages ADD COLUMN attachments TEXT'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE users ADD COLUMN blocked INTEGER'); } catch { /* gibt es schon */ }
+try { await client.execute('ALTER TABLE users ADD COLUMN daily_limit INTEGER'); } catch { /* gibt es schon */ }
+
+// Verbrauch pro Nutzer und Tag (in Punkten)
+await client.execute(`CREATE TABLE IF NOT EXISTS usage (
+  user_id INTEGER NOT NULL,
+  day TEXT NOT NULL,
+  points INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, day)
+)`);
 
 // Ereignisse für die Admin-Seite (Fehler, Modell-Nutzung) – wird klein gehalten
 await client.execute(`CREATE TABLE IF NOT EXISTS events (

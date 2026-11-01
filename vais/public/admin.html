@@ -46,6 +46,28 @@
     </section>
 
     <section class="adm-card">
+      <h2 data-en="Daily limit &amp; costs">Tageslimit &amp; Kosten</h2>
+      <p class="adm-sub" data-en="Every user gets points per day. Each answer costs points – this way enough is left for everyone. Resets at midnight (German time).">Jeder Nutzer bekommt Punkte pro Tag. Jede Antwort kostet Punkte – so bleibt für alle genug übrig. Neu um Mitternacht (deutsche Zeit).</p>
+      <form class="adm-form" id="limits-form" novalidate>
+        <div class="adm-fields" id="limit-fields"></div>
+        <p class="adm-hint" id="limit-example"></p>
+        <button class="adm-btn primary" type="submit" data-en="Save">Speichern</button>
+      </form>
+    </section>
+
+    <section class="adm-card">
+      <h2 data-en="API keys">API-Schlüssel</h2>
+      <p class="adm-sub" data-en="If a key is full, the next one takes over automatically. Keys are only shown shortened.">Ist ein Schlüssel voll, springt automatisch der nächste ein. Schlüssel werden nur gekürzt angezeigt.</p>
+      <div id="keys"></div>
+      <form class="adm-form adm-keyform" id="key-form" novalidate>
+        <select class="adm-input" id="key-provider" aria-label="Anbieter" data-en-aria-label="Provider"></select>
+        <input class="adm-input" id="key-value" type="password" autocomplete="off" spellcheck="false" placeholder="Neuen Schlüssel einfügen" data-en-placeholder="Paste new key" aria-label="Schlüssel" data-en-aria-label="Key">
+        <button class="adm-btn primary" type="submit" data-en="Add">Hinzufügen</button>
+      </form>
+      <p class="adm-hint" data-en="The key is tested before it is saved.">Der Schlüssel wird vor dem Speichern getestet.</p>
+    </section>
+
+    <section class="adm-card">
       <h2 data-en="Users">Nutzer</h2>
       <input class="adm-search" id="user-q" type="search" placeholder="E-Mail suchen …" data-en-placeholder="Search email …" autocomplete="off">
       <ul class="adm-users" id="users"></ul>

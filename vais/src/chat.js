@@ -4,6 +4,7 @@ import { get, run, all, purgeChats, getSetting, logEvent } from './db.js';
 import { t } from './i18n.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { runAgent } from './agent.js';
+import { limitSettings, charge, refund, usageOf } from './limits.js';
 import { sourcesFromText } from './models.js';
 import { pickAvailable } from './models.js';
 import { generateImage, helperModel, complete } from './models.js';
@@ -65,44 +66,34 @@ chat.use(wrap(async (req, res, next) => {
   next();
 }));
 
-// Premium-Modelle (kosten Guthaben): höchstens PAID_DAILY_LIMIT Antworten pro Nutzer und Tag
-const PAID_DAILY_LIMIT = Math.max(0, Number(process.env.PAID_DAILY_LIMIT ?? 20));
+// Premium-Modelle (kosten Guthaben): höchstens „paidDaily“ Antworten pro Nutzer und Tag (im Admin-Bereich einstellbar)
 const paidUse = new Map();
 const today = () => new Date().toISOString().slice(0, 10);
-function paidAllowed(userId) {
-  const key = `${userId}:${today()}`;
-  return (paidUse.get(key) ?? 0) < PAID_DAILY_LIMIT;
+function paidAllowed(userId, max) {
+  return (paidUse.get(`${userId}:${today()}`) ?? 0) < max;
 }
 function countPaid(userId) {
   const key = `${userId}:${today()}`;
   paidUse.set(key, (paidUse.get(key) ?? 0) + 1);
   if (paidUse.size > 5000) for (const k of paidUse.keys()) if (!k.endsWith(today())) paidUse.delete(k);
 }
-const premiumError = () => Object.assign(
-  new Error(t(`Du hast dein Tageslimit für Premium-Modelle erreicht (${PAID_DAILY_LIMIT} pro Tag). Wähle ein kostenloses Modell.`, `You reached your daily limit for premium models (${PAID_DAILY_LIMIT} per day). Choose a free model.`)),
+const premiumError = (max) => Object.assign(
+  new Error(t(`Du hast dein Tageslimit für Premium-Modelle erreicht (${max} pro Tag). Wähle ein kostenloses Modell.`, `You reached your daily limit for premium models (${max} per day). Choose a free model.`)),
   { status: 429, premium: true },
 );
 
-// Limits pro Nutzer: 40 Antworten in 5 Minuten und USER_DAILY_LIMIT pro Tag (Standard 500)
-const USER_DAILY_LIMIT = Math.max(1, Number(process.env.USER_DAILY_LIMIT ?? 500));
+// Schutz vor Dauerfeuer: höchstens „burst“ Antworten in 5 Minuten (das Tageslimit steht in limits.js)
 const usage = new Map();
-const daily = new Map();
-function limit(userId) {
+function limit(userId, burst) {
   const now = Date.now();
   const list = (usage.get(userId) || []).filter((ts) => now - ts < 5 * 60 * 1000);
-  if (list.length >= 40) throw new HttpError(429, t('Du sendest gerade sehr viele Nachrichten. Warte kurz.', 'You are sending a lot of messages. Please wait a moment.'));
-  const dayKey = `${userId}:${today()}`;
-  if ((daily.get(dayKey) ?? 0) >= USER_DAILY_LIMIT) {
-    throw new HttpError(429, t(`Du hast dein Tageslimit von ${USER_DAILY_LIMIT} Antworten erreicht. Morgen geht es weiter.`, `You reached your daily limit of ${USER_DAILY_LIMIT} answers. See you tomorrow.`));
-  }
+  if (list.length >= burst) throw new HttpError(429, t('Du sendest gerade sehr viele Nachrichten. Warte kurz.', 'You are sending a lot of messages. Please wait a moment.'));
   list.push(now);
   usage.set(userId, list);
-  daily.set(dayKey, (daily.get(dayKey) ?? 0) + 1);
 }
 setInterval(() => {
   const now = Date.now();
   for (const [k, list] of usage) if (list.every((ts) => now - ts > 5 * 60 * 1000)) usage.delete(k);
-  for (const k of daily.keys()) if (!k.endsWith(today())) daily.delete(k);
 }, 10 * 60 * 1000).unref();
 
 chat.get('/models', wrap(async (req, res) => {
@@ -171,7 +162,16 @@ chat.post('/stream', wrap(async (req, res) => {
   // Ältere Bilder für Modelle ohne Bild-Fähigkeit nicht mitschicken
   if (!hasImages) clean = flatten(clean);
   const turnNo = Number.isInteger(turn) && turn >= 0 && turn < 1000 ? turn : null;
-  limit(req.user.id);
+  const L = await limitSettings();
+  limit(req.user.id, L.burst);
+  // Punkte fürs Tageslimit: je nach Art der Antwort
+  const info = model === 'agent' ? null : await findModel(model);
+  const [cost, what] = row.mode === 'agent' ? [L.costAgent, 'Agent X']
+    : row.modality === 'image' ? [L.costImage, t('Ein Bild', 'An image')]
+      : info?.paid ? [L.costPremium, t('Ein Premium-Modell', 'A premium model')]
+        : row.modality === 'web' || info?.caps.includes('web') ? [L.costWeb, t('Websuche', 'Web search')]
+          : [L.costText, t('Eine Antwort', 'An answer')];
+  const charged = await charge(req.user, cost, what);
 
   // Verlauf speichern: deine Frage sofort, die Antwort am Ende
   const steps = [];
@@ -243,7 +243,7 @@ chat.post('/stream', wrap(async (req, res) => {
       for (let attempt = 0; ; attempt++) {
         try {
           if ((await findModel(model))?.paid) {
-            if (!paidAllowed(req.user.id)) throw premiumError();
+            if (!paidAllowed(req.user.id, L.paidDaily)) throw premiumError(L.paidDaily);
             countPaid(req.user.id);
           }
           if (row.modality === 'image') {
@@ -268,7 +268,7 @@ chat.post('/stream', wrap(async (req, res) => {
           if (controller.signal.aborted || text || row.mode !== 'battle' || attempt >= 3) throw err;
           const fresh = await get('SELECT model_a, model_b FROM chats WHERE id = ?', row.id);
           const other = side === 1 ? fresh.model_a : fresh.model_b;
-          const premiumIds = paidAllowed(req.user.id) ? [] : (await listModels()).filter((m) => m.paid).map((m) => m.id);
+          const premiumIds = paidAllowed(req.user.id, L.paidDaily) ? [] : (await listModels()).filter((m) => m.paid).map((m) => m.id);
           const needCap = row.modality === 'image' ? 'image' : hasImages ? 'vision' : (MODALITY_CAP[row.modality] ?? 'text');
           const next = await pickAvailable(needCap, [...tried, other, ...premiumIds]);
           if (!next) throw err;
@@ -285,8 +285,10 @@ chat.post('/stream', wrap(async (req, res) => {
     }
     res.write(`${JSON.stringify({ done: true })}\n`);
     const got = text || images.length;
+    if (!got) await refund(req.user, charged);
     await save(side === 1 ? 1 : 0, text, got ? 'done' : 'error', got ? null : t('Das Modell hat keine Antwort geliefert.', 'The model returned no answer.'));
   } catch (err) {
+    if (!text && !images.length) await refund(req.user, charged); // keine Antwort → Punkte zurück
     if (controller.signal.aborted) {
       await save(side === 1 ? 1 : 0, text, text || images.length ? 'done' : 'stopped');
     } else {
@@ -430,6 +432,13 @@ chat.post('/unshare', wrap(async (req, res) => {
 }));
 
 // ── Meine Statistik ───────────────────────────────────────────────
+// Eigener Verbrauch heute (0–100 %)
+async function usageWithCosts(user) {
+  const L = await limitSettings();
+  return { ...(await usageOf(user)), costs: { text: L.costText, web: L.costWeb, image: L.costImage, agent: L.costAgent, premium: L.costPremium } };
+}
+chat.get('/usage', wrap(async (req, res) => res.json(await usageWithCosts(req.user))));
+
 chat.get('/stats', wrap(async (req, res) => {
   const uid = req.user.id;
   const one = async (sql, ...args) => Number(Object.values((await get(sql, ...args)) ?? { n: 0 })[0] ?? 0);
@@ -460,6 +469,7 @@ chat.get('/stats', wrap(async (req, res) => {
     favorites: await top(wins),
     mostUsed: await top(used),
     since: req.user.created_at,
+    usage: await usageWithCosts(req.user),
   });
 }));
 
