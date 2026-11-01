@@ -69,6 +69,7 @@ await client.execute('CREATE UNIQUE INDEX IF NOT EXISTS chats_share ON chats (sh
 try { await client.execute('ALTER TABLE messages ADD COLUMN meta TEXT'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE messages ADD COLUMN feedback INTEGER'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE messages ADD COLUMN attachments TEXT'); } catch { /* gibt es schon */ }
+try { await client.execute('ALTER TABLE messages ADD COLUMN feedback_reason TEXT'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE users ADD COLUMN blocked INTEGER'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE users ADD COLUMN daily_limit INTEGER'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE users ADD COLUMN instructions TEXT'); } catch { /* gibt es schon */ }

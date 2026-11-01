@@ -259,6 +259,25 @@ $('#keys').addEventListener('click', async (e) => {
   try { renderKeys((await api('keys/remove', { provider: btn.dataset.provider, id: btn.dataset.rmKey })).providers); toast(t('Entfernt.', 'Removed.')); } catch (err) { toast(err.message); }
 });
 
+// ── Bewertungen ──────────────────────────────────────────────────
+const REASON_LABEL = {
+  wrong: t('falsch', 'wrong'), misunderstood: t('nicht verstanden', 'misunderstood'), long: t('zu lang', 'too long'), short: t('zu kurz', 'too short'),
+  code: t('Code geht nicht', 'code broken'), outdated: t('veraltet', 'outdated'), language: t('falsche Sprache', 'wrong language'), rude: t('unpassend', 'inappropriate'),
+};
+async function loadFeedback() {
+  try {
+    const { models } = await api('feedback');
+    $('#feedback').innerHTML = models.length ? models.map((m) => {
+      const total = m.up + m.down;
+      const pct = total ? Math.round((m.up / total) * 100) : 0;
+      const reasons = Object.entries(m.reasons).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => `${esc(REASON_LABEL[k] ?? k)} ${n}×`).join(' · ');
+      return `<li><div class="adm-fb-top"><b>${esc(m.name || m.model)}</b><span>👍 ${num(m.up)} · 👎 ${num(m.down)}</span></div>
+        <span class="adm-bar adm-fb-bar" title="${pct} % ${t('positiv', 'positive')}"><i style="width:${pct}%"></i></span>
+        ${reasons ? `<small>${t('Kritik', 'Criticism')}: ${reasons}</small>` : ''}</li>`;
+    }).join('') : `<li class="adm-empty">${t('Noch keine Bewertungen.', 'No ratings yet.')}</li>`;
+  } catch (err) { toast(err.message); }
+}
+
 // ── Veröffentlichte Webseiten ────────────────────────────────────
 async function loadSitesAdmin() {
   try {
@@ -273,7 +292,8 @@ async function loadSitesAdmin() {
 $('#sites').addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-rm-site]');
   if (!btn || !confirm(t('Diese Webseite entfernen?', 'Remove this website?'))) return;
-  try { await api('sites/remove', { id: btn.dataset.rmSite }); toast(t('Entfernt.', 'Removed.')); loadSitesAdmin(); } catch (err) { toast(err.message); }
+  try { await api('sites/remove', { id: btn.dataset.rmSite }); toast(t('Entfernt.', 'Removed.')); loadSitesAdmin();
+loadFeedback(); } catch (err) { toast(err.message); }
 });
 
 // ── Bestenliste ──────────────────────────────────────────────────

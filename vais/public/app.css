@@ -1709,3 +1709,7 @@ a.site-open { display: flex; justify-content: center; text-decoration: none; box
 .tr-mic.live { background: var(--primary); color: var(--primary-text); border-color: var(--primary); animation: mic-pulse 1.4s ease-in-out infinite; }
 .tr-mic.live small { color: inherit; opacity: .8; }
 .tr-mic:active { transform: scale(.97); }
+.fb-reasons { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; animation: fadeUp .25s ease both; }
+.fb-reasons p { width: 100%; margin: 0 0 2px; font-size: 13px; color: var(--muted); }
+.fb-chip { padding: 6px 11px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; transition: background .15s, border-color .15s; }
+.fb-chip[aria-pressed='true'] { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }

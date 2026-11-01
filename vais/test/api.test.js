@@ -272,3 +272,16 @@ test('Jugendschutz blockt gefährliche Anfragen und zeigt bei Selbstverletzung H
   const ok = await stream(c, start.data.id, 'Wie backe ich Brot?', 2);
   assert.ok(ok.text.length > 10 && !/nicht helfen|can’t help/.test(ok.text));
 });
+
+test('👎 mit Gründen landet in der Admin-Auswertung', async () => {
+  const c = await signUp('fb@example.com');
+  const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
+  const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'FB' });
+  await stream(c, start.data.id, 'Hallo');
+  assert.equal((await c.json('/api/chat/feedback', { chatId: start.data.id, turn: 0, side: 0, value: -1, reasons: ['long', 'wrong', 'quatsch'] })).status, 200);
+  const a = client();
+  await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
+  const m = (await a.json('/api/admin/feedback')).data.models.find((x) => x.model === first.id);
+  assert.equal(m.down, 1);
+  assert.deepEqual(m.reasons, { long: 1, wrong: 1 });
+});

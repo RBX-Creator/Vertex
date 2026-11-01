@@ -189,4 +189,25 @@ admin.post('/safety', wrap(async (req, res) => {
   res.json({ ok: true, on: !!req.body?.on });
 }));
 
+// Bewertungen pro Modell (letzte 30 Tage): 👍, 👎 und die Gründe
+admin.get('/feedback', wrap(async (req, res) => {
+  const rows = await all(`SELECT CASE WHEN m.side = 1 THEN c.model_b ELSE c.model_a END AS model, m.feedback, m.feedback_reason
+    FROM messages m JOIN chats c ON c.id = m.chat_id
+    WHERE m.side >= 0 AND m.feedback IS NOT NULL AND m.created_at > ?`, Date.now() - 30 * DAY);
+  const per = new Map();
+  for (const r of rows) {
+    if (!r.model) continue;
+    const e = per.get(r.model) ?? { model: r.model, up: 0, down: 0, reasons: {} };
+    if (Number(r.feedback) === 1) e.up++;
+    else if (Number(r.feedback) === -1) {
+      e.down++;
+      for (const reason of String(r.feedback_reason ?? '').split(',').filter(Boolean)) e.reasons[reason] = (e.reasons[reason] ?? 0) + 1;
+    }
+    per.set(r.model, e);
+  }
+  const list = await Promise.all([...per.values()].sort((a, b) => (b.up + b.down) - (a.up + a.down)).slice(0, 30)
+    .map(async (e) => ({ ...e, ...(await describeModel(e.model)) })));
+  res.json({ models: list });
+}));
+
 admin.use(errorHandler);

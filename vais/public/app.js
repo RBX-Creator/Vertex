@@ -1011,6 +1011,26 @@ el.thread.addEventListener('click', async (e) => {
   haptic('tap');
 });
 
+// 👎: Was war nicht gut? (hilft zu sehen, welche Modelle wofür Kritik bekommen)
+const REASONS = () => [
+  ['wrong', t('Falsch', 'Wrong')], ['misunderstood', t('Frage nicht verstanden', 'Misunderstood')], ['long', t('Zu lang', 'Too long')],
+  ['short', t('Zu kurz', 'Too short')], ['code', t('Code geht nicht', 'Code broken')], ['outdated', t('Veraltet', 'Outdated')],
+  ['language', t('Falsche Sprache', 'Wrong language')], ['rude', t('Unpassend', 'Inappropriate')],
+];
+function renderReasons(turnIndex, side, show) {
+  const card = cardEl(turnIndex, side);
+  if (!card) return;
+  let box = $('.fb-reasons', card);
+  if (!show) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'fb-reasons';
+    ($('.card-foot', card) ?? $('.card-body', card)).after(box);
+  }
+  const a = state.chat.turns[turnIndex].answers[side];
+  box.innerHTML = `<p>${t('Was war nicht gut? (optional)', 'What was wrong? (optional)')}</p>${REASONS().map(([k, label]) => `<button type="button" class="fb-chip" data-act="reason" data-reason="${k}" aria-pressed="${(a.reasons ?? []).includes(k)}">${label}</button>`).join('')}`;
+}
+
 // ── Abstimmen ─────────────────────────────────────────────────────
 el.vote.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-vote]');
@@ -1067,14 +1087,25 @@ el.thread.addEventListener('click', async (e) => {
     if (a.feedback) haptic('tap');
     updateCard(turnIndex, side);
     if (a.feedback) cardEl(turnIndex, side)?.querySelector(`[data-act="${act}"]`)?.classList.add('bump');
+    if (a.feedback !== -1) a.reasons = [];
     try {
-      await post('/api/chat/feedback', { chatId: state.chat.id, turn: turnIndex, side, value: a.feedback });
-      if (a.feedback) toast(a.feedback === 1 ? t('Danke für dein Feedback 👍', 'Thanks for your feedback 👍') : t('Danke, wir merken uns das 👎', 'Thanks, noted 👎'));
+      await post('/api/chat/feedback', { chatId: state.chat.id, turn: turnIndex, side, value: a.feedback, reasons: a.reasons ?? [] });
+      if (a.feedback === 1) toast(t('Danke für dein Feedback 👍', 'Thanks for your feedback 👍'));
+      renderReasons(turnIndex, side, a.feedback === -1);
     } catch (err) {
       a.feedback = before;
       updateCard(turnIndex, side);
       toast(err.message);
     }
+    return;
+  }
+
+  if (act === 'reason') {
+    const r = btn.dataset.reason;
+    a.reasons = (a.reasons ?? []).includes(r) ? a.reasons.filter((x) => x !== r) : [...(a.reasons ?? []), r];
+    btn.setAttribute('aria-pressed', String(a.reasons.includes(r)));
+    haptic('tap');
+    post('/api/chat/feedback', { chatId: state.chat.id, turn: turnIndex, side, value: -1, reasons: a.reasons }).catch((err) => toast(err.message));
     return;
   }
 

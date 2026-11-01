@@ -755,7 +755,7 @@ async function loadChatData(row, { forShare = false } = {}) {
       turns[m.turn].answers[m.side] = {
         text: m.content, status: m.status, error: m.error,
         steps: meta.steps ?? [], thinking: forShare ? '' : meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0,
-        feedback: forShare ? 0 : m.feedback ?? 0, sources: meta.sources ?? [], images: meta.images ?? [],
+        feedback: forShare ? 0 : m.feedback ?? 0, reasons: forShare || !m.feedback_reason ? [] : String(m.feedback_reason).split(','), sources: meta.sources ?? [], images: meta.images ?? [],
         reaction: meta.reaction ?? null, fallback: meta.fallback ?? null, summarized: meta.summarized ?? null,
       };
     }
@@ -784,12 +784,16 @@ chat.get('/:id', wrap(async (req, res) => {
 }));
 
 // 👍 / 👎 zu einer Antwort (1, -1 oder 0 zum Zurücknehmen)
+export const FEEDBACK_REASONS = ['wrong', 'long', 'short', 'misunderstood', 'code', 'outdated', 'rude', 'language'];
 chat.post('/feedback', wrap(async (req, res) => {
   const { chatId, turn, side, value } = req.body ?? {};
   if (![1, -1, 0].includes(value) || !Number.isInteger(turn) || ![0, 1].includes(side)) throw new HttpError(400, t('Ungültige Bewertung.', 'Invalid rating.'));
   const row = await get('SELECT id FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
   if (!row) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
-  await run('UPDATE messages SET feedback = ? WHERE chat_id = ? AND turn = ? AND side = ?', value || null, row.id, turn, side);
+  // Gründe beim 👎 (mehrere möglich)
+  const reasons = value === -1 && Array.isArray(req.body?.reasons)
+    ? [...new Set(req.body.reasons.map(String).filter((r) => FEEDBACK_REASONS.includes(r)))].join(',') || null : null;
+  await run('UPDATE messages SET feedback = ?, feedback_reason = ? WHERE chat_id = ? AND turn = ? AND side = ?', value || null, reasons, row.id, turn, side);
   res.json({ ok: true });
 }));
 

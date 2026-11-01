@@ -126,3 +126,10 @@ body.admin { background: var(--bg); color: var(--text); font-family: var(--sans)
 .adm-switch input:checked { background: var(--success); }
 .adm-switch input:checked::after { transform: translateX(18px); }
 .adm-events li.blocked .adm-ev-kind, .adm-events li.alarm .adm-ev-kind { color: var(--danger); }
+.adm-fb { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 12px; }
+.adm-fb li { display: grid; gap: 5px; font-size: 14px; }
+.adm-fb-top { display: flex; justify-content: space-between; gap: 10px; }
+.adm-fb-top b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-fb-top span { color: var(--muted); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.adm-fb-bar { height: 6px; }
+.adm-fb li small { color: var(--muted); font-size: 12px; }
