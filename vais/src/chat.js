@@ -358,12 +358,35 @@ chat.post('/stream', wrap(async (req, res) => {
 // ── Verlauf ───────────────────────────────────────────────────────
 chat.get('/list', wrap(async (req, res) => {
   const rows = await all(
-    `SELECT id, title, mode, COALESCE(updated_at, created_at) AS updated FROM chats
+    `SELECT id, title, mode, pinned, folder, COALESCE(updated_at, created_at) AS updated FROM chats
      WHERE user_id = ? AND EXISTS (SELECT 1 FROM messages WHERE messages.chat_id = chats.id)
-     ORDER BY updated DESC LIMIT 200`,
+     ORDER BY updated DESC LIMIT 300`,
     req.user.id,
   );
-  res.json({ chats: rows.map((r) => ({ id: r.id, title: r.title || t('Chat', 'Chat'), mode: r.mode, updated: r.updated })) });
+  res.json({ chats: rows.map((r) => ({ id: r.id, title: r.title || t('Chat', 'Chat'), mode: r.mode, updated: r.updated, pinned: !!r.pinned, folder: r.folder || null })) });
+}));
+
+// Anheften und Ordner
+chat.post('/organize', wrap(async (req, res) => {
+  const { chatId, pinned, folder } = req.body ?? {};
+  const row = await get('SELECT id FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
+  if (!row) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
+  if (pinned !== undefined) {
+    if (pinned) {
+      const n = await get('SELECT COUNT(*) AS n FROM chats WHERE user_id = ? AND pinned = 1', req.user.id);
+      if (Number(n?.n ?? 0) >= 20) throw new HttpError(400, t('Höchstens 20 angeheftete Chats.', 'At most 20 pinned chats.'));
+    }
+    await run('UPDATE chats SET pinned = ? WHERE id = ?', pinned ? 1 : null, row.id);
+  }
+  if (folder !== undefined) {
+    const name = folder === null ? null : String(folder).replace(/\s+/g, ' ').trim().slice(0, 40) || null;
+    if (name) {
+      const known = await all('SELECT DISTINCT folder FROM chats WHERE user_id = ? AND folder IS NOT NULL', req.user.id);
+      if (!known.some((f) => f.folder === name) && known.length >= 30) throw new HttpError(400, t('Höchstens 30 Ordner.', 'At most 30 folders.'));
+    }
+    await run('UPDATE chats SET folder = ? WHERE id = ?', name, row.id);
+  }
+  res.json({ ok: true });
 }));
 
 // ── Bestenliste (Elo aus den Battle-Stimmen) ──────────────────────
@@ -485,6 +508,35 @@ chat.post('/unshare', wrap(async (req, res) => {
 }));
 
 // ── Meine Statistik ───────────────────────────────────────────────
+// Alle eigenen Daten als Datei (Recht auf Auskunft/Datenübertragbarkeit, Art. 15 und 20 DSGVO)
+chat.get('/export', wrap(async (req, res) => {
+  const uid = req.user.id;
+  const user = await get('SELECT email, created_at, instructions, memory_off, daily_limit FROM users WHERE id = ?', uid);
+  const chats = await all('SELECT * FROM chats WHERE user_id = ? ORDER BY created_at', uid);
+  const out = [];
+  for (const row of chats) {
+    const data = await loadChatData(row);
+    out.push({ id: row.id, title: data.title, mode: data.mode, modality: data.modality, created: new Date(Number(row.created_at)).toISOString(), models: data.labels ?? null, winner: data.winner ?? null, shared: data.shared, turns: data.turns });
+  }
+  const [memories, reminders, usage] = await Promise.all([
+    all('SELECT text, created_at FROM memories WHERE user_id = ? ORDER BY id', uid).catch(() => []),
+    all('SELECT text, due_at, sent_at FROM reminders WHERE user_id = ? ORDER BY due_at', uid).catch(() => []),
+    all('SELECT day, points FROM usage WHERE user_id = ? ORDER BY day', uid).catch(() => []),
+  ]);
+  const file = {
+    exportedAt: new Date().toISOString(),
+    service: 'VAIs',
+    account: { email: user.email, created: new Date(Number(user.created_at)).toISOString() },
+    settings: { instructions: user.instructions ?? '', memory: !user.memory_off, ownDailyLimit: user.daily_limit ?? null },
+    memories: memories.map((m) => ({ text: m.text, created: new Date(Number(m.created_at)).toISOString() })),
+    reminders: reminders.map((r) => ({ text: r.text, due: new Date(Number(r.due_at)).toISOString(), sent: r.sent_at ? new Date(Number(r.sent_at)).toISOString() : null })),
+    usagePerDay: usage.map((u) => ({ day: u.day, points: Number(u.points) })),
+    chats: out,
+  };
+  res.set('Content-Disposition', `attachment; filename="vais-daten-${new Date().toISOString().slice(0, 10)}.json"`);
+  res.type('application/json').send(JSON.stringify(file, null, 2));
+}));
+
 // Eigener Verbrauch heute (0–100 %)
 async function usageWithCosts(user) {
   const L = await limitSettings();

@@ -47,6 +47,10 @@ Object.assign(ICON, {
   's-time': svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   's-error': svg('<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>'),
   's-other': svg('<circle cx="12" cy="12" r="3"/>'),
+  pin: svg('<path d="M9 4h6l-1 6 3 3H7l3-3zM12 13v7"/>'),
+  folder: svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+  more: svg('<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>'),
+  close: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
   's-reminder': svg('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M5 3 2 6M19 3l3 3"/>'),
   's-video': svg('<rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="m10 9.5 5 2.5-5 2.5z"/>'),
   's-memory': svg('<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/>'),
@@ -1718,31 +1722,129 @@ function groupLabel(ts) {
   return t('Älter', 'Older');
 }
 
+const openFolders = new Set(store.get('vais.folders.open', []));
+function chatRow(c) {
+  const active = state.chat?.id === c.id ? ' active' : '';
+  return `<div class="drawer-chat${active}" data-row="${escapeHtml(c.id)}">
+      <button class="drawer-chat-open" data-open="${escapeHtml(c.id)}">${c.pinned ? ICON.pin : ICON[c.mode] ?? ''}<span data-title="${escapeHtml(c.id)}"></span></button>
+      <button class="drawer-chat-more" data-more="${escapeHtml(c.id)}" aria-label="${t('Mehr', 'More')}" title="${t('Mehr', 'More')}" aria-haspopup="menu">${ICON.more}</button>
+    </div>`;
+}
 function renderHistory() {
+  // Ein offenes Menü bleibt offen, solange es den Chat noch gibt (die Liste lädt manchmal im Hintergrund neu)
+  if (chatMenu && !historyItems.some((c) => c.id === chatMenu.dataset.for)) closeChatMenu();
   const q = el.dSearch.value.trim().toLowerCase();
-  const items = historyItems.filter((c) => !q || c.title.toLowerCase().includes(q));
+  const items = historyItems.filter((c) => !q || c.title.toLowerCase().includes(q) || (c.folder ?? '').toLowerCase().includes(q));
   if (!items.length) {
     el.dList.innerHTML = `<p class="drawer-empty">${q ? t('Nichts gefunden.', 'Nothing found.') : t('Noch keine Chats.', 'No chats yet.')}</p>`;
     return;
   }
   let html = '';
+  // Angeheftet ganz oben, dann Ordner, dann der Rest nach Datum (bei der Suche alles nach Datum)
+  const pinned = q ? [] : items.filter((c) => c.pinned);
+  if (pinned.length) html += `<p class="drawer-group">${t('Angeheftet', 'Pinned')}</p>${pinned.map(chatRow).join('')}`;
+  const rest = items.filter((c) => q || !c.pinned);
+  const folders = q ? [] : [...new Set(rest.map((c) => c.folder).filter(Boolean))].sort((x, y) => x.localeCompare(y));
+  if (folders.length) {
+    html += `<p class="drawer-group">${t('Ordner', 'Folders')}</p>`;
+    for (const f of folders) {
+      const inside = rest.filter((c) => c.folder === f);
+      const open = openFolders.has(f);
+      html += `<div class="drawer-folder${open ? ' open' : ''}">
+        <button class="drawer-folder-head" data-folder="${escapeHtml(f)}" aria-expanded="${open}">${ICON.folder}<span></span><small>${inside.length}</small>${ICON.chev}</button>
+        <div class="drawer-folder-body"${open ? '' : ' hidden'}>${inside.map(chatRow).join('')}</div>
+      </div>`;
+    }
+  }
   let last = '';
-  for (const c of items) {
+  for (const c of rest.filter((x) => q || !x.folder)) {
     const g = groupLabel(c.updated);
     if (g !== last) { html += `<p class="drawer-group">${g}</p>`; last = g; }
-    const active = state.chat?.id === c.id ? ' active' : '';
-    html += `<div class="drawer-chat${active}">
-      <button class="drawer-chat-open" data-open="${escapeHtml(c.id)}">${ICON[c.mode] ?? ''}<span></span></button>
-      <button class="drawer-chat-ren" data-ren="${escapeHtml(c.id)}" aria-label="${t('Chat umbenennen', 'Rename chat')}" title="${t('Umbenennen', 'Rename')}">${ICON.rename}</button>
-      <button class="drawer-chat-del" data-del="${escapeHtml(c.id)}" aria-label="${t('Chat löschen', 'Delete chat')}" title="${t('Löschen', 'Delete')}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
-      </button>
-    </div>`;
+    html += chatRow(c);
   }
   el.dList.innerHTML = html;
-  // Titel sicher als Text einsetzen
-  el.dList.querySelectorAll('[data-open] span').forEach((span, i) => { span.textContent = items[i].title; });
+  // Titel und Ordnernamen sicher als Text einsetzen
+  el.dList.querySelectorAll('[data-title]').forEach((span) => { span.textContent = historyItems.find((c) => c.id === span.dataset.title)?.title ?? ''; });
+  el.dList.querySelectorAll('[data-folder] span').forEach((span) => { span.textContent = span.parentElement.dataset.folder; });
 }
+
+// Menü „⋯“ an einem Chat: anheften, Ordner, umbenennen, löschen
+let chatMenu = null;
+function closeChatMenu() { chatMenu?.remove(); chatMenu = null; }
+function openChatMenu(id, btn) {
+  closeChatMenu();
+  const item = historyItems.find((c) => c.id === id);
+  if (!item) return;
+  const menu = document.createElement('div');
+  menu.className = 'chat-menu';
+  menu.setAttribute('role', 'menu');
+  const folders = [...new Set(historyItems.map((c) => c.folder).filter(Boolean))].sort((x, y) => x.localeCompare(y));
+  const main = () => {
+    menu.innerHTML = `
+      <button role="menuitem" data-cm="pin">${ICON.pin}<span>${item.pinned ? t('Lösen', 'Unpin') : t('Anheften', 'Pin')}</span></button>
+      <button role="menuitem" data-cm="folder">${ICON.folder}<span>${item.folder ? t('Ordner ändern', 'Change folder') : t('In Ordner verschieben', 'Move to folder')}</span></button>
+      <button role="menuitem" data-cm="rename">${ICON.rename}<span>${t('Umbenennen', 'Rename')}</span></button>
+      <button role="menuitem" data-cm="delete" class="danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg><span>${t('Löschen', 'Delete')}</span></button>`;
+  };
+  const folderStep = () => {
+    menu.innerHTML = `
+      <p class="chat-menu-title">${t('Ordner wählen', 'Choose folder')}</p>
+      ${folders.map((f, i) => `<button role="menuitem" data-cm-folder="${i}"${f === item.folder ? ' aria-current="true"' : ''}>${ICON.folder}<span></span>${f === item.folder ? ICON.check : ''}</button>`).join('')}
+      ${item.folder ? `<button role="menuitem" data-cm="nofolder">${ICON.close}<span>${t('Aus dem Ordner nehmen', 'Remove from folder')}</span></button>` : ''}
+      <form class="chat-menu-new"><input class="input" maxlength="40" placeholder="${t('Neuer Ordner …', 'New folder …')}" aria-label="${t('Neuer Ordner', 'New folder')}"><button type="submit">${t('OK', 'OK')}</button></form>`;
+    menu.querySelectorAll('[data-cm-folder] span').forEach((sp, i) => { sp.textContent = folders[i]; });
+    menu.querySelector('.chat-menu-new').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const name = e.currentTarget.querySelector('input').value.replace(/\s+/g, ' ').trim();
+      if (name) setFolder(name);
+    });
+    if (!folders.length) menu.querySelector('.chat-menu-new input').focus();
+  };
+  const organize = async (patch) => {
+    try {
+      await post('/api/chat/organize', { chatId: id, ...patch });
+      Object.assign(item, patch);
+      if (patch.folder) { openFolders.add(patch.folder); store.set('vais.folders.open', [...openFolders]); }
+      closeChatMenu();
+      renderHistory();
+    } catch (err) { toast(err.message); }
+  };
+  const setFolder = (name) => organize({ folder: name });
+  menu.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const f = e.target.closest('[data-cm-folder]');
+    if (f) return setFolder(folders[Number(f.dataset.cmFolder)]);
+    const act = e.target.closest('[data-cm]')?.dataset.cm;
+    if (act === 'pin') return organize({ pinned: !item.pinned });
+    if (act === 'folder') return folderStep();
+    if (act === 'nofolder') return organize({ folder: null });
+    if (act === 'rename') { closeChatMenu(); return startRename(id, el.dList.querySelector(`[data-row="${CSS.escape(id)}"]`)); }
+    if (act === 'delete') {
+      closeChatMenu();
+      if (!confirm(t('Diesen Chat löschen?', 'Delete this chat?'))) return;
+      const res = await fetch(`/api/chat/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!res.ok) return toast(t('Löschen fehlgeschlagen.', 'Deleting failed.'));
+      historyItems = historyItems.filter((c) => c.id !== id);
+      closeChatMenu();
+      renderHistory();
+      if (state.chat?.id === id) go('');
+      toast(t('Chat gelöscht', 'Chat deleted'));
+    }
+  });
+  main();
+  const panel = btn.closest('.drawer-panel') ?? el.drawer;
+  panel.append(menu);
+  const r = btn.getBoundingClientRect();
+  const pr = panel.getBoundingClientRect();
+  menu.style.right = `${Math.max(8, pr.right - r.right)}px`;
+  const below = r.bottom - pr.top + 4;
+  menu.style.top = `${Math.min(below, pr.height - menu.offsetHeight - 12)}px`;
+  menu.dataset.for = id;
+  chatMenu = menu;
+  menu.querySelector('button')?.focus({ preventScroll: true });
+}
+document.addEventListener('click', (e) => { if (chatMenu && !chatMenu.contains(e.target) && !e.target.closest('[data-more]')) closeChatMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && chatMenu) { e.stopPropagation(); closeChatMenu(); } }, true);
 
 async function openDrawer() {
   el.drawer.hidden = false;
@@ -1785,18 +1887,17 @@ el.drawer.addEventListener('click', async (e) => {
   if (e.target.closest('[data-close-drawer]')) return closeDrawer();
   const open = e.target.closest('[data-open]');
   if (open) { closeDrawer(); return go(`#c/${open.dataset.open}`); }
-  const ren = e.target.closest('[data-ren]');
-  if (ren) return startRename(ren.dataset.ren, ren.closest('.drawer-chat'));
-  const del = e.target.closest('[data-del]');
-  if (del) {
-    if (!confirm(t('Diesen Chat löschen?', 'Delete this chat?'))) return;
-    const id = del.dataset.del;
-    const res = await fetch(`/api/chat/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    if (!res.ok) return toast(t('Löschen fehlgeschlagen.', 'Deleting failed.'));
-    historyItems = historyItems.filter((c) => c.id !== id);
+  const more = e.target.closest('[data-more]');
+  if (more) {
+    if (chatMenu?.dataset.for === more.dataset.more) return closeChatMenu();
+    return openChatMenu(more.dataset.more, more);
+  }
+  const folder = e.target.closest('[data-folder]');
+  if (folder) {
+    const name = folder.dataset.folder;
+    if (openFolders.has(name)) openFolders.delete(name); else openFolders.add(name);
+    store.set('vais.folders.open', [...openFolders]);
     renderHistory();
-    if (state.chat?.id === id) go('');
-    toast(t('Chat gelöscht', 'Chat deleted'));
   }
 });
 

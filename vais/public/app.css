@@ -1613,3 +1613,31 @@ a.set-admin { display: flex; justify-content: center; text-decoration: none; mar
 .set-range { display: flex; align-items: center; gap: 10px; flex: 1; max-width: 62%; }
 .set-range input { flex: 1; accent-color: var(--primary); }
 .set-range output { min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+a.set-export { display: flex; justify-content: center; text-decoration: none; box-sizing: border-box; margin-bottom: 4px; }
+
+/* ── Seitenleiste: Mehr-Menü, Angeheftet, Ordner ──────────────────── */
+.drawer-chat-ren, .drawer-chat-del { display: none; }
+.drawer-chat-more { width: 36px; height: 38px; flex-shrink: 0; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: var(--muted); opacity: 0; cursor: pointer; }
+.drawer-chat:hover .drawer-chat-more, .drawer-chat.active .drawer-chat-more, .drawer-chat-more:focus-visible, .drawer-chat-more[aria-expanded='true'] { opacity: 1; }
+@media (pointer: coarse) { .drawer-chat-more { opacity: .75; } }
+.drawer-chat-more:hover { color: var(--text); background: var(--border); }
+.drawer-chat-more svg { width: 18px; height: 18px; }
+.chat-menu { position: absolute; z-index: 5; min-width: 220px; max-width: calc(100% - 24px); padding: 6px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 12px 32px rgba(0, 0, 0, .22); display: grid; gap: 2px; animation: pop .2s cubic-bezier(.2, .9, .3, 1.2) both; }
+.chat-menu button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 10px; border: 0; border-radius: 9px; background: none; color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.chat-menu button:hover, .chat-menu button:focus-visible { background: var(--surface-2); outline: none; }
+.chat-menu button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-menu button svg { width: 18px; height: 18px; flex: none; color: var(--muted); }
+.chat-menu button.danger, .chat-menu button.danger svg { color: var(--danger); }
+.chat-menu-title { margin: 4px 10px 6px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.chat-menu-new { display: flex; gap: 6px; padding: 6px 4px 2px; border-top: 1px solid var(--border); margin-top: 4px; }
+.chat-menu-new .input { flex: 1; min-width: 0; padding: 8px 10px; font-size: 14px; }
+.chat-menu-new button { width: auto; flex: none; padding: 8px 12px; background: var(--primary); color: var(--primary-text); font-weight: 600; justify-content: center; }
+.chat-menu-new button:hover { background: var(--primary); opacity: .9; }
+.drawer-folder-head { display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 10px; border: 0; border-radius: 10px; background: none; color: var(--text); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+.drawer-folder-head:hover { background: var(--surface-2); }
+.drawer-folder-head > svg:first-child { width: 18px; height: 18px; color: var(--muted); flex: none; }
+.drawer-folder-head span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drawer-folder-head small { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.drawer-folder-head > svg:last-child { width: 16px; height: 16px; color: var(--muted); transition: transform .2s; }
+.drawer-folder.open .drawer-folder-head > svg:last-child { transform: rotate(180deg); }
+.drawer-folder-body { padding-left: 14px; border-left: 1px solid var(--border); margin-left: 18px; }
