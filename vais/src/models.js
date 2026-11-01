@@ -126,6 +126,31 @@ export async function removeKey(provider, id) {
 export const demoMode = !Object.values(PROVIDERS).some((p) => p.keys.length);
 export const hasProvider = (name) => !!PROVIDERS[name]?.keys.length;
 
+// Sprache → Text mit Whisper bei Groq (kostenlos). Gibt null zurück, wenn es gerade nicht geht.
+export async function transcribe(buf, type, language) {
+  if (demoMode) return language?.startsWith('en') ? 'Hello, how are you?' : 'Hallo, wie geht es dir?';
+  if (!PROVIDERS.groq.keys.length) return null;
+  const ids = await rawModelIds('groq');
+  const model = ids.find((id) => /whisper-large-v3-turbo/.test(id)) ?? ids.find((id) => /whisper/.test(id));
+  if (!model) return null;
+  const ext = /mp4|m4a|aac/.test(type) ? 'm4a' : /ogg/.test(type) ? 'ogg' : /wav/.test(type) ? 'wav' : 'webm';
+  const res = await withKeys('groq', `groq:${model}`, (key) => {
+    const form = new FormData();
+    form.append('file', new Blob([buf], { type: type || 'audio/webm' }), `sprache.${ext}`);
+    form.append('model', model);
+    form.append('response_format', 'json');
+    form.append('temperature', '0');
+    if (language) form.append('language', language.slice(0, 2));
+    return fetch(`${PROVIDERS.groq.base}/audio/transcriptions`, { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form, signal: AbortSignal.timeout(45_000) });
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw fail(`groq:${model}`, res.status, body?.error?.message, PROVIDERS.groq);
+  }
+  const data = await res.json();
+  return String(data.text ?? '').trim();
+}
+
 // Alle Modell-IDs eines Anbieters ungefiltert (z. B. um ein Prüf-Modell zu finden), 30 Minuten gemerkt
 const rawCache = {};
 export async function rawModelIds(provider) {

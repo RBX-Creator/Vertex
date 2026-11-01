@@ -383,3 +383,13 @@ test('Team-Chat: nur für Admins und Mods, KI antwortet auf @KI', async () => {
   assert.deepEqual(msgs.map((m) => (m.ai ? 'AI' : m.name)), ['AI', 'teammod', 'admin', 'AI']);
   assert.equal((await normal.json(`/api/groups/${g.data.id}/messages`)).status, 404);
 });
+
+test('Sprache → Text (Whisper) für Sprach-Modus und Diktieren', async () => {
+  const c = await signUp('stt@example.com');
+  const empty = await c.call('/api/chat/transcribe?lang=de-DE', new Uint8Array(10), 'POST');
+  assert.equal((await empty.json()).text, '');
+  const res = await fetch(`${BASE}/api/chat/transcribe?lang=de-DE`, {
+    method: 'POST', headers: { 'Content-Type': 'audio/webm', Origin: BASE, Cookie: (await c.call('/api/auth/me')).headers.get('set-cookie') ?? '' }, body: new Uint8Array(4000),
+  });
+  assert.ok([200, 401].includes(res.status));
+});

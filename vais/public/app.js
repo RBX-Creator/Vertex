@@ -3,6 +3,7 @@ import { markdown, enhance } from './render.js';
 import { startTour, tourDone } from './tour.js';
 import { CHANGES, LATEST } from './changelog.js';
 import { openTeam, refreshTeamBadge } from './team.js';
+import { Listener, canRecord, toText } from './listen.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 translateDom();
@@ -1517,9 +1518,38 @@ function speak(btn, card) {
 // ── Spracheingabe (Mikrofon) ──────────────────────────────────────
 let recognition = null;
 const micBtn = $('#mic');
-if (SpeechRec) {
+// Auf dem iPhone (und wo es keine Spracherkennung gibt): aufnehmen + Whisper, sonst die des Browsers (zeigt live Text)
+const iosDevice = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const dictateByRecording = canRecord && (iosDevice || !SpeechRec);
+let dictation = null;
+if (dictateByRecording || SpeechRec) {
   micBtn.hidden = false;
-  micBtn.addEventListener('click', () => (recognition ? recognition.stop() : startListening()));
+  micBtn.addEventListener('click', () => {
+    if (dictateByRecording) return dictation ? dictation.stopNow() : dictateRecording();
+    return recognition ? recognition.stop() : startListening();
+  });
+}
+async function dictateRecording() {
+  const listener = new Listener();
+  try { await listener.open(); } catch { return toast(t('Bitte erlaube den Zugriff aufs Mikrofon.', 'Please allow access to the microphone.')); }
+  dictation = listener;
+  micBtn.classList.add('live');
+  micBtn.setAttribute('aria-pressed', 'true');
+  const before = el.prompt.placeholder;
+  el.prompt.placeholder = t('Sprich jetzt … (🎙 nochmal tippen = fertig)', 'Speak now … (tap 🎙 again = done)');
+  const blob = await listener.record({ silenceMs: 2200, noSpeechMs: 12_000 }).catch(() => null);
+  listener.close(); // Mikrofon sofort wieder freigeben
+  dictation = null;
+  micBtn.classList.remove('live');
+  micBtn.setAttribute('aria-pressed', 'false');
+  if (!blob) { el.prompt.placeholder = before; return; }
+  el.prompt.placeholder = t('Erkennt …', 'Recognising …');
+  try {
+    const text = await toText(blob, LOCALE);
+    if (text) { el.prompt.value = [el.prompt.value.trim(), text].filter(Boolean).join(' '); autosize(); el.prompt.focus(); }
+  } catch (err) {
+    toast(err.unsupported ? t('Spracherkennung ist gerade nicht verfügbar.', 'Speech recognition is not available right now.') : err.message);
+  } finally { el.prompt.placeholder = before; }
 }
 
 function startListening() {
@@ -1560,9 +1590,11 @@ function startListening() {
 }
 
 // ── Sprach-Modus: zuhören → senden → vorlesen → wieder zuhören ─────
+// Aufnahme über das Mikrofon + Whisper (zuverlässig auch auf dem iPhone); nur wenn das nicht geht,
+// die eingebaute Spracherkennung des Browsers – dann „Tippen zum Sprechen“.
 const voiceEl = $('#voice');
-const voice = { on: false, paused: false, rec: null, phase: 'idle' };
-if (SpeechRec && canSpeak) $('#voice-btn').hidden = false;
+const voice = { on: false, paused: false, rec: null, phase: 'idle', mode: 'record', misses: 0, listener: null };
+if ((canRecord || SpeechRec) && canSpeak) $('#voice-btn').hidden = false;
 function voicePhase(phase, said) {
   voice.phase = phase;
   voiceEl.dataset.phase = phase;
@@ -1571,12 +1603,47 @@ function voicePhase(phase, said) {
     think: t('Denkt nach …', 'Thinking …'),
     speak: t('Spricht …', 'Speaking …'),
     paused: t('Pausiert', 'Paused'),
+    tap: t('Tippe auf den Kreis und sprich', 'Tap the circle and speak'),
   }[phase] ?? '';
   if (said !== undefined) $('#voice-said').textContent = said;
-  $('#voice-pause').textContent = phase === 'paused' ? t('▶ Weiter', '▶ Resume') : phase === 'speak' ? t('Unterbrechen', 'Interrupt') : t('Pause', 'Pause');
+  $('#voice-hint').textContent = phase === 'listen'
+    ? t('Tippe auf den Kreis, wenn du fertig bist', 'Tap the circle when you are done')
+    : phase === 'speak' ? t('Tippe auf den Kreis zum Unterbrechen', 'Tap the circle to interrupt') : '';
+  $('#voice-pause').textContent = phase === 'paused' || phase === 'tap' ? t('▶ Weiter', '▶ Resume') : phase === 'speak' ? t('Unterbrechen', 'Interrupt') : t('Pause', 'Pause');
 }
-function voiceListen() {
+const orbLevel = (lvl) => voiceEl.style.setProperty('--lvl', String(lvl));
+
+async function voiceListen() {
   if (!voice.on || voice.paused) return;
+  if (voice.mode === 'browser') return voiceListenBrowser();
+  voicePhase('listen', '');
+  let blob = null;
+  try {
+    blob = await voice.listener.record({ onLevel: orbLevel });
+  } catch { blob = null; }
+  if (!voice.on || voice.paused) return;
+  if (!blob) {
+    // Nichts gehört: ein paar Mal weiter zuhören, dann pausieren statt endlos zu laufen
+    if (++voice.misses >= 3) { voice.paused = true; voice.misses = 0; return voicePhase('tap', t('Ich habe nichts gehört.', 'I didn’t hear anything.')); }
+    return voiceListen();
+  }
+  voice.misses = 0;
+  voicePhase('think', '…');
+  let text = '';
+  try {
+    text = await toText(blob, LOCALE);
+  } catch (err) {
+    if (err.unsupported && SpeechRec) { voice.mode = 'browser'; voice.paused = true; return voicePhase('tap', ''); }
+    toast(err.message);
+    voice.paused = true;
+    return voicePhase('tap', '');
+  }
+  if (!voice.on) return;
+  if (!text) return voiceListen();
+  voiceAsk(text);
+}
+// Notlösung: Spracherkennung des Browsers – startet nur per Tipp (sonst bleibt sie auf dem iPhone stumm)
+function voiceListenBrowser() {
   const rec = new SpeechRec();
   rec.lang = LOCALE;
   rec.interimResults = true;
@@ -1591,28 +1658,28 @@ function voiceListen() {
     $('#voice-said').textContent = `${finalText}${interim}`.trim();
   };
   rec.onerror = (e) => {
-    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { toast(t('Bitte erlaube den Zugriff aufs Mikrofon.', 'Please allow access to the microphone.')); stopVoice(); }
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast(t('Bitte erlaube den Zugriff aufs Mikrofon (und auf dem iPhone die Diktierfunktion).', 'Please allow microphone access (and dictation on iPhone).'));
   };
   rec.onend = () => {
     voice.rec = null;
-    if (!voice.on || voice.paused) return;
+    if (!voice.on) return;
     const text = finalText.trim();
-    if (!text) return setTimeout(voiceListen, 250); // nichts gehört → weiter zuhören
+    if (!text) { voice.paused = true; return voicePhase('tap', ''); }
     voiceAsk(text);
   };
-  try { rec.start(); voice.rec = rec; voicePhase('listen', ''); } catch { setTimeout(voiceListen, 500); }
+  try { rec.start(); voice.rec = rec; voicePhase('listen', ''); } catch { voice.paused = true; voicePhase('tap', ''); }
 }
 async function voiceAsk(text) {
   voicePhase('think', text);
   if (busy() || offline) { voicePhase('paused'); voice.paused = true; return; }
   el.prompt.value = text;
-  await send();
+  try { await send(); } catch { /* Fehler zeigt die Karte */ }
   const chat = state.chat;
   const turn = chat?.turns.at(-1);
   if (!voice.on || !turn) return;
   const answer = turn.answers.find((a) => a.status === 'done' && a.text) ?? turn.answers[0];
   const card = cardEl(chat.turns.length - 1, turn.answers.indexOf(answer));
-  const spoken = answer?.text ? speakableText(card) : answer?.reaction ? '' : t('Das hat leider nicht geklappt.', 'Sorry, that did not work.');
+  const spoken = answer?.text && card ? speakableText(card) : answer?.reaction ? '' : t('Das hat leider nicht geklappt.', 'Sorry, that did not work.');
   if (!spoken) return voiceListen(); // nur ein Emoji als Antwort
   voicePhase('speak', spoken.length > 220 ? `${spoken.slice(0, 220)} …` : spoken);
   const lang = EXTRA_LANGS.includes(LANG) ? LANG : guessLang(spoken);
@@ -1620,18 +1687,22 @@ async function voiceAsk(text) {
   const prefs = voicePrefs();
   const parts = speechChunks(spoken);
   speechSynthesis.cancel();
+  let ended = false;
+  const done = () => { if (ended) return; ended = true; if (voice.on && !voice.paused && voice.phase === 'speak') voiceListen(); };
   parts.forEach((part, i) => {
     const u = new SpeechSynthesisUtterance(part);
     u.lang = { de: 'de-DE', en: 'en-US' }[lang] ?? LOCALE;
     if (v) u.voice = v;
     u.rate = prefs.rate;
     u.pitch = prefs.pitch;
-    if (i === parts.length - 1) u.onend = () => { if (voice.on && !voice.paused && voice.phase === 'speak') voiceListen(); };
+    if (i === parts.length - 1) { u.onend = done; u.onerror = done; }
     speechSynthesis.speak(u);
   });
+  // Sicherheitsnetz: manche Handys melden das Ende des Vorlesens nicht
+  setTimeout(() => { if (!speechSynthesis.speaking) done(); }, Math.max(4000, spoken.length * 90));
 }
-function startVoice() {
-  if (!SpeechRec || !canSpeak) return toast(t('Dein Browser kann leider keine Sprache erkennen.', 'Your browser cannot recognize speech.'));
+async function startVoice() {
+  if (!canSpeak || !(canRecord || SpeechRec)) return toast(t('Dein Browser kann leider keine Sprache erkennen.', 'Your browser cannot recognize speech.'));
   if (offline) return toast(t('Du bist offline.', 'You are offline.'));
   stopSpeaking();
   recognition?.stop();
@@ -1639,26 +1710,59 @@ function startVoice() {
   try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch { /* egal */ }
   voice.on = true;
   voice.paused = false;
+  voice.misses = 0;
+  voice.mode = canRecord ? 'record' : 'browser';
   voiceEl.hidden = false;
   haptic('tap');
+  if (voice.mode === 'record') {
+    try {
+      voice.listener = new Listener();
+      await voice.listener.open();
+    } catch {
+      voice.listener = null;
+      if (SpeechRec) voice.mode = 'browser';
+      else { toast(t('Bitte erlaube den Zugriff aufs Mikrofon.', 'Please allow access to the microphone.')); return stopVoice(); }
+    }
+  }
   voiceListen();
 }
 function stopVoice() {
+  // Zuerst schließen – egal, was danach passiert
+  voiceEl.hidden = true;
   voice.on = false;
   voice.paused = false;
   try { voice.rec?.abort(); } catch { /* egal */ }
   voice.rec = null;
-  speechSynthesis.cancel();
-  voiceEl.hidden = true;
+  try { voice.listener?.close(); } catch { /* egal */ }
+  voice.listener = null;
+  try { speechSynthesis.cancel(); } catch { /* egal */ }
+  orbLevel(0);
 }
+function voiceTap() {
+  if (!voice.on) return;
+  if (voice.phase === 'listen') {
+    if (voice.mode === 'record') voice.listener?.stopNow(); else { try { voice.rec?.stop(); } catch { /* egal */ } }
+    return;
+  }
+  if (voice.phase === 'speak') { speechSynthesis.cancel(); voice.paused = false; return voiceListen(); }
+  if (voice.phase === 'paused' || voice.phase === 'tap') { voice.paused = false; return voiceListen(); }
+}
+// pointerup statt click: reagiert auch, wenn das iPhone gerade mit dem Mikrofon beschäftigt ist
+const onTap = (sel, fn) => {
+  const node = $(sel);
+  let handled = 0;
+  node.addEventListener('pointerup', (e) => { handled = Date.now(); e.preventDefault(); fn(); });
+  node.addEventListener('click', () => { if (Date.now() - handled > 600) fn(); });
+};
 $('#voice-btn').addEventListener('click', startVoice);
-$('#voice-close').addEventListener('click', stopVoice);
-$('#voice-end').addEventListener('click', stopVoice);
-$('#voice-pause').addEventListener('click', () => {
+onTap('#voice-close', stopVoice);
+onTap('#voice-end', stopVoice);
+onTap('#voice-orb', voiceTap);
+onTap('#voice-pause', () => {
   if (voice.phase === 'speak') { speechSynthesis.cancel(); return voiceListen(); } // unterbrechen und gleich zuhören
   if (voice.paused) { voice.paused = false; return voiceListen(); }
   voice.paused = true;
-  try { voice.rec?.abort(); } catch { /* egal */ }
+  try { voice.listener?.cancel(); voice.rec?.abort(); } catch { /* egal */ }
   voicePhase('paused');
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && voice.on) stopVoice(); });
@@ -1680,7 +1784,7 @@ function trPaint() {
     const [, name, flag] = trLang(code);
     $(`${sel} .tr-flag`).textContent = flag;
     $(`${sel} b`).textContent = name;
-    $(sel).hidden = !SpeechRec;
+    $(sel).hidden = !(canRecord || SpeechRec);
   });
 }
 function openTranslator() {
@@ -1692,12 +1796,14 @@ function openTranslator() {
   $('#tr-a').value = saved.a;
   $('#tr-b').value = saved.b;
   trPaint();
-  if (!$('#tr-log').children.length) $('#tr-log').innerHTML = `<li class="tr-hint">${SpeechRec ? t('Tippe auf deine Sprache und sprich. VAIs übersetzt und liest die Übersetzung laut vor – dann ist die andere Person dran.', 'Tap your language and speak. VAIs translates and reads the translation aloud – then it is the other person’s turn.') : t('Tippe deinen Satz unten ein – VAIs übersetzt ihn.', 'Type your sentence below – VAIs translates it.')}</li>`;
+  if (!$('#tr-log').children.length) $('#tr-log').innerHTML = `<li class="tr-hint">${canRecord || SpeechRec ? t('Tippe auf deine Sprache und sprich. VAIs übersetzt und liest die Übersetzung laut vor – dann ist die andere Person dran.', 'Tap your language and speak. VAIs translates and reads the translation aloud – then it is the other person’s turn.') : t('Tippe deinen Satz unten ein – VAIs übersetzt ihn.', 'Type your sentence below – VAIs translates it.')}</li>`;
   trEl.hidden = false;
 }
 function closeTranslator() {
   try { tr.rec?.abort(); } catch { /* egal */ }
   tr.rec = null;
+  try { tr.listener?.close(); } catch { /* egal */ }
+  tr.listener = null;
   if (canSpeak) speechSynthesis.cancel();
   document.querySelectorAll('.tr-mic.live').forEach((b) => b.classList.remove('live'));
   trEl.hidden = true;
@@ -1734,10 +1840,40 @@ async function trTranslate(text, fromCode, toCode, side) {
     item.classList.add('error');
   } finally { tr.busy = false; }
 }
-function trListen(btn, fromCode, toCode, side) {
+async function trListen(btn, fromCode, toCode, side) {
   if (tr.rec) { try { tr.rec.stop(); } catch { /* egal */ } return; }
+  if (tr.listener?.recording) return tr.listener.stopNow(); // zweiter Tipp = fertig gesprochen
   if (tr.busy) return;
   if (canSpeak) speechSynthesis.cancel();
+  if (canRecord && !tr.browserOnly) {
+    const small = btn.querySelector('small');
+    try {
+      if (!tr.listener) { tr.listener = new Listener(); await tr.listener.open(); }
+    } catch {
+      tr.listener = null;
+      if (!SpeechRec) return toast(t('Bitte erlaube den Zugriff aufs Mikrofon.', 'Please allow access to the microphone.'));
+      tr.browserOnly = true;
+      return trListen(btn, fromCode, toCode, side);
+    }
+    btn.classList.add('live');
+    small.textContent = t('hört zu … (nochmal tippen = fertig)', 'listening … (tap again = done)');
+    haptic('tap');
+    const blob = await tr.listener.record({ silenceMs: 1500, onLevel: (l) => btn.style.setProperty('--lvl', String(l)) });
+    btn.classList.remove('live');
+    btn.style.removeProperty('--lvl');
+    if (!blob) { small.textContent = t('tippen & sprechen', 'tap and speak'); return; }
+    small.textContent = t('erkennt …', 'recognising …');
+    try {
+      const text = await toText(blob, fromCode);
+      small.textContent = t('tippen & sprechen', 'tap and speak');
+      if (text) trTranslate(text, fromCode, toCode, side);
+    } catch (err) {
+      small.textContent = t('tippen & sprechen', 'tap and speak');
+      if (err.unsupported && SpeechRec) { tr.browserOnly = true; toast(t('Tippe nochmal und sprich.', 'Tap again and speak.')); } else toast(err.message);
+    }
+    return;
+  }
+  if (!SpeechRec) return;
   const rec = new SpeechRec();
   rec.lang = fromCode;
   rec.interimResults = true;

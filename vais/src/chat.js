@@ -11,7 +11,7 @@ import { checkText } from './safety.js';
 import { limitSettings, charge, refund, usageOf } from './limits.js';
 import { sourcesFromText } from './models.js';
 import { pickAvailable, isBusy } from './models.js';
-import { generateImage, editImage, helperModel, complete } from './models.js';
+import { generateImage, editImage, helperModel, complete, transcribe } from './models.js';
 import { listModels, findModel, streamChat, displayName, describeModel, modelKey, demoMode } from './models.js';
 
 const MAX_MESSAGES = 120;         // so viele Nachrichten nehmen wir an (ältere werden zusammengefasst)
@@ -645,6 +645,24 @@ chat.post('/announcements/read', wrap(async (req, res) => {
   const id = Number(req.body?.id);
   if (Number.isInteger(id)) await run('INSERT OR IGNORE INTO announcement_reads (user_id, ann_id, read_at) VALUES (?, ?, ?)', req.user.id, id, Date.now());
   res.json({ ok: true });
+}));
+
+// ── Sprache → Text (Sprach-Modus, Übersetzer, Mikrofon) ──────────
+chat.post('/transcribe', express.raw({ type: ['audio/*', 'video/webm', 'video/mp4', 'application/octet-stream'], limit: '15mb' }), wrap(async (req, res) => {
+  const buf = req.body;
+  if (!Buffer.isBuffer(buf) || buf.length < 500) return res.json({ text: '' }); // zu kurz/leer
+  const L = await limitSettings();
+  limit(req.user.id, L.burst * 2);
+  const lang = String(req.query.lang ?? '').slice(0, 5);
+  try {
+    const text = await transcribe(buf, String(req.headers['content-type'] ?? ''), lang);
+    if (text === null) return res.status(501).json({ error: t('Spracherkennung ist gerade nicht verfügbar.', 'Speech recognition is not available right now.') });
+    // Whisper erfindet bei Stille gern Floskeln – die filtern wir raus
+    const junk = /^(untertitel(ung)? (im auftrag|von|der)|vielen dank( fürs zuschauen)?\.?|thank you\.?|thanks for watching!?|\.+|♪+)$/i;
+    res.json({ text: junk.test(text) ? '' : text.slice(0, 4000) });
+  } catch (err) {
+    throw new HttpError(502, err.message);
+  }
 }));
 
 // ── Prompt-Verbesserer (✨): macht aus einer kurzen Frage eine klare, gute Anfrage ──

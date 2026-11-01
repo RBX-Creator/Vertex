@@ -3,6 +3,13 @@ import { t } from './i18n.js';
 
 export const CHANGES = () => [
   {
+    id: 8, date: '2026-11-01',
+    items: [
+      ['🎙️', t('Sprach-Modus repariert', 'Voice mode fixed'), t('Funktioniert jetzt auch auf dem iPhone: Der Kreis zeigt, dass du gehört wirst – antippen, wenn du fertig bist.', 'Now works on iPhone too: the circle shows you are being heard – tap it when you are done.')],
+      ['🗣️', t('Bessere Spracherkennung', 'Better speech recognition'), t('Mikrofon, Sprach-Modus und Übersetzer erkennen Sprache jetzt genauer.', 'Microphone, voice mode and translator now recognise speech more accurately.')],
+    ],
+  },
+  {
     id: 7, date: '2026-11-01',
     items: [
       ['🕶️', t('Inkognito-Chats', 'Incognito chats'), t('Chats, die nicht gespeichert werden.', 'Chats that are not saved.')],
