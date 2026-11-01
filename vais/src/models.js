@@ -126,6 +126,20 @@ export async function removeKey(provider, id) {
 export const demoMode = !Object.values(PROVIDERS).some((p) => p.keys.length);
 export const hasProvider = (name) => !!PROVIDERS[name]?.keys.length;
 
+// Alle Modell-IDs eines Anbieters ungefiltert (z. B. um ein Prüf-Modell zu finden), 30 Minuten gemerkt
+const rawCache = {};
+export async function rawModelIds(provider) {
+  const p = PROVIDERS[provider];
+  if (!p?.keys.length || provider === 'gemini') return [];
+  const c = rawCache[provider];
+  if (c && Date.now() - c.at < 30 * 60 * 1000) return c.ids;
+  try {
+    const { data } = await getJson(`${p.base}/models`, { Authorization: `Bearer ${p.key}` });
+    rawCache[provider] = { at: Date.now(), ids: data.filter((m) => m.active !== false).map((m) => m.id) };
+  } catch { rawCache[provider] = { at: Date.now() - 25 * 60 * 1000, ids: c?.ids ?? [] }; }
+  return rawCache[provider].ids;
+}
+
 // Bilder: Pollinations funktioniert ohne Schlüssel (wenige Modelle); mit POLLINATIONS_API_KEY gibt es mehr.
 // Mit DISABLE_FREE_IMAGES=true lässt sich der Bild-Modus abschalten.
 const IMAGES = {

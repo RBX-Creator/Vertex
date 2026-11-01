@@ -3,9 +3,21 @@
 // Fällt die Prüfung aus, geht es trotzdem weiter (lieber eine Antwort als gar keine).
 import { getSetting, setSetting, logEvent } from './db.js';
 import { t } from './i18n.js';
-import { complete, demoMode, hasProvider } from './models.js';
+import { complete, demoMode, hasProvider, rawModelIds } from './models.js';
 
-const GUARD_MODEL = process.env.SAFETY_MODEL?.trim() || 'groq:meta-llama/llama-guard-4-12b';
+// Welches Prüf-Modell gibt es gerade? Llama Guard (bevorzugt), sonst ein Sicherheits- oder normales Modell mit Prüf-Anleitung
+async function guardModel() {
+  if (process.env.SAFETY_MODEL) return { id: process.env.SAFETY_MODEL.trim(), guard: /guard/i.test(process.env.SAFETY_MODEL) && !/safeguard/i.test(process.env.SAFETY_MODEL) };
+  const ids = await rawModelIds('groq');
+  const llama = ids.find((id) => /llama-guard/i.test(id));
+  if (llama) return { id: `groq:${llama}`, guard: true };
+  const other = ids.find((id) => /safeguard/i.test(id)) ?? ids.find((id) => /gpt-oss-20b$/.test(id)) ?? ids.find((id) => /gpt-oss-120b$/.test(id));
+  return other ? { id: `groq:${other}`, guard: false } : null;
+}
+const POLICY = `You are a content safety classifier for a chat app that is also used by teenagers. Classify the USER MESSAGE.
+Categories: S1 violent crimes (planning/instructions to hurt people), S3 sex crimes, S4 child sexual abuse, S9 weapons of mass harm (bombs, chemical/biological weapons), S10 hate speech against groups, S11 suicide or self-harm (wanting to hurt oneself), S12 sexual or pornographic content.
+Normal questions, school topics, history, news, medicine, fiction, jokes and insults without hate are SAFE.
+Answer with exactly one line: "safe" or "unsafe S<number>".`;
 // Llama-Guard-Kategorien, die wir blockieren
 const BLOCK = {
   S1: 'Gewalt', S3: 'Sexuelle Straftaten', S4: 'Missbrauch von Kindern', S9: 'Waffen für Massenschäden',
@@ -38,8 +50,12 @@ export async function checkText(text, kind = 'prompt') {
   } else {
     if (!hasProvider('groq')) return null;
     try {
-      const msg = await complete({ model: GUARD_MODEL, messages: [{ role: 'user', content: clean }], maxTokens: 20, signal: AbortSignal.timeout(8000) });
-      verdict = String(msg.content ?? '').trim().toLowerCase();
+      const g = await guardModel();
+      if (!g) return null;
+      const messages = g.guard ? [{ role: 'user', content: clean }] : [{ role: 'system', content: POLICY }, { role: 'user', content: `USER MESSAGE:\n${clean}` }];
+      const msg = await complete({ model: g.id, messages, maxTokens: g.guard ? 20 : 300, signal: AbortSignal.timeout(10_000) });
+      verdict = String(msg.content ?? '').trim().toLowerCase().split('\n').filter(Boolean).slice(-2).join('\n');
+      if (!g.guard) verdict = /unsafe/.test(verdict) ? verdict.slice(verdict.indexOf('unsafe')) : 'safe';
     } catch (err) {
       console.error('Jugendschutz-Prüfung nicht möglich:', err.message);
       return null;
