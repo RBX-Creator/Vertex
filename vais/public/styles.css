@@ -16,11 +16,14 @@
   --serif: 'Instrument Serif', Georgia, 'Times New Roman', serif;
   --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --vote-bg: var(--surface-2);
+  --tab-on: var(--surface-2);
   color-scheme: light;
 }
 
+/* Dunkel: automatisch nach System (außer „Hell“ gewählt) oder fest gewählt */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: #242422;
     --surface: #2c2c2a;
     --surface-2: #333331;
@@ -34,8 +37,28 @@
     --focus: rgba(242, 240, 234, 0.14);
     --danger: #e8735f;
     --success: #6fbf8a;
+    --vote-bg: rgba(0, 0, 0, .18);
+    --tab-on: var(--bg);
     color-scheme: dark;
   }
+}
+:root[data-theme='dark'] {
+    --bg: #242422;
+  --surface: #2c2c2a;
+  --surface-2: #333331;
+  --border: #3d3d3a;
+  --border-strong: #52524e;
+  --text: #ecebe6;
+  --heading: #d6d2c9;
+  --muted: #9b998f;
+  --primary: #f2f0ea;
+  --primary-text: #1f1e1c;
+  --focus: rgba(242, 240, 234, 0.14);
+  --danger: #e8735f;
+  --success: #6fbf8a;
+  --vote-bg: rgba(0, 0, 0, .18);
+  --tab-on: var(--bg);
+  color-scheme: dark;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -87,6 +110,19 @@ button { cursor: pointer; }
   padding: 20px 16px;
 }
 .auth-top { display: flex; align-items: center; justify-content: space-between; }
+.auth { padding-top: max(20px, env(safe-area-inset-top)); }
+.lang-switch { display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--surface-2); }
+.lang-switch button {
+  height: 30px;
+  min-width: 40px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.lang-switch button[aria-pressed='true'] { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
 .auth-main {
   flex: 1;
   display: flex;

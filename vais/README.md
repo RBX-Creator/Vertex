@@ -7,8 +7,12 @@ KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand:
 - Antworten nebeneinander (PC) bzw. zum Wischen (Handy), Abstimmen mit „A ist besser“, Unentschieden, Beide schlecht, „B ist besser“
 - **Art der Anfrage** (zweites Menü): Auto, Text, Code (mit Vorschau für erstellte Webseiten), Websuche; Bild und Video folgen
 - **Anhänge (+)**: Bilder (werden verkleinert, für Modelle mit 👁) und Textdateien/Code bis 200 KB; auch per Einfügen oder Drag & Drop
-- **Seitenleiste** mit gespeichertem Chat-Verlauf (suchen, öffnen, löschen)
-- **Bestenliste**: Elo-Wertung aus allen Battle-Stimmen (Unentschieden und „beide schlecht“ zählen halb)
+- **Seitenleiste** mit gespeichertem Chat-Verlauf (suchen, öffnen, umbenennen, löschen)
+- **Nachrichten bearbeiten** (✏️ unter der eigenen Nachricht – ab dort wird neu geantwortet)
+- **Spracheingabe** (🎙️ neben Senden) und **Vorlesen** (🔊 an jeder Antwort), direkt über den Browser
+- **Einstellungen**: Hell/Dunkel/System, Deutsch/English, Passwort ändern, alle Chats löschen, Konto löschen
+- **Als App installierbar** (PWA) mit eigenem Symbol; schläft der kostenlose Server, erscheint „VAIs wacht auf …“ statt einer leeren Seite
+- **Bestenliste**: Elo-Wertung aus allen Battle-Stimmen, getrennt nach Alle/Text/Code/Websuche, mit Siegquote (Unentschieden und „beide schlecht“ zählen halb)
 
 Ohne OpenRouter-Schlüssel läuft der Chat im **Demo-Modus** mit Platzhalter-Modellen.
 
@@ -73,7 +77,7 @@ Ohne E-Mail-Einstellungen läuft VAIs im **Entwicklungsmodus**: Der 6-stellige C
    **Bestehend:** Passwort eingeben → angemeldet.
 3. *Passwort vergessen?* schickt einen Code, mit dem ein neues Passwort gesetzt wird (alle anderen Geräte werden dabei abgemeldet).
 
-Sicherheit: Passwörter mit scrypt gehasht, Codes nur als Hash gespeichert, 10 Minuten gültig, max. 5 Fehlversuche, 45 s Wartezeit zwischen Codes, Rate-Limit pro IP, Session als HttpOnly-Cookie (30 Tage).
+Sicherheit: Content-Security-Policy, Schutz vor fremden Webseiten (CSRF), Sperre nach 8 falschen Passwörtern in 15 Minuten, Tageslimit pro Nutzer (`USER_DAILY_LIMIT`, Standard 500 Antworten), Webseiten-Vorschau in abgeschirmter Seite, Passwörter mit scrypt gehasht, Codes nur als Hash gespeichert, 10 Minuten gültig, max. 5 Fehlversuche, 45 s Wartezeit zwischen Codes, Rate-Limit pro IP, Session als HttpOnly-Cookie (30 Tage).
 
 ## Dateien
 
@@ -89,4 +93,8 @@ Sicherheit: Passwörter mit scrypt gehasht, Codes nur als Hash gespeichert, 10 M
 | `src/db.js` | Datenbank (Turso online, lokal `data/vais.db`) |
 | `public/login.html`, `login.js` | Login-Fenster |
 | `public/app.html`, `app.js`, `app.css` | Chat-Oberfläche |
-| `public/styles.css` | Gemeinsames Design (hell/dunkel automatisch) |
+| `public/styles.css` | Gemeinsames Design (hell/dunkel) |
+| `public/i18n.js`, `src/i18n.js` | Deutsch/Englisch (Oberfläche und Server) |
+| `public/boot.js` | Sprache, Design und Service Worker beim Start |
+| `public/sw.js`, `waking.html` | App-Installation und „VAIs wacht auf“-Seite |
+| `public/sandbox.html` | Abgeschirmte Vorschau für erstellte Webseiten |

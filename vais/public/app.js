@@ -1,4 +1,7 @@
+import { t, LANG, LOCALE, translateDom, setLang, getTheme, setTheme } from './i18n.js';
+
 const $ = (sel, root = document) => root.querySelector(sel);
+translateDom();
 
 // ── Icons ─────────────────────────────────────────────────────────
 const svg = (paths) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
@@ -19,14 +22,18 @@ const ICON = {
 
 // Zweites Menü: Art der Anfrage (wie „Modality“ bei Arena), von oben nach unten
 const MODALITIES = {
-  video: { label: 'Video', desc: 'Videos erstellen', soon: true },
-  image: { label: 'Bild', desc: 'Bilder erstellen', soon: true },
-  web: { label: 'Websuche', desc: 'Mit aktuellen Infos aus dem Internet', cap: 'web' },
-  code: { label: 'Code', desc: 'Webseiten und Apps programmieren', cap: 'code' },
-  text: { label: 'Text', desc: 'Chatten mit Text-Modellen', cap: 'text' },
-  auto: { label: 'Auto', desc: 'Wählt automatisch passende Modelle', cap: 'text' },
+  video: { label: t('Video', 'Video'), desc: t('Videos erstellen', 'Create videos'), soon: true },
+  image: { label: t('Bild', 'Image'), desc: t('Bilder erstellen', 'Create images'), soon: true },
+  web: { label: t('Websuche', 'Web search'), desc: t('Mit aktuellen Infos aus dem Internet', 'With current info from the internet'), cap: 'web' },
+  code: { label: 'Code', desc: t('Webseiten und Apps programmieren', 'Build websites and apps'), cap: 'code' },
+  text: { label: 'Text', desc: t('Chatten mit Text-Modellen', 'Chat with text models'), cap: 'text' },
+  auto: { label: 'Auto', desc: t('Wählt automatisch passende Modelle', 'Picks suitable models automatically'), cap: 'text' },
 };
 Object.assign(ICON, {
+  speak: svg('<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  speakStop: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>',
+  edit: svg('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>'),
+  rename: svg('<path d="M4 20h4L19 9l-4-4L4 16z"/>'),
   up: svg('<path d="M7 10v11M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.6l-2.3 7A2 2 0 0 1 17.5 21H7V10l4.4-7.2A1.9 1.9 0 0 1 15 4.3z"/><path d="M3 10h4v11H3z"/>'),
   down: svg('<path d="M17 14V3M9 18.1 10 14H4.2a2 2 0 0 1-1.9-2.6l2.3-7A2 2 0 0 1 6.5 3H17v11l-4.4 7.2A1.9 1.9 0 0 1 9 19.7z"/><path d="M21 14h-4V3h4z"/>'),
   brain: svg('<path d="M9.5 4A2.5 2.5 0 0 0 7 6.5v.1A3 3 0 0 0 4.5 9.5c0 .8.3 1.5.8 2a3 3 0 0 0 .7 4.8V17a3 3 0 0 0 3 3 2.5 2.5 0 0 0 3-1.7V5.6A2.5 2.5 0 0 0 9.5 4z"/><path d="M14.5 4A2.5 2.5 0 0 1 17 6.5v.1a3 3 0 0 1 2.5 2.9c0 .8-.3 1.5-.8 2a3 3 0 0 1-.7 4.8V17a3 3 0 0 1-3 3 2.5 2.5 0 0 1-3-1.7"/>'),
@@ -47,11 +54,14 @@ Object.assign(ICON, {
 });
 
 const MODES = {
-  agent: { label: 'Agent X', desc: 'Sucht, liest und rechnet selbstständig – der stärkste Modus' },
-  battle: { label: 'Battle', desc: '2 anonyme Modelle im Vergleich' },
-  sxs: { label: 'Side by Side', desc: '2 Modelle deiner Wahl vergleichen' },
-  direct: { label: 'Direkt', desc: 'Mit 1 Modell chatten' },
+  agent: { label: 'Agent X', desc: t('Sucht, liest und rechnet selbstständig – der stärkste Modus', 'Searches, reads and calculates on its own – the strongest mode') },
+  battle: { label: 'Battle', desc: t('2 anonyme Modelle im Vergleich', '2 anonymous models head to head') },
+  sxs: { label: 'Side by Side', desc: t('2 Modelle deiner Wahl vergleichen', 'Compare 2 models of your choice') },
+  direct: { label: t('Direkt', 'Direct'), desc: t('Mit 1 Modell chatten', 'Chat with 1 model') },
 };
+
+const canSpeak = 'speechSynthesis' in window;
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 // ── Kleine Helfer ─────────────────────────────────────────────────
 const store = {
@@ -73,7 +83,7 @@ async function post(url, body) {
   const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (res.status === 401) location.replace('/login');
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Etwas ist schiefgelaufen.');
+  if (!res.ok) throw new Error(data.error || t('Etwas ist schiefgelaufen.', 'Something went wrong.'));
   return data;
 }
 
@@ -148,10 +158,10 @@ const modelById = (id) => state.models.find((m) => m.id === id);
 // ── Steuerung unten (Modus + Modelle) ─────────────────────────────
 function renderControls() {
   el.modeBtn.innerHTML = ICON[state.mode] + ICON.chev;
-  el.modeBtn.setAttribute('aria-label', `Modus: ${MODES[state.mode].label}`);
+  el.modeBtn.setAttribute('aria-label', `${t('Modus', 'Mode')}: ${MODES[state.mode].label}`);
   el.modalityBtn.hidden = state.mode === 'agent';
   el.modalityBtn.innerHTML = ICON[`m-${state.modality}`] + ICON.chev;
-  el.modalityBtn.setAttribute('aria-label', `Art: ${MODALITIES[state.modality].label}`);
+  el.modalityBtn.setAttribute('aria-label', `${t('Art', 'Type')}: ${MODALITIES[state.modality].label}`);
   el.chips.forEach((chip, slot) => {
     const show = state.mode === 'sxs' || (state.mode === 'direct' && slot === 0);
     chip.hidden = !show;
@@ -159,10 +169,10 @@ function renderControls() {
     const m = modelById(state.picks[slot]);
     chip.innerHTML = m
       ? `${modelLogo(m)}<span class="name">${escapeHtml(m.name)}</span>${ICON.chev}`
-      : `<span class="name">Modell wählen</span>${ICON.chev}`;
-    chip.setAttribute('aria-label', `Modell ${slot + 1}: ${m?.name ?? 'keins gewählt'}`);
+      : `<span class="name">${t('Modell wählen', 'Choose model')}</span>${ICON.chev}`;
+    chip.setAttribute('aria-label', `${t('Modell', 'Model')} ${slot + 1}: ${m?.name ?? t('keins gewählt', 'none chosen')}`);
   });
-  el.prompt.placeholder = state.chat ? 'Folgefrage stellen …' : 'Frag irgendwas …';
+  el.prompt.placeholder = state.chat ? t('Folgefrage stellen …', 'Ask a follow-up …') : t('Frag irgendwas …', 'Ask anything …');
 }
 
 function renderModeMenu() {
@@ -188,7 +198,7 @@ el.modeMenu.addEventListener('click', (e) => {
   if (mode === state.mode) return;
   state.mode = mode;
   store.set('vais.mode', mode);
-  if (state.chat) { resetChat(); toast(`Neuer Chat: ${MODES[mode].label}`); }
+  if (state.chat) { resetChat(); toast(`${t('Neuer Chat', 'New chat')}: ${MODES[mode].label}`); }
   renderControls();
   el.prompt.focus();
 });
@@ -199,7 +209,7 @@ const currentCap = () => MODALITIES[state.modality].cap;
 function renderModalityMenu() {
   el.modalityMenu.innerHTML = Object.entries(MODALITIES).map(([key, m]) => `
     <button type="button" class="mode-item${m.soon ? ' soon' : ''}" role="menuitemradio" aria-checked="${key === state.modality}" aria-disabled="${!!m.soon}" data-modality="${key}">
-      ${ICON[`m-${key}`]}<span><b>${m.label}${m.soon ? ' <em>bald</em>' : ''}</b><small>${m.desc}</small></span>${key === state.modality ? ICON.check.replace('<svg ', '<svg class="check" ') : '<span></span>'}
+      ${ICON[`m-${key}`]}<span><b>${m.label}${m.soon ? ` <em>${t('bald', 'soon')}</em>` : ''}</b><small>${m.desc}</small></span>${key === state.modality ? ICON.check.replace('<svg ', '<svg class="check" ') : '<span></span>'}
     </button>`).join('');
 }
 
@@ -225,13 +235,13 @@ el.modalityMenu.addEventListener('click', (e) => {
   const item = e.target.closest('[data-modality]');
   if (!item) return;
   const key = item.dataset.modality;
-  if (MODALITIES[key].soon) return toast(`${MODALITIES[key].label} kommt bald`);
+  if (MODALITIES[key].soon) return toast(`${MODALITIES[key].label} ${t('kommt bald', 'is coming soon')}`);
   toggleModalityMenu(false);
   if (key === state.modality) return;
   state.modality = key;
   store.set('vais.modality', key);
   fitPicks();
-  if (state.chat) { resetChat(); toast(`Neuer Chat: ${MODALITIES[key].label}`); }
+  if (state.chat) { resetChat(); toast(`${t('Neuer Chat', 'New chat')}: ${MODALITIES[key].label}`); }
   renderControls();
   el.prompt.focus();
 });
@@ -240,8 +250,8 @@ el.modalityMenu.addEventListener('click', (e) => {
 let sheetSlot = 0;
 let sheetCap = 'text';
 const CAP_EMPTY = {
-  image: 'Bild-Modelle kommen bald.',
-  web: 'Für Websuche bitte einen Groq-Schlüssel eintragen (GROQ_API_KEY).',
+  image: t('Bild-Modelle kommen bald.', 'Image models are coming soon.'),
+  web: t('Für Websuche bitte einen Groq-Schlüssel eintragen (GROQ_API_KEY).', 'For web search, please add a Groq key (GROQ_API_KEY).'),
 };
 function renderModelList() {
   document.querySelectorAll('.cap-tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.cap === sheetCap)));
@@ -254,11 +264,11 @@ function renderModelList() {
     ? items.map((m) => {
         const selected = m.id === state.picks[sheetSlot];
         return `<li><button type="button" class="model-opt${selected ? ' selected' : ''}${m.id === other ? ' taken' : ''}${m.busy ? ' busy' : ''}" data-id="${escapeHtml(m.id)}">
-          ${modelLogo(m)}<span class="name">${escapeHtml(m.name)}</span>${m.caps.includes('vision') ? `<span class="vis" title="Kann Bilder ansehen">${ICON.preview}</span>` : ''}
+          ${modelLogo(m)}<span class="name">${escapeHtml(m.name)}</span>${m.caps.includes('vision') ? `<span class="vis" title="${t('Kann Bilder ansehen', 'Can see images')}">${ICON.preview}</span>` : ''}
           ${selected ? ICON.check.replace('<svg ', '<svg width="18" height="18" ') : ''}
-          <span class="prov">${m.busy ? 'ausgelastet' : `${m.paid ? '<span class="premium">Premium</span> ' : ''}${escapeHtml(m.maker)}`}</span></button></li>`;
+          <span class="prov">${m.busy ? t('ausgelastet', 'busy') : `${m.paid ? '<span class="premium">Premium</span> ' : ''}${escapeHtml(m.maker)}`}</span></button></li>`;
       }).join('')
-    : `<li class="model-empty">${q ? 'Kein Modell gefunden.' : CAP_EMPTY[sheetCap] ?? 'Keine Modelle in dieser Kategorie.'}</li>`;
+    : `<li class="model-empty">${q ? t('Kein Modell gefunden.', 'No model found.') : CAP_EMPTY[sheetCap] ?? t('Keine Modelle in dieser Kategorie.', 'No models in this category.')}</li>`;
 }
 
 document.querySelectorAll('.cap-tab').forEach((tab) => tab.addEventListener('click', () => {
@@ -289,14 +299,14 @@ el.sheet.addEventListener('click', (e) => {
   state.picks[sheetSlot] = id;
   store.set('vais.picks', state.picks);
   closeSheet();
-  if (changed && state.chat) { resetChat(); toast('Neuer Chat mit anderem Modell'); }
+  if (changed && state.chat) { resetChat(); toast(t('Neuer Chat mit anderem Modell', 'New chat with another model')); }
   renderControls();
 });
 
 // ── Chat ──────────────────────────────────────────────────────────
 function labelFor(chat, side) {
   if (chat.mode === 'agent') return 'Agent X';
-  if (chat.mode === 'battle') return chat.names ? chat.names[side] : `Assistent ${'AB'[side]}`;
+  if (chat.mode === 'battle') return chat.names ? chat.names[side] : `${t('Assistent', 'Assistant')} ${'AB'[side]}`;
   return chat.labels[side];
 }
 
@@ -314,34 +324,34 @@ function showView(view) {
 // ── Vorschläge auf der Startseite ─────────────────────────────────
 const SUGGESTIONS = [
   {
-    title: 'Landingpage erstellen', desc: 'Eine schlichte, moderne Webseite',
+    title: t('Landingpage erstellen', 'Create a landing page'), desc: t('Eine schlichte, moderne Webseite', 'A clean, modern website'),
     icon: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8h18M6 6h.01M8.5 6h.01M14 13l2 5 1-2 2-1z"/>',
-    prompt: 'Erstelle eine schlichte, moderne Landingpage als einzelne HTML-Datei (mit CSS) für ein kleines Café namens „Bohne“. Mit Startbereich, Speisekarte und Kontakt.',
+    prompt: t('Erstelle eine schlichte, moderne Landingpage als einzelne HTML-Datei (mit CSS) für ein kleines Café namens „Bohne“. Mit Startbereich, Speisekarte und Kontakt.', 'Create a clean, modern landing page as a single HTML file (with CSS) for a small café called “Bean”. With a hero section, menu and contact.'),
   },
   {
-    title: 'Einfach erklären', desc: 'Ein Thema verständlich erklärt',
+    title: t('Einfach erklären', 'Explain simply'), desc: t('Ein Thema verständlich erklärt', 'A topic made easy'),
     icon: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/>',
-    prompt: 'Erkläre mir so einfach wie möglich, wie künstliche Intelligenz funktioniert. Mit einem Beispiel aus dem Alltag.',
+    prompt: t('Erkläre mir so einfach wie möglich, wie künstliche Intelligenz funktioniert. Mit einem Beispiel aus dem Alltag.', 'Explain as simply as possible how artificial intelligence works. With an everyday example.'),
   },
   {
-    title: 'Text verbessern', desc: 'Rechtschreibung und Stil prüfen',
+    title: t('Text verbessern', 'Improve text'), desc: t('Rechtschreibung und Stil prüfen', 'Check spelling and style'),
     icon: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
-    prompt: 'Verbessere Rechtschreibung, Grammatik und Stil in diesem Text und erkläre kurz die wichtigsten Änderungen:\n\n',
+    prompt: t('Verbessere Rechtschreibung, Grammatik und Stil in diesem Text und erkläre kurz die wichtigsten Änderungen:\n\n', 'Improve spelling, grammar and style in this text and briefly explain the main changes:\n\n'),
   },
   {
-    title: 'Code reparieren', desc: 'Fehler finden und erklären',
+    title: t('Code reparieren', 'Fix code'), desc: t('Fehler finden und erklären', 'Find and explain bugs'),
     icon: '<path d="m8 7-5 5 5 5M16 7l5 5-5 5"/>',
-    prompt: 'Finde den Fehler in diesem Code, erkläre ihn und zeig mir die korrigierte Version:\n\n',
+    prompt: t('Finde den Fehler in diesem Code, erkläre ihn und zeig mir die korrigierte Version:\n\n', 'Find the bug in this code, explain it and show me the fixed version:\n\n'),
   },
   {
-    title: 'Reise planen', desc: 'Ein Wochenende voller Ideen',
+    title: t('Reise planen', 'Plan a trip'), desc: t('Ein Wochenende voller Ideen', 'A weekend full of ideas'),
     icon: '<path d="M12 21s-7-6.1-7-11a7 7 0 1 1 14 0c0 4.9-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',
-    prompt: 'Plane mir ein entspanntes Wochenende in Hamburg: Sehenswürdigkeiten, gutes Essen und ein Tipp für schlechtes Wetter.',
+    prompt: t('Plane mir ein entspanntes Wochenende in Hamburg: Sehenswürdigkeiten, gutes Essen und ein Tipp für schlechtes Wetter.', 'Plan a relaxed weekend in London for me: sights, good food and a tip for bad weather.'),
   },
   {
-    title: 'Ideen sammeln', desc: 'Brainstorming für dein Projekt',
+    title: t('Ideen sammeln', 'Brainstorm ideas'), desc: t('Brainstorming für dein Projekt', 'Brainstorming for your project'),
     icon: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"/>',
-    prompt: 'Gib mir 10 kreative Ideen für ein eigenes Roblox-Spiel, jeweils mit einem Satz zur Spielidee.',
+    prompt: t('Gib mir 10 kreative Ideen für ein eigenes Roblox-Spiel, jeweils mit einem Satz zur Spielidee.', 'Give me 10 creative ideas for my own Roblox game, each with one sentence about the idea.'),
   },
 ];
 
@@ -362,6 +372,7 @@ $('#suggest-track').addEventListener('click', (e) => {
 
 function resetChat() {
   if (!$('#preview').hidden) closePreview();
+  stopSpeaking();
   for (const c of state.controllers) c.abort();
   state.controllers.clear();
   state.chat = null;
@@ -377,11 +388,11 @@ function resetChat() {
 el.newChat.addEventListener('click', () => { go(''); el.prompt.focus(); });
 
 // Deine Nachricht fürs Modell: Text + Dateiinhalte, Bilder als eigene Teile
-function userContent(t) {
-  const att = t.attachments ?? [];
+function userContent(turn) {
+  const att = turn.attachments ?? [];
   const files = att.filter((a) => a.kind === 'file')
-    .map((a) => `\n\n--- Datei: ${a.name} ---\n\`\`\`\n${a.text}\n\`\`\``).join('');
-  const text = `${t.user || (att.length ? 'Siehe Anhang.' : '')}${files}`;
+    .map((a) => `\n\n--- ${t('Datei', 'File')}: ${a.name} ---\n\`\`\`\n${a.text}\n\`\`\``).join('');
+  const text = `${turn.user || (att.length ? t('Siehe Anhang.', 'See attachment.') : '')}${files}`;
   const images = att.filter((a) => a.kind === 'image');
   if (!images.length) return text;
   return [{ type: 'text', text }, ...images.map((a) => ({ type: 'image_url', image_url: { url: a.url } }))];
@@ -410,18 +421,19 @@ function renderTurn(turnIndex) {
       <div class="track">
         ${turn.answers.map((_, side) => {
           const actions = `
-                <button class="card-btn" data-act="regen" aria-label="Neu generieren" title="Neu generieren">${ICON.regen}</button>
-                <button class="card-btn" data-act="copy" aria-label="Kopieren" title="Kopieren">${ICON.copy}</button>
-                <button class="card-btn" data-act="preview" aria-label="Vorschau" title="Vorschau" hidden>${ICON.preview}</button>
-                <button class="card-btn" data-act="expand" aria-label="Vollbild" title="Vollbild">${ICON.expand}</button>`;
+                <button class="card-btn" data-act="regen" aria-label="${t('Neu generieren', 'Regenerate')}" title="${t('Neu generieren', 'Regenerate')}">${ICON.regen}</button>
+                <button class="card-btn" data-act="copy" aria-label="${t('Kopieren', 'Copy')}" title="${t('Kopieren', 'Copy')}">${ICON.copy}</button>
+                <button class="card-btn" data-act="speak" aria-label="${t('Vorlesen', 'Read aloud')}" title="${t('Vorlesen', 'Read aloud')}" aria-pressed="false"${canSpeak ? '' : ' hidden'}>${ICON.speak}</button>
+                <button class="card-btn" data-act="preview" aria-label="${t('Vorschau', 'Preview')}" title="${t('Vorschau', 'Preview')}" hidden>${ICON.preview}</button>
+                <button class="card-btn" data-act="expand" aria-label="${t('Vollbild', 'Full screen')}" title="${t('Vollbild', 'Full screen')}">${ICON.expand}</button>`;
           // Einzel-Antwort (Direkt, Agent X): Knöpfe unter der Nachricht wie bei Arena, mit 👍/👎
           return n === 1 ? `
           <article class="card" data-side="${side}">
             <header class="card-head"><span class="card-label"></span></header>
             <div class="card-body md"></div>
             <div class="card-foot">
-                <button class="card-btn" data-act="like" aria-label="Gute Antwort" title="Gute Antwort" aria-pressed="false">${ICON.up}</button>
-                <button class="card-btn" data-act="dislike" aria-label="Schlechte Antwort" title="Schlechte Antwort" aria-pressed="false">${ICON.down}</button>${actions}
+                <button class="card-btn" data-act="like" aria-label="${t('Gute Antwort', 'Good answer')}" title="${t('Gute Antwort', 'Good answer')}" aria-pressed="false">${ICON.up}</button>
+                <button class="card-btn" data-act="dislike" aria-label="${t('Schlechte Antwort', 'Bad answer')}" title="${t('Schlechte Antwort', 'Bad answer')}" aria-pressed="false">${ICON.down}</button>${actions}
             </div>` : `
           <article class="card" data-side="${side}">
             <header class="card-head">
@@ -434,13 +446,18 @@ function renderTurn(turnIndex) {
           </article>`).join('')}
       </div>
       ${n > 1 ? `
-        <button class="nav-btn next" data-go="1" aria-label="Antwort B zeigen">${ICON.next}</button>
-        <button class="nav-btn prev" data-go="0" aria-label="Antwort A zeigen" hidden>${ICON.prev}</button>
-        <div class="dots">${turn.answers.map((_, i) => `<button class="dot${i ? '' : ' active'}" data-go="${i}" aria-label="Antwort ${'AB'[i]}"></button>`).join('')}</div>` : ''}
+        <button class="nav-btn next" data-go="1" aria-label="${t('Antwort B zeigen', 'Show answer B')}">${ICON.next}</button>
+        <button class="nav-btn prev" data-go="0" aria-label="${t('Antwort A zeigen', 'Show answer A')}" hidden>${ICON.prev}</button>
+        <div class="dots">${turn.answers.map((_, i) => `<button class="dot${i ? '' : ' active'}" data-go="${i}" aria-label="${t('Antwort', 'Answer')} ${'AB'[i]}"></button>`).join('')}</div>` : ''}
     </div>`;
   const bubble = $('.bubble', node);
   bubble.textContent = turn.user;
   if (!turn.user) bubble.remove();
+  $('.turn-user', node).insertAdjacentHTML('beforeend', `
+    <div class="user-actions">
+      <button type="button" class="mini-btn" data-uact="copy" aria-label="${t('Nachricht kopieren', 'Copy message')}" title="${t('Kopieren', 'Copy')}">${ICON.copy}</button>
+      <button type="button" class="mini-btn" data-uact="edit" aria-label="${t('Nachricht bearbeiten', 'Edit message')}" title="${t('Bearbeiten', 'Edit')}">${ICON.edit}</button>
+    </div>`);
   if (turn.attachments?.length) {
     const box = document.createElement('div');
     box.className = 'att-list';
@@ -490,7 +507,7 @@ function paintLabel(card, side) {
   label.textContent = labelFor(chat, side);
   const won = (chat.winner === 'a' && side === 0) || (chat.winner === 'b' && side === 1);
   card.classList.toggle('winner', won);
-  if (won) label.insertAdjacentHTML('beforeend', '<span class="badge">✓ Gewinner</span>');
+  if (won) label.insertAdjacentHTML('beforeend', `<span class="badge">✓ ${t('Gewinner', 'Winner')}</span>`);
 }
 
 function updateLabels() {
@@ -508,6 +525,7 @@ function updateCard(turnIndex, side) {
   actBtn('regen').disabled = !isLast || a.status === 'streaming';
   actBtn('copy').disabled = !a.text;
   actBtn('expand').disabled = !a.text;
+  actBtn('speak').disabled = !a.text || a.status === 'streaming';
   actBtn('preview').hidden = !(a.status === 'done' && htmlBlock(a.text));
   const foot = $('.card-foot', card);
   if (foot) {
@@ -527,21 +545,21 @@ function updateCard(turnIndex, side) {
   if (part || (codeChat() && a.status === 'streaming')) {
     // Webseite: Code als kompakter Datei-Chip statt riesigem Codeblock, dazu Fortschritt
     const lines = part ? part.code.split('\n').filter((l, i, all) => l || i < all.length - 1).length : 0;
-    const chip = part ? `<button type="button" class="code-chip" data-act="code">${ICON['m-code']}<span>index.html</span><small>${lines} Zeilen</small></button>` : '';
+    const chip = part ? `<button type="button" class="code-chip" data-act="code">${ICON['m-code']}<span>index.html</span><small>${lines} ${t('Zeilen', 'lines')}</small></button>` : '';
     const gen = a.status === 'streaming'
-      ? `<p class="gen"><span class="gen-dots"></span><span class="shimmer">${part ? 'Baut …' : 'Generiert …'}</span>${a.startedAt ? ` <small data-since="${a.startedAt}"></small>` : ''}</p>`
+      ? `<p class="gen"><span class="gen-dots"></span><span class="shimmer">${part ? t('Baut …', 'Building …') : t('Generiert …', 'Generating …')}</span>${a.startedAt ? ` <small data-since="${a.startedAt}"></small>` : ''}</p>`
       : '';
     const err = a.status === 'error' ? '<p class="card-error"></p>' : '';
     body.innerHTML = `${part?.before.trim() ? markdown(part.before) : (!part && a.text ? markdown(a.text) : '')}${chip}${part?.after.trim() ? markdown(part.after) : ''}${gen}${err}`;
     if (err) $('.card-error', body).textContent = a.error;
     tickTimers();
   } else if (a.status === 'error') {
-    body.innerHTML = `${a.text ? markdown(a.text) : ''}<p class="card-error"></p>${isLast ? '<button class="retry" data-act="regen">Erneut versuchen</button>' : ''}`;
+    body.innerHTML = `${a.text ? markdown(a.text) : ''}<p class="card-error"></p>${isLast ? `<button class="retry" data-act="regen">${t('Erneut versuchen', 'Try again')}</button>` : ''}`;
     $('.card-error', body).textContent = a.error;
   } else if (!a.text) {
     body.innerHTML = a.status === 'stopped'
-      ? '<p class="card-error" style="color:var(--muted)">Gestoppt.</p>'
-      : '<div class="typing" aria-label="Schreibt …"><span></span><span></span><span></span></div>';
+      ? `<p class="card-error" style="color:var(--muted)">${t('Gestoppt.', 'Stopped.')}</p>`
+      : `<div class="typing" aria-label="${t('Schreibt …', 'Typing …')}"><span></span><span></span><span></span></div>`;
   } else {
     body.innerHTML = markdown(a.text);
   }
@@ -562,7 +580,7 @@ function renderThinking(card, a) {
   box.classList.toggle('live', live);
   box.classList.toggle('open', open);
   const secs = Math.max(1, Math.round((a.thinkMs || 0) / 1000));
-  $('.think-head span', box).textContent = live ? 'Denkt nach …' : `Gedacht${a.thinkMs ? ` · ${secs} s` : ''}`;
+  $('.think-head span', box).textContent = live ? t('Denkt nach …', 'Thinking …') : `${t('Gedacht', 'Thought')}${a.thinkMs ? ` · ${secs} s` : ''}`;
   $('.think-head', box).setAttribute('aria-expanded', String(open));
   const body = $('.think-body', box);
   $('p', body).textContent = a.thinking;
@@ -583,12 +601,12 @@ function renderSources(card, a) {
   box.classList.toggle('searching', searching);
   box.classList.toggle('open', !!a.sourcesOpen);
   if (searching) {
-    box.innerHTML = `<div class="sources-head">${ICON['m-web']}<span class="shimmer">Sucht im Web …</span></div>`;
+    box.innerHTML = `<div class="sources-head">${ICON['m-web']}<span class="shimmer">${t('Sucht im Web …', 'Searching the web …')}</span></div>`;
     return;
   }
   box.innerHTML = `
     <button type="button" class="sources-head" data-act="sources" aria-expanded="${!!a.sourcesOpen}">
-      ${ICON['m-web']}<span>Quellen <small>${a.sources.length}</small></span>${ICON.chev}
+      ${ICON['m-web']}<span>${t('Quellen', 'Sources')} <small>${a.sources.length}</small></span>${ICON.chev}
     </button>
     <ol class="sources-list">${a.sources.map((src, i) => `
       <li><a target="_blank" rel="noopener noreferrer">
@@ -610,7 +628,9 @@ function renderSources(card, a) {
 }
 
 // Arbeitsschritte von Agent X über der Antwort anzeigen
-const STEP_LABEL = { search: 'Sucht', read: 'Liest', calc: 'Rechnet', time: 'Prüft', error: 'Problem', other: 'Nutzt' };
+const STEP_LABEL = LANG === 'en'
+  ? { search: 'Searching', read: 'Reading', calc: 'Calculating', time: 'Checking', error: 'Problem', other: 'Using' }
+  : { search: 'Sucht', read: 'Liest', calc: 'Rechnet', time: 'Prüft', error: 'Problem', other: 'Nutzt' };
 function renderSteps(card, a) {
   let box = $('.agent-steps', card);
   if (!a.steps?.length) { box?.remove(); return; }
@@ -622,7 +642,7 @@ function renderSteps(card, a) {
   const working = a.status === 'streaming' && !a.text;
   box.innerHTML = a.steps.map((st, i) => `
     <li class="agent-step ${st.kind}${working && i === a.steps.length - 1 ? ' active' : ''}">
-      ${ICON[`s-${st.kind}`] ?? ICON['s-other']}<span><b>${STEP_LABEL[st.kind] ?? 'Schritt'}</b> <span class="t"></span></span>
+      ${ICON[`s-${st.kind}`] ?? ICON['s-other']}<span><b>${STEP_LABEL[st.kind] ?? t('Schritt', 'Step')}</b> <span class="t"></span></span>
     </li>`).join('');
   box.querySelectorAll('.t').forEach((t, i) => { t.textContent = a.steps[i].text; });
 }
@@ -661,7 +681,7 @@ async function runSide(turnIndex, side) {
       signal: ctrl.signal,
     });
     if (res.status === 401) location.replace('/login');
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Das Modell konnte nicht antworten.');
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t('Das Modell konnte nicht antworten.', 'The model could not answer.'));
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -693,12 +713,12 @@ async function runSide(turnIndex, side) {
         if (msg.done) finished = true;
       }
     }
-    if (!finished) throw new Error('Die Verbindung wurde unterbrochen.');
+    if (!finished) throw new Error(t('Die Verbindung wurde unterbrochen.', 'The connection was interrupted.'));
     a.status = a.text ? 'done' : 'error';
-    if (!a.text) a.error = 'Das Modell hat keine Antwort geliefert.';
+    if (!a.text) a.error = t('Das Modell hat keine Antwort geliefert.', 'The model returned no answer.');
   } catch (err) {
     if (ctrl.signal.aborted) a.status = a.text ? 'done' : 'stopped';
-    else Object.assign(a, { status: 'error', error: err.message || 'Das Modell konnte nicht antworten.' });
+    else Object.assign(a, { status: 'error', error: err.message || t('Das Modell konnte nicht antworten.', 'The model could not answer.') });
   } finally {
     a.buildMs = Date.now() - a.startedAt;
     state.controllers.delete(ctrl);
@@ -719,15 +739,15 @@ async function send() {
   const text = el.prompt.value.trim();
   const attachments = state.pending;
   if ((!text && !attachments.length) || busy()) return;
-  if (pendingReads) return toast('Anhänge werden noch geladen …');
-  if (!state.models.length) return toast('Modelle konnten nicht geladen werden. Lade die Seite neu.');
+  if (pendingReads) return toast(t('Anhänge werden noch geladen …', 'Attachments are still loading …'));
+  if (!state.models.length) return toast(t('Modelle konnten nicht geladen werden. Lade die Seite neu.', 'Models could not be loaded. Reload the page.'));
   const hasImages = attachments.some((a) => a.kind === 'image');
-  if (hasImages && (state.chat?.mode ?? state.mode) === 'agent') return toast('Agent X kann noch keine Bilder ansehen. Nutze „Direkt“.');
+  if (hasImages && (state.chat?.mode ?? state.mode) === 'agent') return toast(t('Agent X kann noch keine Bilder ansehen. Nutze „Direkt“.', 'Agent X cannot see images yet. Use “Direct”.'));
   if (hasImages && ['sxs', 'direct'].includes(state.chat?.mode ?? state.mode)) {
     const need = (state.chat?.mode ?? state.mode) === 'sxs' ? 2 : 1;
     const blind = state.picks.slice(0, need).findIndex((id) => !modelById(id)?.caps.includes('vision'));
     if (blind !== -1) {
-      toast('Dieses Modell kann keine Bilder ansehen. Wähle eins mit 👁.');
+      toast(t('Dieses Modell kann keine Bilder ansehen. Wähle eins mit 👁.', 'This model cannot see images. Choose one with 👁.'));
       if (!state.chat) return openSheet(blind);
       return;
     }
@@ -739,7 +759,7 @@ async function send() {
       const missing = state.picks.slice(0, need).findIndex((id) => !modelById(id));
       if (missing !== -1) return openSheet(missing);
     }
-    const title = text || attachments.map((a) => a.name).join(', ') || 'Anhang';
+    const title = text || attachments.map((a) => a.name).join(', ') || t('Anhang', 'Attachment');
     const body = { mode: state.mode, modality: state.modality, title: title.slice(0, 80), images: hasImages };
     if (state.mode === 'sxs') body.models = state.picks.slice(0, 2);
     if (state.mode === 'direct') body.models = [state.picks[0]];
@@ -761,6 +781,7 @@ async function send() {
 
   const chat = state.chat;
   historyDirty = true;
+  recognition?.stop();
   el.prompt.value = '';
   state.pending = [];
   renderTray();
@@ -768,6 +789,11 @@ async function send() {
   el.vote.hidden = true;
   el.voteResult.hidden = true;
 
+  await runTurn(chat, text, attachments);
+}
+
+// Eine Frage stellen und die Antwort(en) holen
+async function runTurn(chat, text, attachments) {
   const sides = chat.mode === 'direct' || chat.mode === 'agent' ? 1 : 2;
   chat.turns.push({ user: text, attachments, answers: Array.from({ length: sides }, () => ({ text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0 })) });
   const index = chat.turns.length - 1;
@@ -792,8 +818,8 @@ el.vote.addEventListener('click', async (e) => {
     updateLabels();
     el.vote.hidden = true;
     el.voteResult.innerHTML = chat.mode === 'battle'
-      ? `Danke für deine Stimme! A war <strong></strong>, B war <strong></strong>.`
-      : 'Danke für deine Stimme!';
+      ? t('Danke für deine Stimme! A war <strong></strong>, B war <strong></strong>.', 'Thanks for your vote! A was <strong></strong>, B was <strong></strong>.')
+      : t('Danke für deine Stimme!', 'Thanks for your vote!');
     const strongs = el.voteResult.querySelectorAll('strong');
     if (strongs.length) { strongs[0].textContent = data.models[0]; strongs[1].textContent = data.models[1]; }
     el.voteResult.hidden = false;
@@ -817,6 +843,9 @@ el.thread.addEventListener('click', async (e) => {
     return;
   }
 
+  const uact = e.target.closest('[data-uact]');
+  if (uact) return userAction(uact.dataset.uact, turnIndex, turnNode);
+
   const btn = e.target.closest('[data-act]');
   if (!btn || btn.disabled) return;
   const side = Number(btn.closest('.card').dataset.side);
@@ -830,7 +859,7 @@ el.thread.addEventListener('click', async (e) => {
     updateCard(turnIndex, side);
     try {
       await post('/api/chat/feedback', { chatId: state.chat.id, turn: turnIndex, side, value: a.feedback });
-      if (a.feedback) toast(a.feedback === 1 ? 'Danke für dein Feedback 👍' : 'Danke, wir merken uns das 👎');
+      if (a.feedback) toast(a.feedback === 1 ? t('Danke für dein Feedback 👍', 'Thanks for your feedback 👍') : t('Danke, wir merken uns das 👎', 'Thanks, noted 👎'));
     } catch (err) {
       a.feedback = before;
       updateCard(turnIndex, side);
@@ -857,10 +886,12 @@ el.thread.addEventListener('click', async (e) => {
       await navigator.clipboard.writeText(a.text);
       btn.innerHTML = ICON.check;
       setTimeout(() => (btn.innerHTML = ICON.copy), 1500);
-      toast('Kopiert');
+      toast(t('Kopiert', 'Copied'));
     } catch {
-      toast('Kopieren nicht möglich');
+      toast(t('Kopieren nicht möglich', 'Copying not possible'));
     }
+  } else if (act === 'speak') {
+    speak(btn, btn.closest('.card'));
   } else if (act === 'preview' || act === 'code') {
     openPreview(turnIndex, side, act === 'code' ? 'code' : 'view');
   } else if (act === 'expand') {
@@ -876,6 +907,177 @@ el.thread.addEventListener('click', async (e) => {
     if (state.chat === chat) afterTurn();
   }
 });
+
+// ── Eigene Nachricht kopieren / bearbeiten ────────────────────────
+async function userAction(act, turnIndex, turnNode) {
+  const chat = state.chat;
+  const turn = chat.turns[turnIndex];
+  if (act === 'copy') {
+    try { await navigator.clipboard.writeText(turn.user); toast(t('Kopiert', 'Copied')); } catch { toast(t('Kopieren nicht möglich', 'Copying not possible')); }
+    return;
+  }
+  if (act === 'edit') {
+    if (busy()) return toast(t('Warte, bis die Antwort fertig ist.', 'Wait until the answer is finished.'));
+    if (chat.mode === 'battle' && chat.winner) return toast(t('Nach der Abstimmung kann das Battle nicht mehr geändert werden.', 'The battle cannot be changed after voting.'));
+    const box = $('.turn-user', turnNode);
+    box.classList.add('editing');
+    box.insertAdjacentHTML('beforeend', `
+      <div class="edit-box">
+        <textarea rows="2" aria-label="${t('Nachricht bearbeiten', 'Edit message')}"></textarea>
+        <div class="edit-actions">
+          <button type="button" class="link" data-uact="cancel">${t('Abbrechen', 'Cancel')}</button>
+          <button type="button" class="edit-send" data-uact="save">${t('Senden', 'Send')}</button>
+        </div>
+      </div>`);
+    const area = $('.edit-box textarea', box);
+    area.value = turn.user;
+    const fit = () => { area.style.height = 'auto'; area.style.height = `${Math.min(area.scrollHeight, 260)}px`; };
+    area.addEventListener('input', fit);
+    area.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); userAction('cancel', turnIndex, turnNode); }
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(pointer: fine)').matches) { e.preventDefault(); userAction('save', turnIndex, turnNode); }
+    });
+    fit();
+    area.focus();
+    area.setSelectionRange(area.value.length, area.value.length);
+    return;
+  }
+  if (act === 'cancel') {
+    const box = $('.turn-user', turnNode);
+    box.classList.remove('editing');
+    $('.edit-box', box)?.remove();
+    return;
+  }
+  if (act === 'save') {
+    const text = $('.edit-box textarea', turnNode).value.trim();
+    if (!text && !turn.attachments?.length) return;
+    if (busy()) return;
+    try {
+      await post('/api/chat/truncate', { chatId: chat.id, fromTurn: turnIndex });
+    } catch (err) {
+      return toast(err.message);
+    }
+    const attachments = turn.attachments ?? [];
+    chat.turns.length = turnIndex;
+    el.thread.querySelectorAll('.turn').forEach((n) => { if (Number(n.dataset.index) >= turnIndex) n.remove(); });
+    el.vote.hidden = true;
+    el.voteResult.hidden = true;
+    historyDirty = true;
+    await runTurn(chat, text, attachments);
+  }
+}
+
+// ── Vorlesen ──────────────────────────────────────────────────────
+let speakingBtn = null;
+
+// Sprache einer Antwort grob erkennen (Antworten können anders sein als die Oberfläche)
+function guessLang(text) {
+  const words = text.toLowerCase().match(/[a-zäöüß]+/g) ?? [];
+  let de = 0;
+  let en = 0;
+  for (const w of words.slice(0, 300)) {
+    if (/^(der|die|das|und|ist|nicht|ich|du|mit|auf|für|eine?|wird|sind|auch|oder)$/.test(w)) de++;
+    if (/^(the|and|is|not|you|with|for|are|this|that|of|to|it|or|be)$/.test(w)) en++;
+  }
+  return de === en ? LANG : de > en ? 'de' : 'en';
+}
+
+function speakableText(card) {
+  const body = $('.card-body', card).cloneNode(true);
+  body.querySelectorAll('pre, .code-chip').forEach((n) => n.replaceWith(document.createTextNode(` ${t('(Code)', '(code)')} `)));
+  body.querySelectorAll('.cite, .gen, .retry').forEach((n) => n.remove());
+  return body.textContent.replace(/\s+/g, ' ').trim();
+}
+
+// Lange Texte in Stücke teilen (manche Browser brechen sonst ab)
+function speechChunks(text) {
+  const out = [];
+  let cur = '';
+  for (const sentence of text.split(/(?<=[.!?…:;])\s+/)) {
+    if ((cur + ' ' + sentence).length > 220 && cur) { out.push(cur); cur = ''; }
+    cur = cur ? `${cur} ${sentence}` : sentence;
+    while (cur.length > 260) { out.push(cur.slice(0, 260)); cur = cur.slice(260); }
+  }
+  if (cur.trim()) out.push(cur);
+  return out;
+}
+
+function stopSpeaking() {
+  if (!canSpeak) return;
+  speechSynthesis.cancel();
+  if (speakingBtn) {
+    speakingBtn.setAttribute('aria-pressed', 'false');
+    speakingBtn.innerHTML = ICON.speak;
+  }
+  speakingBtn = null;
+}
+
+function speak(btn, card) {
+  if (!canSpeak) return;
+  if (speakingBtn === btn) return stopSpeaking();
+  stopSpeaking();
+  const text = speakableText(card);
+  const parts = speechChunks(text);
+  if (!parts.length) return;
+  const lang = guessLang(text);
+  const voice = speechSynthesis.getVoices().find((v) => v.lang?.toLowerCase().startsWith(lang));
+  speakingBtn = btn;
+  btn.setAttribute('aria-pressed', 'true');
+  btn.innerHTML = ICON.speakStop;
+  parts.forEach((part, i) => {
+    const u = new SpeechSynthesisUtterance(part);
+    u.lang = lang === 'en' ? 'en-US' : 'de-DE';
+    if (voice) u.voice = voice;
+    if (i === parts.length - 1) u.onend = () => { if (speakingBtn === btn) stopSpeaking(); };
+    u.onerror = (e) => { if (e.error !== 'interrupted' && e.error !== 'canceled' && speakingBtn === btn) stopSpeaking(); };
+    speechSynthesis.speak(u);
+  });
+}
+
+// ── Spracheingabe (Mikrofon) ──────────────────────────────────────
+let recognition = null;
+const micBtn = $('#mic');
+if (SpeechRec) {
+  micBtn.hidden = false;
+  micBtn.addEventListener('click', () => (recognition ? recognition.stop() : startListening()));
+}
+
+function startListening() {
+  const rec = new SpeechRec();
+  rec.lang = LOCALE;
+  rec.interimResults = true;
+  rec.continuous = true;
+  const base = el.prompt.value.trim();
+  let finalText = '';
+  rec.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const res = e.results[i];
+      if (res.isFinal) finalText += res[0].transcript;
+      else interim += res[0].transcript;
+    }
+    el.prompt.value = [base, `${finalText}${interim}`.trim()].filter(Boolean).join(' ');
+    autosize();
+  };
+  rec.onerror = (e) => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast(t('Bitte erlaube den Zugriff aufs Mikrofon.', 'Please allow access to the microphone.'));
+    else if (e.error !== 'no-speech' && e.error !== 'aborted') toast(t('Spracheingabe hat nicht geklappt.', 'Voice input did not work.'));
+  };
+  rec.onend = () => {
+    recognition = null;
+    micBtn.classList.remove('live');
+    micBtn.setAttribute('aria-pressed', 'false');
+  };
+  try {
+    rec.start();
+    recognition = rec;
+    micBtn.classList.add('live');
+    micBtn.setAttribute('aria-pressed', 'true');
+    el.prompt.focus();
+  } catch {
+    recognition = null;
+  }
+}
 
 // ── Webseiten (Code-Modus) ────────────────────────────────────────
 const codeChat = () => state.chat?.modality === 'code';
@@ -926,7 +1128,7 @@ function renderBuild(card, a, part) {
   const secs = a.buildMs ? ` · ${(a.buildMs / 1000).toFixed(1)} s` : '';
   box.innerHTML = `
     <span class="build-icon">${ready ? ICON['m-code'] : BRICKS.replace('bricks', 'bricks live')}</span>
-    <span class="build-text"><b>${ready ? 'Webseite fertig' : 'Baut …'}</b><small>${ready ? `Tippe, um sie anzusehen${secs}` : 'Vorschau bald verfügbar'}</small></span>
+    <span class="build-text"><b>${ready ? t('Webseite fertig', 'Website ready') : t('Baut …', 'Building …')}</b><small>${ready ? `${t('Tippe, um sie anzusehen', 'Tap to view it')}${secs}` : t('Vorschau bald verfügbar', 'Preview available soon')}</small></span>
     ${ready ? ICON.preview : ''}`;
 }
 
@@ -953,9 +1155,26 @@ function openPreview(turnIndex, side, tab = 'view') {
   $(`[data-ptab="${tab}"]`).focus();
 }
 
+// Webseite in der abgeschirmten Vorschau-Seite anzeigen (eigene Sicherheitsregeln, kein Zugriff auf VAIs)
+let frameHtml = null;
+window.addEventListener('message', (e) => {
+  const frame = $('#preview-frame');
+  if (e.source === frame.contentWindow && e.data?.type === 'vais-sandbox-ready' && frameHtml !== null) {
+    frame.contentWindow.postMessage({ type: 'vais-render', html: frameHtml }, '*');
+  }
+});
+function showInFrame(html) {
+  frameHtml = html;
+  $('#preview-frame').src = `/sandbox.html?v=${Date.now()}`;
+}
+function clearFrame() {
+  frameHtml = null;
+  $('#preview-frame').removeAttribute('src');
+}
+
 function closePreview() {
   $('#preview').hidden = true;
-  $('#preview-frame').srcdoc = '';
+  clearFrame();
   Object.assign(pv, { turn: null, side: null, shown: null, code: null });
 }
 
@@ -976,15 +1195,15 @@ function refreshPreview() {
   $('#preview-download').disabled = !part?.code;
 
   if (pv.tab === 'view' && ready && pv.shown !== part.code) {
-    frame.srcdoc = part.code;
+    showInFrame(part.code);
     pv.shown = part.code;
   }
   if (!ready) {
     const working = a.status === 'streaming';
-    $('#preview-build-title').textContent = working ? 'Baut …' : 'Keine Webseite';
+    $('#preview-build-title').textContent = working ? t('Baut …', 'Building …') : t('Keine Webseite', 'No website');
     $('#preview-build-text').textContent = working
-      ? 'Die Vorschau erscheint, sobald die Webseite fertig ist.'
-      : 'In dieser Antwort wurde keine vollständige Webseite gefunden.';
+      ? t('Die Vorschau erscheint, sobald die Webseite fertig ist.', 'The preview appears as soon as the website is ready.')
+      : t('In dieser Antwort wurde keine vollständige Webseite gefunden.', 'No complete website was found in this answer.');
     $('.bricks', build).classList.toggle('live', working);
   }
   if (pv.tab === 'code') {
@@ -1006,9 +1225,7 @@ $('#preview').addEventListener('click', (e) => {
 });
 $('#preview-reload').addEventListener('click', () => {
   if (pv.tab !== 'view' || !pv.shown) return;
-  const frame = $('#preview-frame');
-  frame.srcdoc = '';
-  requestAnimationFrame(() => { frame.srcdoc = pv.shown; });
+  showInFrame(pv.shown);
 });
 $('#preview-download').addEventListener('click', () => {
   const part = websitePart(previewAnswer()?.text ?? '');
@@ -1045,22 +1262,22 @@ async function shrinkImage(file) {
 
 async function addFiles(fileList) {
   for (const file of [...fileList]) {
-    if (state.pending.length + pendingReads >= MAX_ATTACHMENTS) { toast(`Höchstens ${MAX_ATTACHMENTS} Anhänge pro Nachricht.`); break; }
+    if (state.pending.length + pendingReads >= MAX_ATTACHMENTS) { toast(t(`Höchstens ${MAX_ATTACHMENTS} Anhänge pro Nachricht.`, `At most ${MAX_ATTACHMENTS} attachments per message.`)); break; }
     pendingReads++;
     try {
       if (file.type.startsWith('image/')) {
-        state.pending.push({ kind: 'image', name: file.name || 'Bild', url: await shrinkImage(file) });
+        state.pending.push({ kind: 'image', name: file.name || t('Bild', 'Image'), url: await shrinkImage(file) });
       } else if (/pdf|zip|octet-stream|word|excel|powerpoint|audio|video/.test(file.type)) {
-        toast(`„${file.name}“: Nur Bilder und Textdateien werden unterstützt.`);
+        toast(t(`„${file.name}“: Nur Bilder und Textdateien werden unterstützt.`, `“${file.name}”: only images and text files are supported.`));
       } else if (file.size > MAX_FILE_BYTES) {
-        toast(`„${file.name}“ ist zu groß (max. 200 KB).`);
+        toast(t(`„${file.name}“ ist zu groß (max. 200 KB).`, `“${file.name}” is too large (max. 200 KB).`));
       } else {
         const text = await file.text();
-        if (/\u0000/.test(text.slice(0, 2000))) toast(`„${file.name}“ ist keine Textdatei.`);
+        if (/\u0000/.test(text.slice(0, 2000))) toast(t(`„${file.name}“ ist keine Textdatei.`, `“${file.name}” is not a text file.`));
         else state.pending.push({ kind: 'file', name: file.name, text });
       }
     } catch {
-      toast(`„${file.name}“ konnte nicht gelesen werden.`);
+      toast(t(`„${file.name}“ konnte nicht gelesen werden.`, `“${file.name}” could not be read.`));
     } finally {
       pendingReads--;
       renderTray();
@@ -1081,7 +1298,7 @@ function renderTray() {
       item.innerHTML = ICON['s-read'];
       item.append(Object.assign(document.createElement('span'), { textContent: a.name }));
     }
-    const del = Object.assign(document.createElement('button'), { type: 'button', className: 'tray-del', ariaLabel: `${a.name} entfernen` });
+    const del = Object.assign(document.createElement('button'), { type: 'button', className: 'tray-del', ariaLabel: `${a.name} ${t('entfernen', 'remove')}` });
     del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>';
     del.addEventListener('click', () => { state.pending.splice(i, 1); renderTray(); updateSend(); });
     item.append(del);
@@ -1112,7 +1329,7 @@ function updateSend() {
   el.send.classList.toggle('stop', isBusy);
   el.send.classList.toggle('ready', !isBusy && (!!el.prompt.value.trim() || state.pending.length > 0));
   el.send.innerHTML = isBusy ? ICON.stop : ICON.send;
-  el.send.setAttribute('aria-label', isBusy ? 'Stoppen' : 'Senden');
+  el.send.setAttribute('aria-label', isBusy ? t('Stoppen', 'Stop') : t('Senden', 'Send'));
 }
 
 el.prompt.addEventListener('input', autosize);
@@ -1140,7 +1357,8 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (!$('#preview').hidden) closePreview();
+  if (!$('#settings').hidden) closeSettings();
+  else if (!$('#preview').hidden) closePreview();
   else if (!el.modalityMenu.hidden) { toggleModalityMenu(false); el.modalityBtn.focus(); }
   else if (!el.drawer.hidden) closeDrawer();
   else if (!$('#expand').hidden) $('#expand').hidden = true;
@@ -1193,7 +1411,7 @@ async function loadChat(id) {
   try {
     const res = await fetch(`/api/chat/${encodeURIComponent(id)}`);
     if (res.status === 401) return location.replace('/login');
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Chat nicht gefunden.');
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t('Chat nicht gefunden.', 'Chat not found.'));
     data = await res.json();
   } catch (err) {
     toast(err.message);
@@ -1230,19 +1448,19 @@ let historyItems = [];
 function groupLabel(ts) {
   const day = 24 * 3600 * 1000;
   const start = new Date(); start.setHours(0, 0, 0, 0);
-  const t = start.getTime();
-  if (ts >= t) return 'Heute';
-  if (ts >= t - day) return 'Gestern';
-  if (ts >= t - 7 * day) return 'Letzte 7 Tage';
-  if (ts >= t - 30 * day) return 'Letzte 30 Tage';
-  return 'Älter';
+  const t0 = start.getTime();
+  if (ts >= t0) return t('Heute', 'Today');
+  if (ts >= t0 - day) return t('Gestern', 'Yesterday');
+  if (ts >= t0 - 7 * day) return t('Letzte 7 Tage', 'Previous 7 days');
+  if (ts >= t0 - 30 * day) return t('Letzte 30 Tage', 'Previous 30 days');
+  return t('Älter', 'Older');
 }
 
 function renderHistory() {
   const q = el.dSearch.value.trim().toLowerCase();
   const items = historyItems.filter((c) => !q || c.title.toLowerCase().includes(q));
   if (!items.length) {
-    el.dList.innerHTML = `<p class="drawer-empty">${q ? 'Nichts gefunden.' : 'Noch keine Chats.'}</p>`;
+    el.dList.innerHTML = `<p class="drawer-empty">${q ? t('Nichts gefunden.', 'Nothing found.') : t('Noch keine Chats.', 'No chats yet.')}</p>`;
     return;
   }
   let html = '';
@@ -1253,7 +1471,8 @@ function renderHistory() {
     const active = state.chat?.id === c.id ? ' active' : '';
     html += `<div class="drawer-chat${active}">
       <button class="drawer-chat-open" data-open="${escapeHtml(c.id)}">${ICON[c.mode] ?? ''}<span></span></button>
-      <button class="drawer-chat-del" data-del="${escapeHtml(c.id)}" aria-label="Chat löschen" title="Löschen">
+      <button class="drawer-chat-ren" data-ren="${escapeHtml(c.id)}" aria-label="${t('Chat umbenennen', 'Rename chat')}" title="${t('Umbenennen', 'Rename')}">${ICON.rename}</button>
+      <button class="drawer-chat-del" data-del="${escapeHtml(c.id)}" aria-label="${t('Chat löschen', 'Delete chat')}" title="${t('Löschen', 'Delete')}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
       </button>
     </div>`;
@@ -1267,13 +1486,13 @@ async function openDrawer() {
   el.drawer.hidden = false;
   $('#open-drawer').setAttribute('aria-expanded', 'true');
   if (historyDirty || !historyItems.length) {
-    if (!historyItems.length) el.dList.innerHTML = '<p class="drawer-empty">Lädt …</p>';
+    if (!historyItems.length) el.dList.innerHTML = `<p class="drawer-empty">${t('Lädt …', 'Loading …')}</p>`;
     try {
       const res = await fetch('/api/chat/list');
       historyItems = (await res.json()).chats ?? [];
       historyDirty = false;
     } catch {
-      el.dList.innerHTML = '<p class="drawer-empty">Verlauf konnte nicht geladen werden.</p>';
+      el.dList.innerHTML = `<p class="drawer-empty">${t('Verlauf konnte nicht geladen werden.', 'History could not be loaded.')}</p>`;
       return;
     }
   }
@@ -1292,58 +1511,208 @@ el.drawer.addEventListener('click', async (e) => {
   if (e.target.closest('[data-close-drawer]')) return closeDrawer();
   const open = e.target.closest('[data-open]');
   if (open) { closeDrawer(); return go(`#c/${open.dataset.open}`); }
+  const ren = e.target.closest('[data-ren]');
+  if (ren) return startRename(ren.dataset.ren, ren.closest('.drawer-chat'));
   const del = e.target.closest('[data-del]');
   if (del) {
-    if (!confirm('Diesen Chat löschen?')) return;
+    if (!confirm(t('Diesen Chat löschen?', 'Delete this chat?'))) return;
     const id = del.dataset.del;
     const res = await fetch(`/api/chat/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    if (!res.ok) return toast('Löschen fehlgeschlagen.');
+    if (!res.ok) return toast(t('Löschen fehlgeschlagen.', 'Deleting failed.'));
     historyItems = historyItems.filter((c) => c.id !== id);
     renderHistory();
     if (state.chat?.id === id) go('');
-    toast('Chat gelöscht');
+    toast(t('Chat gelöscht', 'Chat deleted'));
   }
 });
 
+// Chat in der Seitenleiste umbenennen
+function startRename(id, row) {
+  const item = historyItems.find((c) => c.id === id);
+  if (!item || !row) return;
+  const input = Object.assign(document.createElement('input'), { className: 'drawer-rename', value: item.title, maxLength: 80 });
+  input.setAttribute('aria-label', t('Neuer Name', 'New name'));
+  row.replaceChildren(input);
+  row.classList.add('renaming');
+  input.focus();
+  input.select();
+  let done = false;
+  const commit = async (save) => {
+    if (done) return;
+    done = true;
+    const title = input.value.replace(/\s+/g, ' ').trim();
+    if (!save || !title || title === item.title) return renderHistory();
+    try {
+      const data = await post('/api/chat/rename', { chatId: id, title });
+      item.title = data.title;
+      if (state.chat?.id === id) el.title.textContent = data.title.length > 40 ? `${data.title.slice(0, 40)}…` : data.title;
+    } catch (err) {
+      toast(err.message);
+    }
+    renderHistory();
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(true); }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); commit(false); }
+  });
+  input.addEventListener('blur', () => commit(true));
+}
+
 // ── Bestenliste ───────────────────────────────────────────────────
+let boardCat = 'all';
+document.querySelectorAll('[data-board]').forEach((tab) => tab.addEventListener('click', () => {
+  boardCat = tab.dataset.board;
+  showBoard();
+}));
+
 async function showBoard() {
   if (state.chat) resetChat();
   showView('board');
+  document.querySelectorAll('[data-board]').forEach((tab) => tab.setAttribute('aria-selected', String(tab.dataset.board === boardCat)));
   const list = $('#board-list');
   const sub = $('#board-sub');
-  sub.textContent = 'Lädt …';
+  sub.textContent = t('Lädt …', 'Loading …');
   list.innerHTML = '';
   try {
-    const res = await fetch('/api/chat/leaderboard');
+    const res = await fetch(`/api/chat/leaderboard?cat=${encodeURIComponent(boardCat)}`);
     const data = await res.json();
     if (!data.models?.length) {
-      sub.textContent = 'Noch keine Stimmen. Starte ein Battle, stimme ab, und die Modelle landen hier.';
-      list.innerHTML = '<li class="board-empty"><button class="btn" id="board-start">Battle starten</button></li>';
+      sub.textContent = boardCat === 'all'
+        ? t('Noch keine Stimmen. Starte ein Battle, stimme ab, und die Modelle landen hier.', 'No votes yet. Start a battle, vote, and the models will show up here.')
+        : t('In dieser Kategorie gibt es noch keine Stimmen.', 'There are no votes in this category yet.');
+      list.innerHTML = `<li class="board-empty"><button class="btn" id="board-start">${t('Battle starten', 'Start a battle')}</button></li>`;
       $('#board-start').addEventListener('click', () => {
         state.mode = 'battle';
         store.set('vais.mode', 'battle');
+        if (boardCat === 'code' || boardCat === 'web') { state.modality = boardCat; store.set('vais.modality', boardCat); }
         go('');
         renderControls();
         el.prompt.focus();
       });
       return;
     }
-    sub.textContent = `Elo-Wertung aus ${data.totalVotes} ${data.totalVotes === 1 ? 'Stimme' : 'Stimmen'} im Battle-Modus.`;
+    const n = data.totalVotes;
+    sub.textContent = t(
+      `Elo-Wertung aus ${n} ${n === 1 ? 'Stimme' : 'Stimmen'} im Battle-Modus. Siegquote: Siege plus halbe Unentschieden.`,
+      `Elo rating from ${n} ${n === 1 ? 'vote' : 'votes'} in battle mode. Win rate: wins plus half of the ties.`,
+    );
     list.innerHTML = data.models.map((m, i) => `
-      <li class="board-row">
+      <li class="board-row" title="${t(`${m.wins} Siege · ${m.ties} Unentschieden · ${m.losses} Niederlagen`, `${m.wins} wins · ${m.ties} ties · ${m.losses} losses`)}">
         <span class="b-rank">${i + 1}</span>
         ${modelLogo(m)}
-        <span class="b-name"><b></b><small></small></span>
-        <span class="b-score"><b>${m.rating}</b><small>${m.votes} ${m.votes === 1 ? 'Stimme' : 'Stimmen'}</small></span>
+        <span class="b-name"><b></b><small></small><span class="b-bar" aria-hidden="true"><i style="width:${m.winRate}%"></i></span></span>
+        <span class="b-score"><b>${m.rating}</b><small>${m.winRate} % · ${m.votes} ${m.votes === 1 ? 'Battle' : 'Battles'}</small></span>
       </li>`).join('');
-    list.querySelectorAll('.b-name').forEach((n, i) => {
-      n.querySelector('b').textContent = data.models[i].name;
-      n.querySelector('small').textContent = data.models[i].maker;
+    list.querySelectorAll('.b-name').forEach((nameEl, i) => {
+      nameEl.querySelector('b').textContent = data.models[i].name;
+      nameEl.querySelector('small').textContent = data.models[i].maker;
     });
   } catch {
-    sub.textContent = 'Die Bestenliste konnte nicht geladen werden.';
+    sub.textContent = t('Die Bestenliste konnte nicht geladen werden.', 'The leaderboard could not be loaded.');
   }
 }
+
+// ── Einstellungen ─────────────────────────────────────────────────
+const settingsEl = $('#settings');
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; });
+window.addEventListener('appinstalled', () => { installPrompt = null; toast(t('VAIs wurde installiert 🎉', 'VAIs was installed 🎉')); });
+
+function paintSettings() {
+  const theme = getTheme();
+  document.querySelectorAll('[data-theme-opt]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.themeOpt === theme)));
+  document.querySelectorAll('[data-lang-opt]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.langOpt === LANG)));
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  $('#set-install-group').hidden = standalone;
+  $('#set-install').hidden = !installPrompt;
+  $('#set-install-text').textContent = installPrompt
+    ? t('Installiere VAIs als App – mit eigenem Symbol auf deinem Startbildschirm.', 'Install VAIs as an app – with its own icon on your home screen.')
+    : ios
+      ? t('Tippe im Browser auf „Teilen“ (□↑) und dann auf „Zum Home-Bildschirm“. Danach startet VAIs wie eine App.', 'In your browser, tap “Share” (□↑) and then “Add to Home Screen”. VAIs will then open like an app.')
+      : t('Öffne das Browser-Menü (⋮) und wähle „App installieren“ oder „Zum Startbildschirm hinzufügen“.', 'Open the browser menu (⋮) and choose “Install app” or “Add to home screen”.');
+}
+
+function openSettings() {
+  toggleAccount(false);
+  closeDrawer();
+  paintSettings();
+  settingsEl.querySelectorAll('.msg').forEach((m) => { m.textContent = ''; m.className = m.className.replace(/ (ok|error)$/, ''); });
+  settingsEl.hidden = false;
+  $('.settings-head [data-close]', settingsEl).focus();
+}
+function closeSettings() { settingsEl.hidden = true; }
+
+$('#open-settings').addEventListener('click', openSettings);
+$('#d-settings').addEventListener('click', openSettings);
+settingsEl.addEventListener('click', (e) => {
+  if (e.target.closest('[data-close]')) return closeSettings();
+  const th = e.target.closest('[data-theme-opt]');
+  if (th) { setTheme(th.dataset.themeOpt); paintSettings(); }
+  const lg = e.target.closest('[data-lang-opt]');
+  if (lg && lg.dataset.langOpt !== LANG) setLang(lg.dataset.langOpt);
+});
+$('#set-install').addEventListener('click', async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice.catch(() => {});
+  installPrompt = null;
+  paintSettings();
+});
+
+function setMsg(form, text, kind) {
+  const m = $('.msg', form);
+  m.textContent = text;
+  m.classList.remove('ok', 'error');
+  if (kind) m.classList.add(kind);
+}
+
+$('#set-password').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.currentTarget;
+  const current = $('#set-current').value;
+  const password = $('#set-new').value;
+  if (password.length < 8) return setMsg(form, t('Das neue Passwort muss mindestens 8 Zeichen lang sein.', 'The new password must be at least 8 characters long.'), 'error');
+  const btn = $('button[type="submit"]', form);
+  btn.disabled = true;
+  try {
+    await post('/api/auth/password', { current, password });
+    $('#set-current').value = '';
+    $('#set-new').value = '';
+    setMsg(form, t('Passwort geändert. Andere Geräte wurden abgemeldet.', 'Password changed. Other devices were signed out.'), 'ok');
+  } catch (err) {
+    setMsg(form, err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('#set-clear').addEventListener('click', async () => {
+  if (!confirm(t('Wirklich alle Chats löschen? Das kann nicht rückgängig gemacht werden.', 'Really delete all chats? This cannot be undone.'))) return;
+  try {
+    await post('/api/chat/clear', {});
+    historyItems = [];
+    historyDirty = true;
+    if (state.chat) go('');
+    toast(t('Alle Chats gelöscht', 'All chats deleted'));
+  } catch (err) {
+    toast(err.message);
+  }
+});
+
+$('#set-delete').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.currentTarget;
+  const password = $('#set-delete-pw').value;
+  if (!password) return setMsg(form, t('Bitte gib dein Passwort ein.', 'Please enter your password.'), 'error');
+  if (!confirm(t('Konto wirklich endgültig löschen? Alle Chats gehen verloren.', 'Really delete your account permanently? All chats will be lost.'))) return;
+  try {
+    await post('/api/auth/delete', { password });
+    location.replace('/login');
+  } catch (err) {
+    setMsg(form, err.message, 'error');
+  }
+});
 
 // ── Start ─────────────────────────────────────────────────────────
 async function init() {
@@ -1351,10 +1720,12 @@ async function init() {
   if (!me.ok) return location.replace('/login');
   const { user } = await me.json();
   avatar.textContent = user.email[0].toUpperCase();
-  avatar.setAttribute('aria-label', `Konto: ${user.email}`);
+  avatar.setAttribute('aria-label', `${t('Konto', 'Account')}: ${user.email}`);
   $('#menu-email').textContent = user.email;
   $('#d-avatar').textContent = user.email[0].toUpperCase();
   $('#d-email').textContent = user.email;
+  $('#set-email').textContent = user.email;
+  $('#set-username').value = user.email;
 
   renderControls();
   updateSend();
@@ -1364,7 +1735,7 @@ async function init() {
     state.models = data.models ?? [];
     $('#demo-note').hidden = !data.demo;
   } catch {
-    toast('Modelle konnten nicht geladen werden.');
+    toast(t('Modelle konnten nicht geladen werden.', 'Models could not be loaded.'));
   }
   // Gespeicherte Auswahl prüfen, sonst die ersten Modelle nehmen
   state.picks = [0, 1].map((i) => (modelById(state.picks[i]) ? state.picks[i] : state.models[i]?.id ?? null));

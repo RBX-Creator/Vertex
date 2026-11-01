@@ -1,12 +1,14 @@
+import { t, LANG, translateDom, setLang } from './i18n.js';
+
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 const STEPS = {
-  email:    { title: 'Willkommen bei VAIs', sub: () => 'Die besten KI-Modelle an einem Ort. Kostenlos.' },
-  login:    { title: 'Willkommen zurück',   sub: () => 'Melde dich mit deinem Passwort an.' },
-  register: { title: 'Konto erstellen',     sub: () => 'Wähle ein Passwort für dein neues Konto.' },
-  verify:   { title: 'Prüfe dein Postfach', sub: (e) => `Wir haben einen 6-stelligen Code an <strong>${e}</strong> gesendet.` },
-  reset:    { title: 'Neues Passwort',      sub: (e) => `Falls ein Konto existiert, haben wir einen Code an <strong>${e}</strong> gesendet.` },
+  email:    { title: t('Willkommen bei VAIs', 'Welcome to VAIs'), sub: () => t('Die besten KI-Modelle an einem Ort. Kostenlos.', 'The best AI models in one place. For free.') },
+  login:    { title: t('Willkommen zurück', 'Welcome back'), sub: () => t('Melde dich mit deinem Passwort an.', 'Sign in with your password.') },
+  register: { title: t('Konto erstellen', 'Create account'), sub: () => t('Wähle ein Passwort für dein neues Konto.', 'Choose a password for your new account.') },
+  verify:   { title: t('Prüfe dein Postfach', 'Check your inbox'), sub: (e) => t(`Wir haben einen 6-stelligen Code an <strong>${e}</strong> gesendet.`, `We sent a 6-digit code to <strong>${e}</strong>.`) },
+  reset:    { title: t('Neues Passwort', 'New password'), sub: (e) => t(`Falls ein Konto existiert, haben wir einen Code an <strong>${e}</strong> gesendet.`, `If an account exists, we sent a code to <strong>${e}</strong>.`) },
 };
 
 const RESEND_SECONDS = 45;
@@ -25,10 +27,10 @@ async function api(path, body) {
       body: JSON.stringify(body),
     });
   } catch {
-    throw Object.assign(new Error('Keine Verbindung. Prüfe dein Internet.'), { status: 0 });
+    throw Object.assign(new Error(t('Keine Verbindung. Prüfe dein Internet.', 'No connection. Check your internet.')), { status: 0 });
   }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error || 'Etwas ist schiefgelaufen.'), { status: res.status, data });
+  if (!res.ok) throw Object.assign(new Error(data.error || t('Etwas ist schiefgelaufen.', 'Something went wrong.')), { status: res.status, data });
   return data;
 }
 
@@ -120,11 +122,12 @@ function startCooldown(purpose, seconds = RESEND_SECONDS) {
     if (left <= 0) {
       clearInterval(timers[purpose]);
       btn.disabled = false;
-      btn.textContent = 'Code erneut senden';
+      btn.textContent = t('Code erneut senden', 'Resend code');
       return;
     }
     btn.disabled = true;
-    btn.textContent = `Erneut senden in ${left--} s`;
+    btn.textContent = t(`Erneut senden in ${left} s`, `Resend in ${left} s`);
+    left--;
   };
   tick();
   timers[purpose] = setInterval(tick, 1000);
@@ -141,7 +144,7 @@ $$('[data-toggle-pw]').forEach((btn) => {
     const hidden = input.type === 'password';
     input.type = hidden ? 'text' : 'password';
     btn.innerHTML = hidden ? EYE_OFF : EYE;
-    btn.setAttribute('aria-label', hidden ? 'Passwort verbergen' : 'Passwort anzeigen');
+    btn.setAttribute('aria-label', hidden ? t('Passwort verbergen', 'Hide password') : t('Passwort anzeigen', 'Show password'));
     input.focus();
   });
 });
@@ -161,7 +164,7 @@ fEmail.addEventListener('submit', (e) => {
   const input = $('#email');
   const value = input.value.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)) {
-    return setError(fEmail, 'Bitte gib eine gültige E-Mail-Adresse ein.', input);
+    return setError(fEmail, t('Bitte gib eine gültige E-Mail-Adresse ein.', 'Please enter a valid email address.'), input);
   }
   submitting(fEmail, async () => {
     try {
@@ -179,7 +182,7 @@ fEmail.addEventListener('submit', (e) => {
 fLogin.addEventListener('submit', (e) => {
   e.preventDefault();
   const input = $('#login-password');
-  if (!input.value) return setError(fLogin, 'Bitte gib dein Passwort ein.', input);
+  if (!input.value) return setError(fLogin, t('Bitte gib dein Passwort ein.', 'Please enter your password.'), input);
   submitting(fLogin, async () => {
     try {
       const data = await api('login', { email, password: input.value });
@@ -200,7 +203,7 @@ fLogin.addEventListener('submit', (e) => {
 fRegister.addEventListener('submit', (e) => {
   e.preventDefault();
   const input = $('#register-password');
-  if (input.value.length < 8) return setError(fRegister, 'Das Passwort muss mindestens 8 Zeichen lang sein.', input);
+  if (input.value.length < 8) return setError(fRegister, t('Das Passwort muss mindestens 8 Zeichen lang sein.', 'The password must be at least 8 characters long.'), input);
   submitting(fRegister, async () => {
     try {
       await api('register', { email, password: input.value });
@@ -222,7 +225,7 @@ fRegister.addEventListener('submit', (e) => {
 fVerify.addEventListener('submit', (e) => {
   e.preventDefault();
   if (verifyOtp.input.value.length !== 6) {
-    $('.msg', fVerify).textContent = 'Bitte gib den 6-stelligen Code ein.';
+    $('.msg', fVerify).textContent = t('Bitte gib den 6-stelligen Code ein.', 'Please enter the 6-digit code.');
     return verifyOtp.fail();
   }
   submitting(fVerify, async () => {
@@ -261,10 +264,10 @@ fReset.addEventListener('submit', (e) => {
   e.preventDefault();
   const pw = $('#reset-password');
   if (resetOtp.input.value.length !== 6) {
-    $('.msg', fReset).textContent = 'Bitte gib den 6-stelligen Code ein.';
+    $('.msg', fReset).textContent = t('Bitte gib den 6-stelligen Code ein.', 'Please enter the 6-digit code.');
     return resetOtp.fail();
   }
-  if (pw.value.length < 8) return setError(fReset, 'Das Passwort muss mindestens 8 Zeichen lang sein.', pw);
+  if (pw.value.length < 8) return setError(fReset, t('Das Passwort muss mindestens 8 Zeichen lang sein.', 'The password must be at least 8 characters long.'), pw);
   submitting(fReset, async () => {
     try {
       await api('reset', { email, code: resetOtp.input.value, password: pw.value });
@@ -304,3 +307,11 @@ $$('[data-back]').forEach((btn) =>
 );
 
 $('#year').textContent = new Date().getFullYear();
+
+// Sprache umschalten (DE / EN)
+translateDom();
+document.querySelectorAll('[data-lang-opt]').forEach((b) => {
+  b.setAttribute('aria-pressed', String(b.dataset.langOpt === LANG));
+  b.addEventListener('click', () => { if (b.dataset.langOpt !== LANG) setLang(b.dataset.langOpt); });
+});
+show(current);

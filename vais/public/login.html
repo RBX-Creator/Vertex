@@ -4,10 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Anmelden – VAIs</title>
+  <meta name="title-en" content="Sign in – VAIs">
   <meta name="description" content="VAIs – die besten KI-Modelle kostenlos nutzen und vergleichen.">
-  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#242422" media="(prefers-color-scheme: dark)">
+  <script src="/boot.js"></script>
   <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="VAIs">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
@@ -24,6 +30,10 @@
         </svg>
         <span>VAIs</span>
       </a>
+      <div class="lang-switch" role="group" aria-label="Sprache / Language">
+        <button type="button" data-lang-opt="de">DE</button>
+        <button type="button" data-lang-opt="en">EN</button>
+      </div>
     </header>
 
     <main class="auth-main">
@@ -34,44 +44,44 @@
         <!-- 1 · E-Mail -->
         <section class="step active" data-step="email">
           <form id="form-email" novalidate>
-            <label class="sr-only" for="email">E-Mail-Adresse</label>
-            <input class="input" id="email" type="email" name="email" placeholder="E-Mail-Adresse"
+            <label class="sr-only" for="email" data-en="Email address">E-Mail-Adresse</label>
+            <input class="input" id="email" type="email" name="email" placeholder="E-Mail-Adresse" data-en-placeholder="Email address"
                    autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" required autofocus>
             <p class="msg error" role="alert"></p>
-            <button class="btn" type="submit">Weiter</button>
+            <button class="btn" type="submit" data-en="Continue">Weiter</button>
           </form>
         </section>
 
         <!-- 2a · Anmelden -->
         <section class="step" data-step="login">
           <form id="form-login" novalidate>
-            <div class="chip"><span data-email></span><button class="link" type="button" data-back>Ändern</button></div>
+            <div class="chip"><span data-email></span><button class="link" type="button" data-back data-en="Change">Ändern</button></div>
             <input type="email" autocomplete="username" data-email-hidden hidden>
             <div class="field">
-              <label class="sr-only" for="login-password">Passwort</label>
-              <input class="input" id="login-password" type="password" placeholder="Passwort" autocomplete="current-password" required>
-              <button class="icon-btn" type="button" data-toggle-pw aria-label="Passwort anzeigen"></button>
+              <label class="sr-only" for="login-password" data-en="Password">Passwort</label>
+              <input class="input" id="login-password" type="password" placeholder="Passwort" data-en-placeholder="Password" autocomplete="current-password" required>
+              <button class="icon-btn" type="button" data-toggle-pw aria-label="Passwort anzeigen" data-en-aria-label="Show password"></button>
             </div>
             <p class="msg error" role="alert"></p>
-            <button class="btn" type="submit">Anmelden</button>
-            <div class="row center"><button class="link" type="button" id="forgot">Passwort vergessen?</button></div>
+            <button class="btn" type="submit" data-en="Sign in">Anmelden</button>
+            <div class="row center"><button class="link" type="button" id="forgot" data-en="Forgot password?">Passwort vergessen?</button></div>
           </form>
         </section>
 
         <!-- 2b · Registrieren -->
         <section class="step" data-step="register">
           <form id="form-register" novalidate>
-            <div class="chip"><span data-email></span><button class="link" type="button" data-back>Ändern</button></div>
+            <div class="chip"><span data-email></span><button class="link" type="button" data-back data-en="Change">Ändern</button></div>
             <input type="email" autocomplete="username" data-email-hidden hidden>
             <div class="field">
-              <label class="sr-only" for="register-password">Passwort wählen</label>
-              <input class="input" id="register-password" type="password" placeholder="Passwort wählen"
+              <label class="sr-only" for="register-password" data-en="Choose a password">Passwort wählen</label>
+              <input class="input" id="register-password" type="password" placeholder="Passwort wählen" data-en-placeholder="Choose a password"
                      autocomplete="new-password" minlength="8" required>
-              <button class="icon-btn" type="button" data-toggle-pw aria-label="Passwort anzeigen"></button>
+              <button class="icon-btn" type="button" data-toggle-pw aria-label="Passwort anzeigen" data-en-aria-label="Show password"></button>
             </div>
-            <p class="hint">Mindestens 8 Zeichen.</p>
+            <p class="hint" data-en="At least 8 characters.">Mindestens 8 Zeichen.</p>
             <p class="msg error" role="alert"></p>
-            <button class="btn" type="submit">Konto erstellen</button>
+            <button class="btn" type="submit" data-en="Create account">Konto erstellen</button>
           </form>
         </section>
 
@@ -79,14 +89,14 @@
         <section class="step" data-step="verify">
           <form id="form-verify" novalidate>
             <div class="otp" data-otp>
-              <label class="sr-only" for="verify-code">6-stelliger Code</label>
+              <label class="sr-only" for="verify-code" data-en="6-digit code">6-stelliger Code</label>
               <input id="verify-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*">
               <div class="otp-boxes" aria-hidden="true"></div>
             </div>
             <p class="msg error" role="alert"></p>
-            <button class="btn" type="submit">Bestätigen</button>
+            <button class="btn" type="submit" data-en="Confirm">Bestätigen</button>
             <div class="row">
-              <button class="link" type="button" data-back>Andere E-Mail</button>
+              <button class="link" type="button" data-back data-en="Different email">Andere E-Mail</button>
               <button class="link" type="button" data-resend="verify">Code erneut senden</button>
             </div>
           </form>
@@ -96,21 +106,21 @@
         <section class="step" data-step="reset">
           <form id="form-reset" novalidate>
             <div class="otp" data-otp>
-              <label class="sr-only" for="reset-code">6-stelliger Code</label>
+              <label class="sr-only" for="reset-code" data-en="6-digit code">6-stelliger Code</label>
               <input id="reset-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*">
               <div class="otp-boxes" aria-hidden="true"></div>
             </div>
             <input type="email" autocomplete="username" data-email-hidden hidden>
             <div class="field">
-              <label class="sr-only" for="reset-password">Neues Passwort</label>
-              <input class="input" id="reset-password" type="password" placeholder="Neues Passwort"
+              <label class="sr-only" for="reset-password" data-en="New password">Neues Passwort</label>
+              <input class="input" id="reset-password" type="password" placeholder="Neues Passwort" data-en-placeholder="New password"
                      autocomplete="new-password" minlength="8" required>
-              <button class="icon-btn" type="button" data-toggle-pw aria-label="Passwort anzeigen"></button>
+              <button class="icon-btn" type="button" data-toggle-pw aria-label="Passwort anzeigen" data-en-aria-label="Show password"></button>
             </div>
             <p class="msg error" role="alert"></p>
-            <button class="btn" type="submit">Passwort speichern</button>
+            <button class="btn" type="submit" data-en="Save password">Passwort speichern</button>
             <div class="row">
-              <button class="link" type="button" data-back>Zurück</button>
+              <button class="link" type="button" data-back data-en="Back">Zurück</button>
               <button class="link" type="button" data-resend="reset">Code erneut senden</button>
             </div>
           </form>

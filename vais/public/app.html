@@ -4,9 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>VAIs</title>
-  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#242422" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="VAIs – die besten KI-Modelle kostenlos nutzen und vergleichen.">
+  <script src="/boot.js"></script>
   <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="VAIs">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -19,10 +25,10 @@
   <div class="shell">
     <header class="topbar">
       <div class="top-left">
-      <button class="round-btn" id="open-drawer" aria-label="Seitenleiste öffnen" title="Verlauf" aria-controls="drawer" aria-expanded="false">
+      <button class="round-btn" id="open-drawer" aria-label="Seitenleiste öffnen" data-en-aria-label="Open sidebar" title="Verlauf" data-en-title="History" aria-controls="drawer" aria-expanded="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16M5.5 10l1.5 2-1.5 2"/></svg>
       </button>
-      <a class="brand" href="/" aria-label="VAIs – Startseite">
+      <a class="brand" href="/" aria-label="VAIs – Startseite" data-en-aria-label="VAIs – Home">
         <svg viewBox="0 0 26 26" fill="none" aria-hidden="true">
           <path d="M4.5 6 13 21 21.5 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
           <circle cx="4.5" cy="6" r="2.4" fill="currentColor"/>
@@ -33,16 +39,20 @@
       </div>
       <p class="chat-title" id="chat-title"></p>
       <div class="top-actions">
-        <button class="round-btn" id="new-chat" aria-label="Neuer Chat" title="Neuer Chat" hidden>
+        <button class="round-btn" id="new-chat" aria-label="Neuer Chat" data-en-aria-label="New chat" title="Neuer Chat" data-en-title="New chat" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v8M8 12h8"/><path d="M21 12a9 9 0 0 1-13.5 7.8L3 21l1.2-4.5A9 9 0 1 1 21 12Z"/></svg>
         </button>
         <div class="account">
           <button class="avatar" id="avatar" aria-haspopup="true" aria-expanded="false" aria-controls="account-menu"></button>
           <div class="menu" id="account-menu" hidden>
             <p class="menu-email" id="menu-email"></p>
+            <button class="menu-item" id="open-settings">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+              <span data-en="Settings">Einstellungen</span>
+            </button>
             <button class="btn" id="logout">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/></svg>
-              Abmelden
+              <span data-en="Sign out">Abmelden</span>
             </button>
           </div>
         </div>
@@ -51,14 +61,20 @@
 
     <main class="stage" id="stage">
       <section class="home" id="home">
-        <h1 class="home-title">Was möchtest du tun?</h1>
-        <p class="demo-note" id="demo-note" hidden>Demo-Modus: Es antworten Platzhalter-Modelle, bis ein OpenRouter-Schlüssel eingetragen ist.</p>
+        <h1 class="home-title" data-en="What would you like to do?">Was möchtest du tun?</h1>
+        <p class="demo-note" id="demo-note" hidden data-en="Demo mode: placeholder models answer until an API key is configured.">Demo-Modus: Es antworten Platzhalter-Modelle, bis ein API-Schlüssel eingetragen ist.</p>
       </section>
       <section class="thread" id="thread" aria-live="polite" hidden></section>
       <section class="board" id="board" hidden>
         <div class="board-inner">
-          <h1 class="board-title">Bestenliste</h1>
+          <h1 class="board-title" data-en="Leaderboard">Bestenliste</h1>
           <p class="board-sub" id="board-sub"></p>
+          <div class="board-tabs" role="tablist" aria-label="Kategorie" data-en-aria-label="Category">
+            <button type="button" role="tab" data-board="all" data-en="All">Alle</button>
+            <button type="button" role="tab" data-board="text" data-en="Text">Text</button>
+            <button type="button" role="tab" data-board="code" data-en="Code">Code</button>
+            <button type="button" role="tab" data-board="web" data-en="Web search">Websuche</button>
+          </div>
           <ol class="board-list" id="board-list"></ol>
         </div>
       </section>
@@ -68,28 +84,28 @@
       <div class="dock-inner">
         <div class="mode-menu" id="mode-menu" role="menu" hidden></div>
         <div class="mode-menu" id="modality-menu" role="menu" hidden></div>
-        <section class="suggest" id="suggest" aria-label="Vorschläge">
-          <p class="suggest-label">Los geht's</p>
+        <section class="suggest" id="suggest" aria-label="Vorschläge" data-en-aria-label="Suggestions">
+          <p class="suggest-label" data-en="Get started">Los geht's</p>
           <div class="suggest-track" id="suggest-track"></div>
         </section>
         <form class="composer" id="composer">
           <div class="vote" id="vote" hidden>
-            <button type="button" data-vote="a">A ist besser</button>
-            <button type="button" data-vote="tie" class="vote-icon" aria-label="Unentschieden" title="Unentschieden">
+            <button type="button" data-vote="a" data-en="A is better">A ist besser</button>
+            <button type="button" data-vote="tie" class="vote-icon" aria-label="Unentschieden" data-en-aria-label="Tie" title="Unentschieden" data-en-title="Tie">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></svg>
             </button>
-            <button type="button" data-vote="bad" class="vote-icon" aria-label="Beide schlecht" title="Beide schlecht">
+            <button type="button" data-vote="bad" class="vote-icon" aria-label="Beide schlecht" data-en-aria-label="Both are bad" title="Beide schlecht" data-en-title="Both are bad">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m5.6 18.4 12.8-12.8"/></svg>
             </button>
-            <button type="button" data-vote="b">B ist besser</button>
+            <button type="button" data-vote="b" data-en="B is better">B ist besser</button>
           </div>
           <div class="vote-result" id="vote-result" hidden></div>
           <div class="tray" id="tray" hidden></div>
-          <label class="sr-only" for="prompt">Nachricht</label>
+          <label class="sr-only" for="prompt" data-en="Message">Nachricht</label>
           <textarea id="prompt" rows="1" placeholder="Frag irgendwas …" enterkeyhint="send"></textarea>
           <div class="composer-bar">
             <div class="controls">
-              <button type="button" class="ctrl" id="attach-btn" aria-label="Bild oder Datei anhängen" title="Bild oder Datei anhängen">
+              <button type="button" class="ctrl" id="attach-btn" aria-label="Bild oder Datei anhängen" data-en-aria-label="Attach image or file" title="Bild oder Datei anhängen" data-en-title="Attach image or file">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
               </button>
               <input type="file" id="attach-input" multiple hidden
@@ -99,7 +115,12 @@
               <button type="button" class="ctrl model-chip" data-slot="0" hidden></button>
               <button type="button" class="ctrl model-chip" data-slot="1" hidden></button>
             </div>
-            <button class="send" id="send" type="submit" aria-label="Senden"></button>
+            <div class="send-area">
+              <button type="button" class="mic" id="mic" aria-label="Sprechen" data-en-aria-label="Speak" title="Sprechen" data-en-title="Speak" aria-pressed="false" hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+              </button>
+              <button class="send" id="send" type="submit" aria-label="Senden"></button>
+            </div>
           </div>
         </form>
       </div>
@@ -109,49 +130,52 @@
   <!-- Seitenleiste mit Verlauf -->
   <div class="drawer" id="drawer" hidden>
     <div class="drawer-backdrop" data-close-drawer></div>
-    <nav class="drawer-panel" aria-label="Seitenleiste">
+    <nav class="drawer-panel" aria-label="Seitenleiste" data-en-aria-label="Sidebar">
       <div class="drawer-head">
         <span class="brand"><svg viewBox="0 0 26 26" fill="none" aria-hidden="true"><path d="M4.5 6 13 21 21.5 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4.5" cy="6" r="2.4" fill="currentColor"/><circle cx="21.5" cy="6" r="2.4" fill="currentColor"/></svg><span>VAIs</span></span>
-        <button class="round-btn" data-close-drawer aria-label="Seitenleiste schließen">
+        <button class="round-btn" data-close-drawer aria-label="Seitenleiste schließen" data-en-aria-label="Close sidebar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16M18.5 10 17 12l1.5 2"/></svg>
         </button>
       </div>
       <button class="drawer-item" id="d-new">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v8M8 12h8"/><path d="M21 12a9 9 0 0 1-13.5 7.8L3 21l1.2-4.5A9 9 0 1 1 21 12Z"/></svg>
-        Neuer Chat
+        <span data-en="New chat">Neuer Chat</span>
       </button>
       <button class="drawer-item" id="d-board">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="14" width="4" height="6" rx="1"/><rect x="10" y="9" width="4" height="11" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>
-        Bestenliste
+        <span data-en="Leaderboard">Bestenliste</span>
       </button>
       <label class="drawer-search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <span class="sr-only">Chats suchen</span>
-        <input id="d-search" type="search" placeholder="Chats suchen" autocomplete="off">
+        <span class="sr-only" data-en="Search chats">Chats suchen</span>
+        <input id="d-search" type="search" placeholder="Chats suchen" data-en-placeholder="Search chats" autocomplete="off">
       </label>
       <div class="drawer-list" id="d-list"></div>
-      <div class="drawer-foot"><span class="avatar small" id="d-avatar"></span><span id="d-email"></span></div>
+      <button class="drawer-foot" id="d-settings" title="Einstellungen" data-en-title="Settings">
+        <span class="avatar small" id="d-avatar"></span><span id="d-email"></span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
     </nav>
   </div>
 
   <!-- Modellauswahl (Bottom-Sheet) -->
   <div class="sheet" id="model-sheet" hidden>
     <div class="sheet-backdrop" data-close></div>
-    <div class="sheet-panel" role="dialog" aria-modal="true" aria-label="Modell wählen">
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-label="Modell wählen" data-en-aria-label="Choose model">
       <div class="sheet-grip" aria-hidden="true"></div>
-      <label class="sr-only" for="model-search">Modelle suchen</label>
-      <input class="input" id="model-search" type="search" placeholder="Modelle suchen" autocomplete="off">
-      <div class="cap-tabs" role="tablist" aria-label="Kategorie">
+      <label class="sr-only" for="model-search" data-en="Search models">Modelle suchen</label>
+      <input class="input" id="model-search" type="search" placeholder="Modelle suchen" data-en-placeholder="Search models" autocomplete="off">
+      <div class="cap-tabs" role="tablist" aria-label="Kategorie" data-en-aria-label="Category">
         <button type="button" class="cap-tab" role="tab" data-cap="text" aria-label="Text" title="Text">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M5 5h14M12 5v15M9 20h6"/></svg>
         </button>
         <button type="button" class="cap-tab" role="tab" data-cap="code" aria-label="Code" title="Code">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg>
         </button>
-        <button type="button" class="cap-tab" role="tab" data-cap="image" aria-label="Bild" title="Bild">
+        <button type="button" class="cap-tab" role="tab" data-cap="image" aria-label="Bild" data-en-aria-label="Image" title="Bild" data-en-title="Image">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><circle cx="15.5" cy="8.5" r="1.8"/><path d="m3.5 17 5-5 5 5 2-2 5 5"/></svg>
         </button>
-        <button type="button" class="cap-tab" role="tab" data-cap="web" aria-label="Websuche" title="Websuche">
+        <button type="button" class="cap-tab" role="tab" data-cap="web" aria-label="Websuche" data-en-aria-label="Web search" title="Websuche" data-en-title="Web search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"/></svg>
         </button>
       </div>
@@ -164,7 +188,7 @@
     <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="expand-title">
       <div class="modal-head">
         <span class="card-label" id="expand-title"></span>
-        <button class="card-btn" data-close aria-label="Schließen">
+        <button class="card-btn" data-close aria-label="Schließen" data-en-aria-label="Close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
       </div>
@@ -172,15 +196,14 @@
     </div>
   </div>
 
-  <!-- Vorschau für HTML-Code -->
   <!-- Webseiten-Vorschau (Bottom-Sheet) -->
   <div class="psheet" id="preview" hidden>
     <div class="sheet-backdrop" data-close></div>
-    <div class="psheet-panel" role="dialog" aria-modal="true" aria-label="Webseite">
+    <div class="psheet-panel" role="dialog" aria-modal="true" aria-label="Webseite" data-en-aria-label="Website">
       <div class="sheet-grip" data-close aria-hidden="true"></div>
       <div class="ptools">
-        <div class="pseg" role="tablist" aria-label="Ansicht">
-          <button type="button" role="tab" data-ptab="view" aria-label="Vorschau" title="Vorschau">
+        <div class="pseg" role="tablist" aria-label="Ansicht" data-en-aria-label="View">
+          <button type="button" role="tab" data-ptab="view" aria-label="Vorschau" data-en-aria-label="Preview" title="Vorschau" data-en-title="Preview">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
           <button type="button" role="tab" data-ptab="code" aria-label="Code" title="Code">
@@ -188,29 +211,98 @@
           </button>
         </div>
         <div class="paddr">
-          <button type="button" id="preview-reload" aria-label="Neu laden" title="Neu laden">
+          <button type="button" id="preview-reload" aria-label="Neu laden" data-en-aria-label="Reload" title="Neu laden" data-en-title="Reload">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
           </button>
           <span>/</span>
         </div>
-        <button type="button" class="pbtn" id="preview-download" aria-label="Herunterladen" title="Als HTML-Datei herunterladen">
+        <button type="button" class="pbtn" id="preview-download" aria-label="Herunterladen" data-en-aria-label="Download" title="Als HTML-Datei herunterladen" data-en-title="Download as HTML file">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
         </button>
-        <button type="button" class="pbtn ghost" data-close aria-label="Schließen" title="Schließen">
+        <button type="button" class="pbtn ghost" data-close aria-label="Schließen" data-en-aria-label="Close" title="Schließen" data-en-title="Close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
       </div>
       <div class="pbody">
-        <iframe id="preview-frame" title="Vorschau der Webseite" sandbox="allow-scripts allow-forms allow-modals allow-popups"></iframe>
+        <iframe id="preview-frame" title="Vorschau der Webseite" data-en-title="Website preview" sandbox="allow-scripts allow-forms allow-modals allow-popups"></iframe>
         <div class="pbuild" id="preview-build">
           <span class="bricks live"><i></i><i></i><i></i><i></i><i></i><i></i></span>
-          <b id="preview-build-title">Baut …</b>
-          <small id="preview-build-text">Die Vorschau erscheint, sobald die Webseite fertig ist.</small>
+          <b id="preview-build-title"></b>
+          <small id="preview-build-text"></small>
         </div>
         <div class="pcode" id="preview-code">
           <div class="pfile"><span>index.html</span></div>
           <pre><code></code></pre>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Einstellungen -->
+  <div class="sheet settings" id="settings" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <div class="settings-head">
+        <h2 id="settings-title" data-en="Settings">Einstellungen</h2>
+        <button class="card-btn" data-close aria-label="Schließen" data-en-aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="settings-body">
+        <section class="set-group">
+          <h3 data-en="Appearance">Darstellung</h3>
+          <div class="seg" role="radiogroup" aria-label="Design" data-en-aria-label="Theme" id="set-theme">
+            <button type="button" role="radio" data-theme-opt="system" data-en="System">System</button>
+            <button type="button" role="radio" data-theme-opt="light" data-en="Light">Hell</button>
+            <button type="button" role="radio" data-theme-opt="dark" data-en="Dark">Dunkel</button>
+          </div>
+        </section>
+
+        <section class="set-group">
+          <h3 data-en="Language">Sprache</h3>
+          <div class="seg" role="radiogroup" aria-label="Sprache" data-en-aria-label="Language" id="set-lang">
+            <button type="button" role="radio" data-lang-opt="de">Deutsch</button>
+            <button type="button" role="radio" data-lang-opt="en">English</button>
+          </div>
+        </section>
+
+        <section class="set-group" id="set-install-group" hidden>
+          <h3 data-en="App">App</h3>
+          <p class="set-hint" id="set-install-text"></p>
+          <button type="button" class="btn" id="set-install" hidden data-en="Install VAIs">VAIs installieren</button>
+        </section>
+
+        <section class="set-group">
+          <h3 data-en="Account">Konto</h3>
+          <p class="set-hint" id="set-email"></p>
+          <form id="set-password" class="set-form" novalidate>
+            <input type="email" autocomplete="username" id="set-username" hidden>
+            <label class="sr-only" for="set-current" data-en="Current password">Aktuelles Passwort</label>
+            <input class="input" id="set-current" type="password" autocomplete="current-password" placeholder="Aktuelles Passwort" data-en-placeholder="Current password">
+            <label class="sr-only" for="set-new" data-en="New password">Neues Passwort</label>
+            <input class="input" id="set-new" type="password" autocomplete="new-password" minlength="8" placeholder="Neues Passwort (mind. 8 Zeichen)" data-en-placeholder="New password (min. 8 characters)">
+            <p class="msg" role="status"></p>
+            <button class="btn" type="submit" data-en="Change password">Passwort ändern</button>
+          </form>
+        </section>
+
+        <section class="set-group">
+          <h3 data-en="Data">Daten</h3>
+          <button type="button" class="btn ghost-btn" id="set-clear" data-en="Delete all chats">Alle Chats löschen</button>
+          <p class="set-hint" data-en="Battle votes stay in the leaderboard anonymously.">Abgestimmte Battles bleiben anonym in der Bestenliste.</p>
+        </section>
+
+        <section class="set-group danger">
+          <h3 data-en="Delete account">Konto löschen</h3>
+          <p class="set-hint" data-en="Deletes your account and all your chats permanently.">Löscht dein Konto und alle deine Chats endgültig.</p>
+          <form id="set-delete" class="set-form" novalidate>
+            <label class="sr-only" for="set-delete-pw" data-en="Password">Passwort</label>
+            <input class="input" id="set-delete-pw" type="password" autocomplete="current-password" placeholder="Passwort zur Bestätigung" data-en-placeholder="Password to confirm">
+            <p class="msg error" role="alert"></p>
+            <button class="btn danger-btn" type="submit" data-en="Delete account permanently">Konto endgültig löschen</button>
+          </form>
+        </section>
       </div>
     </div>
   </div>
