@@ -59,6 +59,15 @@ export function markdown(text) {
 
 // Code-Blöcke einfärben und mit Kopf (Sprache + Kopieren) versehen
 export function enhance(root) {
+  // Breite Tabellen: in einen wischbaren Rahmen (links/rechts) statt zusammengequetscht
+  root.querySelectorAll('table').forEach((table) => {
+    if (table.parentElement?.classList.contains('table-wrap') || table.closest('.chart')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'table-wrap';
+    table.replaceWith(wrap);
+    wrap.append(table);
+    requestAnimationFrame(() => wrap.classList.toggle('scrolls', wrap.scrollWidth > wrap.clientWidth + 4));
+  });
   root.querySelectorAll('pre > code').forEach((code) => {
     const pre = code.parentElement;
     if (pre.parentElement?.classList.contains('codeblock')) return;

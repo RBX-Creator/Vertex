@@ -125,7 +125,10 @@
           <div class="vote-result" id="vote-result" hidden></div>
           <div class="tray" id="tray" hidden></div>
           <label class="sr-only" for="prompt" data-en="Message">Nachricht</label>
-          <textarea id="prompt" rows="1" placeholder="Frag irgendwas …" enterkeyhint="send"></textarea>
+          <div class="prompt-wrap">
+            <textarea id="prompt" rows="1" placeholder="Frag irgendwas …" enterkeyhint="send"></textarea>
+            <button type="button" class="improve-btn" id="improve-btn" hidden aria-label="Nachricht verbessern" data-en-aria-label="Improve message" title="Nachricht verbessern" data-en-title="Improve message">✨</button>
+          </div>
           <div class="composer-bar">
             <div class="controls">
               <button type="button" class="ctrl" id="attach-btn" aria-label="Bild oder Datei anhängen" data-en-aria-label="Attach image or file" title="Bild oder Datei anhängen" data-en-title="Attach image or file">

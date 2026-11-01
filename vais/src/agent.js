@@ -652,9 +652,9 @@ const AGENT_BACKUP = [/^groq:meta-llama\/llama-4-scout/, /^groq:moonshotai\/kimi
 
 const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 
-export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, personal = {}, onRemember = null, onReminder = null }) {
+export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, personal = {}, onRemember = null, onReminder = null, inbox = null }) {
   onReact('👀'); // „hab’s gesehen, bin dran“
-  if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, planFirst: personal.planFirst });
+  if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, planFirst: personal.planFirst, inbox });
   const model = await pickModel(AGENT_PREFERENCE);
   if (!model) throw new Error(t('Agent X braucht einen Groq-Schlüssel (GROQ_API_KEY), damit er Werkzeuge benutzen kann.', 'Agent X needs a Groq key (GROQ_API_KEY) to use tools.'));
 
@@ -698,11 +698,25 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
     throw new Error(t('Agent X konnte gerade nicht antworten. Versuch es gleich noch einmal.', 'Agent X could not answer right now. Please try again shortly.'));
   }
 
+  // Nachträge, die der Nutzer während der Arbeit schickt, sofort berücksichtigen
+  const takeInbox = () => {
+    while (inbox?.length) {
+      const extra = inbox.shift();
+      onStep({ kind: 'inbox', text: extra.slice(0, 80) });
+      convo.push({ role: 'user', content: `(Nachtrag des Nutzers, während du arbeitest – berücksichtige das): ${extra}` });
+    }
+  };
   for (let round = 0; round < MAX_STEPS; round++) {
+    takeInbox();
     const msg = await ask({ tools: agentTools });
     const thought = msg.reasoning ?? msg.reasoning_content;
     if (thought) await emitText(`${thought.trim()}\n\n`, onReasoning, signal, 6, 8);
     const calls = msg.tool_calls ?? [];
+    if (!calls.length && inbox?.length) {
+      // Kurz vor dem Ende kam noch etwas vom Nutzer → nochmal mit dem Nachtrag
+      convo.push({ role: 'assistant', content: msg.content ?? '' });
+      continue;
+    }
     if (!calls.length) return finish(msg.content);
 
     convo.push({ role: 'assistant', content: msg.content ?? '', tool_calls: calls });
@@ -732,7 +746,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   return finish(final.content);
 }
 
-async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onReact, signal, remember, reminder, planFirst }) {
+async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onReact, signal, remember, reminder, planFirst, inbox }) {
   const lastMsg = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
   const q = Array.isArray(lastMsg) ? lastMsg.filter((p) => p.type === 'text').map((p) => p.text).join(' ') : String(lastMsg);
   const pics = Array.isArray(lastMsg) ? lastMsg.filter((p) => p.type === 'image_url').length : 0;
@@ -776,8 +790,10 @@ async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onR
   onStep({ kind: 'wiki', text: q.split(/\s+/).slice(-1)[0] || 'VAIs' });
   onSources([{ url: 'https://de.wikipedia.org/wiki/Berlin', title: 'Berlin – Wikipedia' }, { url: 'https://www.wetter.com/deutschland/berlin/', title: 'Wetter Berlin | wetter.com' }]);
   await sleep(700); onStep({ kind: 'read', text: 'example.com/artikel' });
+  const extras = [];
+  while (inbox?.length) { const x = inbox.shift(); extras.push(x); onStep({ kind: 'inbox', text: x }); }
   await sleep(500); onStep({ kind: 'calc', text: '21 * 2' });
   await sleep(400);
   onReact(/witz|joke/i.test(q) ? '😂' : null);
-  await emitText(`**Agent X (Demo)**\n\n${pics ? 'Auf dem Bild sehe ich (Demo) etwas Schönes. ' : ''}Ich habe parallel gesucht, Wikipedia gelesen und gerechnet: 21 × 2 = **${calculate('21*2')}**.\n\nMit einem Groq-Schlüssel arbeite ich mit echten Werkzeugen.\n\n**Quellen**\n- [example.com](https://example.com)`, onText, signal);
+  await emitText(`**Agent X (Demo)**\n\n${pics ? 'Auf dem Bild sehe ich (Demo) etwas Schönes. ' : ''}Ich habe parallel gesucht, Wikipedia gelesen und gerechnet: 21 × 2 = **${calculate('21*2')}**.${extras.length ? ` Deinen Nachtrag „${extras.join('“, „')}“ habe ich berücksichtigt.` : ''}\n\nMit einem Groq-Schlüssel arbeite ich mit echten Werkzeugen.\n\n**Quellen**\n- [example.com](https://example.com)`, onText, signal);
 }

@@ -51,6 +51,7 @@ Object.assign(ICON, {
   folder: svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
   more: svg('<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>'),
   close: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
+  's-inbox': svg('<path d="M12 5v14M5 12h14"/>'),
   's-edit': svg('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13 7 4 4"/>'),
   's-reminder': svg('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M5 3 2 6M19 3l3 3"/>'),
   's-video': svg('<rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="m10 9.5 5 2.5-5 2.5z"/>'),
@@ -147,9 +148,25 @@ let toastTimer;
 function toast(text) {
   const el = $('#toast');
   el.textContent = text;
+  el.classList.remove('action');
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+}
+
+// Hinweis mit Knopf (z. B. „Rückgängig“)
+function toastAction(text, label, fn) {
+  const el = $('#toast');
+  el.textContent = `${text} `;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'toast-btn';
+  b.textContent = label;
+  b.addEventListener('click', () => { fn(); el.classList.remove('show', 'action'); }, { once: true });
+  el.append(b);
+  el.classList.add('show', 'action');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show', 'action'), 6000);
 }
 
 async function post(url, body) {
@@ -180,6 +197,7 @@ const state = {
   modality: store.get('vais.modality', 'auto'),
   picks: store.get('vais.picks', [null, null]),
   models: [],
+  queue: [], // vorgemerkte Nachrichten (während die KI antwortet)
   pending: [], // Anhänge für die nächste Nachricht: { kind: 'image', name, url } | { kind: 'file', name, text }
   chat: null, // { id, mode, labels, names, winner, turns: [{ user, answers: [{ text, status, error }] }] }
   controllers: new Set(),
@@ -376,6 +394,8 @@ function labelFor(chat, side) {
 function showView(view) {
   el.home.hidden = view !== 'home';
   el.thread.hidden = view !== 'thread';
+  const q = $('#queue');
+  if (q) q.hidden = view !== 'thread';
   el.board.hidden = view !== 'board';
   el.stats.hidden = view !== 'stats';
   el.dock.hidden = view === 'board' || view === 'stats';
@@ -441,6 +461,7 @@ function resetChat() {
   state.controllers.clear();
   state.chat = null;
   el.thread.innerHTML = '';
+  $('#queue')?.remove();
   el.title.textContent = '';
   el.vote.hidden = true;
   el.voteResult.hidden = true;
@@ -751,8 +772,8 @@ function renderSources(card, a) {
 }
 
 // Arbeitsschritte von Agent X über der Antwort anzeigen
-const STEP_EN = { edit: 'Editing', reminder: 'Reminder', video: 'Watching', memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' };
-const STEP_DE = { edit: 'Bearbeitet', reminder: 'Erinnerung', video: 'Schaut Video', memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
+const STEP_EN = { inbox: 'Your addition', edit: 'Editing', reminder: 'Reminder', video: 'Watching', memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' };
+const STEP_DE = { inbox: 'Nachtrag', edit: 'Bearbeitet', reminder: 'Erinnerung', video: 'Schaut Video', memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
 const STEP_LABEL = Object.fromEntries(Object.keys(STEP_EN).map((k) => [k, t(STEP_DE[k], STEP_EN[k])]));
 function renderSteps(card, a) {
   let box = $('.agent-steps', card);
@@ -876,7 +897,8 @@ function afterTurn() {
 async function send() {
   const text = el.prompt.value.trim();
   const attachments = state.pending;
-  if ((!text && !attachments.length) || busy()) return;
+  if (!text && !attachments.length) return;
+  if (busy()) return queueMessage();
   if (offline) return toast(t('Du bist offline – Chats kannst du nur lesen.', 'You are offline – chats are read-only.'));
   if (pendingReads) return toast(t('Anhänge werden noch geladen …', 'Attachments are still loading …'));
   if (!state.models.length) return toast(t('Modelle konnten nicht geladen werden. Lade die Seite neu.', 'Models could not be loaded. Reload the page.'));
@@ -947,7 +969,121 @@ async function runTurn(chat, text, attachments) {
   if (state.chat === chat) afterTurn();
   await loadExtras(chat, index);
   refreshOfflineChat(chat.id);
+  processQueue(chat);
 }
+
+// ── Vorgemerkte Nachrichten (geschrieben, während die KI noch antwortet) ──
+let queueId = 0;
+function queueMessage() {
+  const text = el.prompt.value.trim();
+  const attachments = state.pending;
+  if (!text && !attachments.length) return;
+  if (!state.chat) return toast(t('Warte kurz, bis der Chat gestartet ist.', 'Wait a moment until the chat has started.'));
+  state.queue.push({ id: ++queueId, chatId: state.chat.id, text, attachments });
+  el.prompt.value = '';
+  state.pending = [];
+  renderTray();
+  autosize();
+  haptic('tap');
+  renderQueue();
+}
+function renderQueue() {
+  let box = $('#queue');
+  const items = state.queue.filter((q) => q.chatId === state.chat?.id);
+  if (!items.length) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'queue';
+    box.className = 'queue';
+  }
+  el.thread.after(box);
+  const agentRunning = state.chat?.mode === 'agent' || state.chat?.labels?.includes?.('Agent X');
+  box.innerHTML = items.map((q) => `
+    <div class="queued" data-q="${q.id}">
+      <div class="bubble"><span></span>${q.attachments.length ? `<small>📎 ${q.attachments.length}</small>` : ''}</div>
+      <div class="queued-bar">
+        <small>${t('Wartet – kommt dran, sobald die Antwort fertig ist', 'Waiting – sent when the answer is done')}</small>
+        <button type="button" data-q-now="${q.id}">${agentRunning ? t('↑ Jetzt einbringen', '↑ Add now') : t('↑ Jetzt senden', '↑ Send now')}</button>
+        <button type="button" data-q-del="${q.id}" aria-label="${t('Entfernen', 'Remove')}">✕</button>
+      </div>
+    </div>`).join('');
+  box.querySelectorAll('.queued .bubble span').forEach((span, i) => { span.textContent = items[i].text; });
+  box.scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+function processQueue(chat) {
+  if (state.chat !== chat || busy()) return;
+  const i = state.queue.findIndex((q) => q.chatId === chat.id);
+  if (i === -1) return renderQueue();
+  const [item] = state.queue.splice(i, 1);
+  renderQueue();
+  el.prompt.value = item.text;
+  state.pending = item.attachments;
+  renderTray();
+  send();
+}
+document.addEventListener('click', async (e) => {
+  const del = e.target.closest('[data-q-del]');
+  if (del) {
+    state.queue = state.queue.filter((q) => q.id !== Number(del.dataset.qDel));
+    return renderQueue();
+  }
+  const now = e.target.closest('[data-q-now]');
+  if (!now) return;
+  const item = state.queue.find((q) => q.id === Number(now.dataset.qNow));
+  const chat = state.chat;
+  if (!item || !chat) return;
+  const ti = chat.turns.length - 1;
+  if (busy() && !item.attachments.length) {
+    // Agent X: Nachricht direkt in die laufende Arbeit geben
+    try {
+      const data = await post('/api/chat/inject', { chatId: chat.id, turn: ti, text: item.text });
+      if (data.injected) {
+        state.queue = state.queue.filter((q) => q !== item);
+        chat.turns[ti].user = `${chat.turns[ti].user}\n\n➕ ${item.text}`;
+        const bubble = el.thread.querySelector(`.turn[data-index="${ti}"] .turn-user .bubble`);
+        if (bubble) bubble.append(Object.assign(document.createElement('span'), { className: 'addon', textContent: `➕ ${item.text}` }));
+        haptic('success');
+        toast(t('Agent X berücksichtigt das jetzt ✓', 'Agent X is taking this into account ✓'));
+        return renderQueue();
+      }
+    } catch { /* dann eben neu senden */ }
+  }
+  // Sonst: laufende Antwort stoppen und sofort senden
+  if (busy()) {
+    chat.turns[ti]?.answers.forEach((a, side) => { if (a.status === 'streaming') post('/api/chat/stop', { chatId: chat.id, turn: ti, side }).catch(() => {}); });
+    for (const c of state.controllers) c.abort();
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  state.queue = state.queue.filter((q) => q !== item);
+  state.queue.unshift(item);
+  processQueue(chat);
+});
+
+// ── ✨ Nachricht verbessern ────────────────────────────────────────
+let improving = false;
+$('#improve-btn').addEventListener('click', async () => {
+  const before = el.prompt.value;
+  if (before.trim().length < 3 || improving) return;
+  improving = true;
+  const btn = $('#improve-btn');
+  btn.hidden = false;
+  btn.classList.add('busy');
+  el.prompt.classList.add('improving');
+  try {
+    const data = await post('/api/chat/improve', { text: before, mode: state.chat?.mode ?? state.mode, modality: state.chat?.modality ?? state.modality });
+    el.prompt.value = data.text;
+    autosize();
+    haptic('success');
+    toastAction(t('Nachricht verbessert ✨', 'Message improved ✨'), t('Rückgängig', 'Undo'), () => { el.prompt.value = before; autosize(); });
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    improving = false;
+    btn.classList.remove('busy');
+    el.prompt.classList.remove('improving');
+    updateSend();
+  }
+});
 
 // Nach einer Antwort: automatischer Titel (beim ersten Mal) + 3 Vorschläge für die nächste Frage
 async function loadExtras(chat, index) {
@@ -1903,10 +2039,14 @@ function autosize() {
 
 function updateSend() {
   const isBusy = busy();
-  el.send.classList.toggle('stop', isBusy);
-  el.send.classList.toggle('ready', !isBusy && (!!el.prompt.value.trim() || state.pending.length > 0));
-  el.send.innerHTML = isBusy ? ICON.stop : ICON.send;
-  el.send.setAttribute('aria-label', isBusy ? t('Stoppen', 'Stop') : t('Senden', 'Send'));
+  const hasText = !!el.prompt.value.trim() || state.pending.length > 0;
+  // Während die KI antwortet: mit Text → vormerken, ohne Text → stoppen
+  const stop = isBusy && !hasText;
+  el.send.classList.toggle('stop', stop);
+  el.send.classList.toggle('ready', hasText);
+  el.send.innerHTML = stop ? ICON.stop : ICON.send;
+  el.send.setAttribute('aria-label', stop ? t('Stoppen', 'Stop') : isBusy ? t('Vormerken', 'Queue') : t('Senden', 'Send'));
+  $('#improve-btn').hidden = el.prompt.value.trim().length < 3 || improving;
 }
 
 el.prompt.addEventListener('input', autosize);
@@ -1919,6 +2059,7 @@ el.prompt.addEventListener('keydown', (e) => {
 });
 el.form.addEventListener('submit', (e) => {
   e.preventDefault();
+  if (busy() && (el.prompt.value.trim() || state.pending.length)) return queueMessage();
   if (busy()) {
     // Agent X läuft auf dem Server weiter, wenn nur die Verbindung abbricht – „Stopp“ muss es ihm sagen
     const chat = state.chat;
@@ -2030,6 +2171,7 @@ async function loadChat(id) {
   el.vote.hidden = true;
   el.voteResult.hidden = true;
   state.chat.turns.forEach((_, i) => renderTurn(i));
+  renderQueue();
   el.title.textContent = data.title.length > 40 ? `${data.title.slice(0, 40)}…` : data.title;
   showView('thread');
   renderControls();

@@ -283,7 +283,14 @@ body { overflow: hidden; }
 }
 .md pre code { background: none; padding: 0; font-size: 13.5px; }
 .md blockquote { margin-left: 0; padding-left: 14px; border-left: 3px solid var(--border-strong); color: var(--muted); }
-.md table { border-collapse: collapse; display: block; overflow-x: auto; }
+.md table { border-collapse: collapse; }
+.table-wrap { background: linear-gradient(to right, var(--bg) 30%, transparent) left / 24px 100% no-repeat local, linear-gradient(to left, var(--bg) 30%, transparent) right / 24px 100% no-repeat local, radial-gradient(farthest-side at 0 50%, rgba(0,0,0,.18), transparent) left / 10px 100% no-repeat scroll, radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,.18), transparent) right / 10px 100% no-repeat scroll; overflow-x: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; margin: 0 0 .85em; border: 1px solid var(--border); border-radius: 12px; position: relative; }
+.table-wrap table { margin: 0; width: max-content; min-width: 100%; }
+.table-wrap th, .table-wrap td { min-width: 7em; max-width: 18em; vertical-align: top; }
+.table-wrap tr:first-child th, .table-wrap tr:first-child td { border-top: 0; }
+.table-wrap tr > :first-child { border-left: 0; }
+.table-wrap tr > :last-child { border-right: 0; }
+.table-wrap tr:last-child td { border-bottom: 0; }
 .md th, .md td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
 .md hr { border: 0; border-top: 1px solid var(--border); margin: 1.2em 0; }
 
@@ -1735,3 +1742,26 @@ a.site-open { display: flex; justify-content: center; text-decoration: none; box
 .qr[hidden] { display: none; }
 .qr img { width: 160px; height: 160px; padding: 8px; border-radius: 14px; background: #fff; }
 .qr figcaption { font-size: 12px; color: var(--muted); }
+
+/* ── ✨ Verbessern, Hinweis mit Knopf ─────────────────────────────── */
+.prompt-wrap { position: relative; }
+.prompt-wrap textarea { padding-right: 52px !important; }
+.improve-btn { position: absolute; top: 9px; right: 10px; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); font-size: 17px; line-height: 1; cursor: pointer; display: grid; place-items: center; animation: pop .2s ease both; }
+.improve-btn[hidden] { display: none; }
+.improve-btn.busy { animation: improve-spin 1s linear infinite; }
+@keyframes improve-spin { to { transform: rotate(360deg); } }
+textarea.improving { opacity: .55; }
+.toast.action { pointer-events: auto; display: flex; align-items: center; gap: 10px; }
+.toast-btn { border: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; padding: 0; }
+
+/* ── Vorgemerkte Nachrichten ──────────────────────────────────────── */
+.queue { display: grid; gap: 10px; max-width: 1080px; margin: -24px auto 16px; padding: 0 16px 8px; box-sizing: border-box; }
+.queue[hidden] { display: none; }
+.queued { display: grid; justify-items: end; gap: 4px; animation: fadeUp .25s ease both; }
+.queued .bubble { opacity: .5; max-width: 85%; border: 1px dashed var(--border-strong); }
+.queued .bubble small { display: block; margin-top: 4px; color: var(--muted); }
+.queued-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.queued-bar small { color: var(--muted); font-size: 12px; }
+.queued-bar button { border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; padding: 5px 10px; border-radius: 999px; cursor: pointer; }
+.queued-bar button[data-q-now] { background: var(--primary); color: var(--primary-text); border-color: var(--primary); font-weight: 500; }
+.turn-user .bubble .addon { display: block; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); font-size: .95em; }

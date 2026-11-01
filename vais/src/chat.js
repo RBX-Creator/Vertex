@@ -315,7 +315,8 @@ chat.post('/stream', wrap(async (req, res) => {
 
   const controller = new AbortController();
   const runKey = `${row.id}:${turnNo}:${side === 1 ? 1 : 0}`;
-  running.set(runKey, { controller, userId: req.user.id });
+  const inbox = []; // Nachträge des Nutzers, während Agent X arbeitet
+  running.set(runKey, { controller, userId: req.user.id, inbox: model === 'agent' ? inbox : null });
   // Verbindung weg (App zu, Funkloch): Agent X macht weiter und meldet sich, alles andere bricht ab
   let detached = false;
   res.on('close', () => {
@@ -349,6 +350,7 @@ chat.post('/stream', wrap(async (req, res) => {
           onSources,
           onReact,
           personal: { ...personal, summary: fitted.summary },
+          inbox,
           onRemember: (fact) => remember(req.user.id, fact),
           onReminder: (args) => addReminder(req.user.id, args.text, args.when, args.in_minutes),
           onStep: (step) => { steps.push(step); out(`${JSON.stringify({ step })}\n`); },
@@ -440,6 +442,23 @@ chat.post('/stream', wrap(async (req, res) => {
     }).catch(() => {});
   }
   if (!res.writableEnded) res.end();
+}));
+
+// Nachricht in die laufende Arbeit von Agent X einbringen (statt zu warten)
+chat.post('/inject', wrap(async (req, res) => {
+  const { chatId, turn } = req.body ?? {};
+  const text = String(req.body?.text ?? '').trim().slice(0, 4000);
+  if (!text || !Number.isInteger(turn)) throw new HttpError(400, t('Keine Nachricht.', 'No message.'));
+  let n = 0;
+  for (const side of [0, 1]) {
+    const job = running.get(`${chatId}:${turn}:${side}`);
+    if (job && job.userId === req.user.id && job.inbox && !job.controller.signal.aborted) { job.inbox.push(text); n++; }
+  }
+  if (n) {
+    // Im Verlauf an deine Frage anhängen, damit es später nachvollziehbar ist
+    await run("UPDATE messages SET content = content || ? WHERE chat_id = ? AND turn = ? AND side = -1", `\n\n➕ ${text}`, String(chatId), turn).catch(() => {});
+  }
+  res.json({ ok: true, injected: n });
 }));
 
 // Laufende Antworten (für „Stopp“ – auch wenn die Verbindung schon weg ist)
@@ -604,6 +623,38 @@ chat.post('/unshare', wrap(async (req, res) => {
 }));
 
 // ── Meine Statistik ───────────────────────────────────────────────
+// ── Prompt-Verbesserer (✨): macht aus einer kurzen Frage eine klare, gute Anfrage ──
+chat.post('/improve', wrap(async (req, res) => {
+  const text = String(req.body?.text ?? '').trim().slice(0, 4000);
+  const mode = String(req.body?.mode ?? '');
+  const modality = String(req.body?.modality ?? '');
+  if (text.length < 2) throw new HttpError(400, t('Schreib zuerst etwas.', 'Write something first.'));
+  const L = await limitSettings();
+  limit(req.user.id, L.burst);
+  if (demoMode) return res.json({ text: `${text}\n\nBitte antworte klar gegliedert, mit einem kurzen Beispiel und einer Zusammenfassung am Ende.` });
+  const all = (await listModels()).filter((m) => m.caps.includes('text') && !m.paid && !m.busy);
+  const model = TRANSLATE_PREFERENCE.map((re) => all.find((m) => re.test(m.id))).find(Boolean) ?? (await helperModel());
+  if (!model) throw new HttpError(503, t('Gerade ist kein Modell frei.', 'No model is free right now.'));
+  const goal = modality === 'image' ? 'eine detaillierte Bildbeschreibung (Motiv, Stil, Licht, Farben, Perspektive)'
+    : modality === 'code' || /webseite|website|app|spiel|game|html|code/i.test(text) ? 'eine klare Programmier-/Webseiten-Anfrage (Ziel, Funktionen, Aussehen, Handy-tauglich)'
+      : 'eine klare, präzise Frage an eine KI (Ziel, wichtige Details, gewünschte Form der Antwort)';
+  try {
+    const msg = await complete({
+      model: model.id,
+      maxTokens: 1500,
+      messages: [
+        { role: 'system', content: `Du verbesserst Eingaben für KI-Modelle. Mach aus der Nachricht des Nutzers ${goal}. Behalte die Absicht, die Sprache und die Du-Form des Nutzers bei, erfinde keine neuen Wünsche dazu, höchstens 120 Wörter.${mode === 'agent' ? ' Es geht an einen Agenten mit Websuche und Werkzeugen.' : ''} Antworte NUR mit der verbesserten Nachricht, ohne Anführungszeichen oder Erklärung.` },
+        { role: 'user', content: text },
+      ],
+    });
+    const out = String(msg.content ?? '').replace(/^["„“«\s]+|["„“»\s]+$/g, '').trim();
+    if (!out) throw new Error(t('Keine Verbesserung erhalten.', 'No improvement received.'));
+    res.json({ text: out.slice(0, 4000) });
+  } catch (err) {
+    throw err instanceof HttpError ? err : new HttpError(502, err.message);
+  }
+}));
+
 // ── Live-Übersetzer ──────────────────────────────────────────────
 const TRANSLATE_PREFERENCE = [/^groq:openai\/gpt-oss-120b$/, /^groq:moonshotai\/kimi-k2/, /^groq:.*llama-3\.3-70b/, /^groq:openai\/gpt-oss-20b$/, /^groq:meta-llama\/llama-4/, /^gemini:/, /^openrouter:.*:free$/];
 chat.post('/translate', wrap(async (req, res) => {
