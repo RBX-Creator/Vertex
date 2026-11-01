@@ -14,7 +14,6 @@ const PROVIDERS = {
   openrouter: { key: process.env.OPENROUTER_API_KEY?.trim(), base: 'https://openrouter.ai/api/v1', label: 'OpenRouter', env: 'OPENROUTER_API_KEY' },
   gemini: { key: process.env.GEMINI_API_KEY?.trim(), base: 'https://generativelanguage.googleapis.com/v1beta/openai', label: 'Google AI Studio', env: 'GEMINI_API_KEY' },
   groq: { key: process.env.GROQ_API_KEY?.trim(), base: 'https://api.groq.com/openai/v1', label: 'Groq', env: 'GROQ_API_KEY' },
-  github: { key: process.env.GITHUB_MODELS_TOKEN?.trim(), base: 'https://models.github.ai/inference', label: 'GitHub Models', env: 'GITHUB_MODELS_TOKEN' },
   cerebras: { key: process.env.CEREBRAS_API_KEY?.trim(), base: 'https://api.cerebras.ai/v1', label: 'Cerebras', env: 'CEREBRAS_API_KEY' },
   mistral: { key: process.env.MISTRAL_API_KEY?.trim(), base: 'https://api.mistral.ai/v1', label: 'Mistral', env: 'MISTRAL_API_KEY' },
 };
@@ -91,42 +90,8 @@ function makeModel(provider, upstream, name, fallbackMaker, extraCaps = []) {
 }
 
 // ── Modell-Listen der Anbieter ────────────────────────────────────
-const GITHUB_FALLBACK = [
-  'openai/gpt-4.1', 'openai/gpt-4.1-mini', 'openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/o4-mini', 'openai/o3-mini',
-  'deepseek/DeepSeek-R1', 'deepseek/DeepSeek-V3-0324',
-  'meta/Llama-4-Maverick-17B-128E-Instruct-FP8', 'meta/Llama-4-Scout-17B-16E-Instruct', 'meta/Llama-3.3-70B-Instruct',
-  'xai/grok-3', 'xai/grok-3-mini', 'microsoft/Phi-4', 'microsoft/MAI-DS-R1',
-  'mistral-ai/Codestral-2501', 'mistral-ai/Mistral-Medium-2505', 'cohere/cohere-command-a',
-];
-
-// Einmal pro Serverstart prüfen, ob GitHub Models wirklich antwortet (sonst Anbieter ausblenden)
-let githubCheck = null;
-function githubProbe(p) {
-  githubCheck ??= (async () => {
-    const res = await fetch(`${p.base}/chat/completions`, {
-      method: 'POST',
-      headers: { ...githubHeaders(p.key), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'openai/gpt-4.1-mini', messages: [{ role: 'user', content: 'Hi' }], max_tokens: 1 }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    const body = await res.text();
-    let json = null;
-    try { json = JSON.parse(body); } catch { /* kein JSON */ }
-    if (res.status === 401 || res.status === 403) throw new Error(`Token abgelehnt (${res.status}). Hat der Token die Berechtigung „Models: Read-only“? ${body.slice(0, 160)}`);
-    if (res.status === 429) return; // Limit erreicht, Schnittstelle funktioniert aber
-    if (!json) throw new Error(`Antwort ist kein JSON (HTTP ${res.status}): ${body.slice(0, 160)}`);
-    if (!res.ok && !json.choices) throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
-    console.log('GitHub Models: Verbindung ok');
-  })().catch((err) => { githubCheck = null; throw err; });
-  return githubCheck;
-}
-
-const githubHeaders = (key) => ({ Authorization: `Bearer ${key}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' });
-
-// Grenzen je Anbieter (GitHub Models: max. ~4000 Antwort-Tokens; o-/gpt-5-Modelle wollen max_completion_tokens)
-function tokenLimit(provider, upstream) {
-  if (provider !== 'github') return { max_tokens: MAX_OUTPUT_TOKENS };
-  return /(\/o\d|gpt-5)/i.test(upstream) ? { max_completion_tokens: 4000 } : { max_tokens: 4000 };
+function tokenLimit() {
+  return { max_tokens: MAX_OUTPUT_TOKENS };
 }
 
 async function getJson(url, headers = {}) {
@@ -153,24 +118,6 @@ const LISTERS = {
       .filter((id) => /^(gemini-(2\.5|[3-9])|gemma-[3-9])/.test(id))
       .filter((id) => !/(embedding|tts|image|live|audio|aqa|imagen|veo|robotics|computer-use|learnlm|-latest$|-\d{3}$)/i.test(id))
       .map((id) => makeModel('gemini', id, id, 'Google'));
-  },
-
-  async github(p) {
-    // 1) Offizieller Katalog (falls GitHub ihn liefert), 2) sonst eingebaute Liste bekannter Modelle
-    let ids = [];
-    try {
-      const res = await fetch('https://models.github.ai/catalog/models', { headers: githubHeaders(p.key), signal: AbortSignal.timeout(10_000) });
-      const raw = JSON.parse(await res.text());
-      const list = Array.isArray(raw) ? raw : raw.data ?? raw.models ?? [];
-      ids = list
-        .filter((m) => (m.supported_output_modalities ?? ['text']).includes('text'))
-        .filter((m) => !(m.supported_output_modalities ?? []).includes('embeddings'))
-        .map((m) => [m.id, m.publisher]);
-    } catch { /* Katalog nicht verfügbar */ }
-    if (!ids.length) ids = GITHUB_FALLBACK.map((id) => [id]);
-    ids = ids.filter(([id]) => id && !/(embed|whisper|tts|\/o1(-|$))/i.test(id));
-    await githubProbe(p);
-    return ids.map(([id, publisher]) => makeModel('github', id, id.split('/').pop().toLowerCase(), publisher));
   },
 
   async cerebras(p) {
@@ -213,7 +160,7 @@ const DEMO_MODELS = [
   { id: 'demo:fjord', provider: 'demo', upstream: 'fjord', name: 'fjord-search-demo', maker: 'VAIs Demo', icon: null, caps: ['web'] },
 ];
 
-const ORDER = { gemini: 0, github: 1, groq: 2, cerebras: 3, mistral: 4, openrouter: 5 };
+const ORDER = { gemini: 0, groq: 1, cerebras: 2, mistral: 3, openrouter: 4 };
 const cache = {}; // provider → { at, list }
 
 export async function listModels() {
@@ -355,7 +302,6 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
     headers['HTTP-Referer'] = process.env.APP_URL || 'https://vais.onrender.com';
     headers['X-Title'] = 'VAIs';
   }
-  if (provider === 'github') headers['X-GitHub-Api-Version'] = '2022-11-28';
   const res = await fetch(`${p.base}/chat/completions`, {
     method: 'POST',
     signal,
@@ -412,7 +358,6 @@ export async function complete({ model, messages, tools, signal }) {
   if (!p?.key) throw new Error('Dieses Modell ist gerade nicht verfügbar.');
   const headers = { Authorization: `Bearer ${p.key}`, 'Content-Type': 'application/json' };
   if (provider === 'openrouter') { headers['HTTP-Referer'] = process.env.APP_URL || 'https://vais.onrender.com'; headers['X-Title'] = 'VAIs'; }
-  if (provider === 'github') headers['X-GitHub-Api-Version'] = '2022-11-28';
   const allTools = [...(tools ?? []), ...(search ? [{ type: 'browser_search' }] : [])];
   const res = await fetch(`${p.base}/chat/completions`, {
     method: 'POST',

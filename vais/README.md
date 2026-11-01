@@ -35,9 +35,8 @@ Du brauchst 4 kostenlose Konten. Alles geht im Handy-Browser.
 Weitere kostenlose Modelle (optional, je ein Schlüssel in Render unter **Environment** eintragen):
 - **Google Gemini/Gemma:** aistudio.google.com/apikey → `GEMINI_API_KEY`
 - **Groq** (gpt-oss von OpenAI, Llama, Qwen, Kimi und Websuche über `compound`): console.groq.com/keys → `GROQ_API_KEY`
-- **GitHub Models** (GPT-4.1, o3/o4-mini, DeepSeek-R1, Llama, Grok, Phi …; Tageslimit pro Modell): github.com/settings/personal-access-tokens/new → Fine-grained Token, unter „Account permissions“ **Models: Read-only** → `GITHUB_MODELS_TOKEN`
-- **Cerebras** (sehr schnell: gpt-oss, Llama, Qwen, GLM): cloud.cerebras.ai → `CEREBRAS_API_KEY`
-- **Mistral** (Mistral, Magistral, Codestral; Plan „Experiment“): console.mistral.ai → `MISTRAL_API_KEY`
+- **Cerebras** (gpt-oss, Llama, Qwen, GLM; verlangt inzwischen eine Zahlungsmethode): cloud.cerebras.ai → `CEREBRAS_API_KEY`
+- **Mistral** (API nur mit bezahltem Plan): console.mistral.ai → `MISTRAL_API_KEY`
 - Kostenpflichtige Modelle wie Claude oder GPT: Guthaben bei OpenRouter aufladen und die IDs in `OPENROUTER_EXTRA_MODELS` eintragen (durch Komma getrennt).
 
 Fällt ein Modell aus (z. B. Tageslimit), merkt sich VAIs das und überspringt es; im Battle springt automatisch ein anderes Modell ein.
@@ -83,7 +82,7 @@ Sicherheit: Passwörter mit scrypt gehasht, Codes nur als Hash gespeichert, 10 M
 | `src/auth.js` | Registrieren, Anmelden, Codes, Sessions |
 | `src/agent.js` | Agent X: Werkzeuge und Ablauf |
 | `src/chat.js` | Chats starten, Antworten streamen, Abstimmen |
-| `src/models.js` | Modelle von OpenRouter, GitHub, Google, Groq, Cerebras und Mistral, Logos, Kategorien (+ Demo-Modus) |
+| `src/models.js` | Modelle von OpenRouter, Google, Groq, Cerebras und Mistral, Logos, Kategorien (+ Demo-Modus) |
 | `public/icons/` | Hersteller-Logos (MIT, LobeHub) |
 | `src/mailer.js` | E-Mail-Versand und Mail-Vorlage |
 | `src/db.js` | Datenbank (Turso online, lokal `data/vais.db`) |
