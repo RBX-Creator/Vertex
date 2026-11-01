@@ -7,7 +7,7 @@ const { auth, currentUser } = await import('./src/auth.js');
 const { mailConfigured } = await import('./src/mailer.js');
 const { chat, share } = await import('./src/chat.js');
 const { admin } = await import('./src/admin.js');
-const { demoMode } = await import('./src/models.js');
+const { demoMode, tempImage } = await import('./src/models.js');
 const { OWNER, isAdmin } = await import('./src/config.js');
 const { readFile } = await import('node:fs/promises');
 
@@ -99,6 +99,13 @@ app.get('/login', async (req, res) => {
   if (await currentUser(req)) return res.redirect('/');
   noCache(res);
   res.sendFile(page('login.html'));
+});
+
+// Vorlage für die Bildbearbeitung (nur kurz, unerratbare Adresse)
+app.get('/tmpimg/:token', (req, res) => {
+  const img = tempImage(req.params.token);
+  if (!img) return res.status(404).end();
+  res.set({ 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }).type(img.type).send(img.buf);
 });
 
 // Geteilte Chats: für alle lesbar (die Seite lädt die Daten selbst)

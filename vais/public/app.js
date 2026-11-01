@@ -51,6 +51,7 @@ Object.assign(ICON, {
   folder: svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
   more: svg('<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>'),
   close: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
+  's-edit': svg('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13 7 4 4"/>'),
   's-reminder': svg('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M5 3 2 6M19 3l3 3"/>'),
   's-video': svg('<rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="m10 9.5 5 2.5-5 2.5z"/>'),
   's-memory': svg('<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/>'),
@@ -642,7 +643,7 @@ function updateCard(turnIndex, side) {
   if (pics.length || (chat.modality === 'image' && a.status === 'streaming')) {
     // Bild-Antwort: Platzhalter beim Erstellen, danach das Bild mit Download
     body.innerHTML = pics.length
-      ? pics.map((src, i) => `<figure class="gen-img"><img alt="${escapeHtml(chat.turns[turnIndex].user || t('Erstelltes Bild', 'Generated image'))}" data-pic="${i}"><a class="pic-dl" data-pic-dl="${i}" aria-label="${t('Bild herunterladen', 'Download image')}" title="${t('Herunterladen', 'Download')}">${ICON.download}</a></figure>`).join('')
+      ? pics.map((src, i) => `<figure class="gen-img"><img alt="${escapeHtml(chat.turns[turnIndex].user || t('Erstelltes Bild', 'Generated image'))}" data-pic="${i}"><a class="pic-dl" data-pic-dl="${i}" aria-label="${t('Bild herunterladen', 'Download image')}" title="${t('Herunterladen', 'Download')}">${ICON.download}</a><button type="button" class="pic-edit" data-pic-edit="${i}">${ICON['s-edit']}<span>${t('Bearbeiten', 'Edit')}</span></button></figure>`).join('')
       : `<div class="pic-wait"><span class="shimmer">${t('Erstellt Bild …', 'Creating image …')}</span>${a.startedAt ? ` <small data-since="${a.startedAt}"></small>` : ''}</div>`;
     body.querySelectorAll('[data-pic]').forEach((img) => { img.src = pics[Number(img.dataset.pic)]; });
     body.querySelectorAll('[data-pic-dl]').forEach((link) => {
@@ -743,8 +744,8 @@ function renderSources(card, a) {
 
 // Arbeitsschritte von Agent X über der Antwort anzeigen
 const STEP_LABEL = LANG === 'en'
-  ? { reminder: 'Reminder', video: 'Watching', memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' }
-  : { reminder: 'Erinnerung', video: 'Schaut Video', memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
+  ? { edit: 'Editing', reminder: 'Reminder', video: 'Watching', memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' }
+  : { edit: 'Bearbeitet', reminder: 'Erinnerung', video: 'Schaut Video', memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
 function renderSteps(card, a) {
   let box = $('.agent-steps', card);
   if (!a.steps?.length) { box?.remove(); return; }
@@ -866,7 +867,8 @@ async function send() {
   if (pendingReads) return toast(t('Anhänge werden noch geladen …', 'Attachments are still loading …'));
   if (!state.models.length) return toast(t('Modelle konnten nicht geladen werden. Lade die Seite neu.', 'Models could not be loaded. Reload the page.'));
   const hasImages = attachments.some((a) => a.kind === 'image');
-  if (hasImages && ['sxs', 'direct'].includes(state.chat?.mode ?? state.mode)) {
+  const imageChat = (state.chat?.modality ?? state.modality) === 'image';
+  if (hasImages && !imageChat && ['sxs', 'direct'].includes(state.chat?.mode ?? state.mode)) {
     const need = (state.chat?.mode ?? state.mode) === 'sxs' ? 2 : 1;
     const blind = state.picks.slice(0, need).findIndex((id) => !modelById(id)?.caps.includes('vision'));
     if (blind !== -1) {
@@ -909,6 +911,7 @@ async function send() {
   el.prompt.value = '';
   state.pending = [];
   renderTray();
+  el.prompt.placeholder = t('Folgefrage stellen …', 'Ask a follow-up …');
   autosize();
   el.vote.hidden = true;
   el.voteResult.hidden = true;
@@ -970,6 +973,29 @@ async function loadExtras(chat, index) {
 }
 
 const clearFollowups = () => el.thread.querySelectorAll('.followups').forEach((n) => n.remove());
+
+// Erstelltes Bild bearbeiten: als Anhang für die nächste Nachricht übernehmen
+el.thread.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-pic-edit]');
+  if (!btn) return;
+  const img = btn.closest('.gen-img')?.querySelector('img');
+  if (!img?.src) return;
+  let url = img.src;
+  // SVG (Demo) in PNG umwandeln, damit Bildmodelle es lesen können
+  if (!/^data:image\/(png|jpeg|webp)/.test(url)) {
+    try {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth || 1024; c.height = img.naturalHeight || 1024;
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      url = c.toDataURL('image/jpeg', 0.9);
+    } catch { return toast(t('Dieses Bild lässt sich nicht bearbeiten.', 'This image cannot be edited.')); }
+  }
+  state.pending = [{ kind: 'image', name: t('Bild zum Bearbeiten', 'Image to edit'), url }];
+  renderTray();
+  el.prompt.placeholder = t('Was soll ich ändern? z. B. „Mach den Himmel lila“', 'What should I change? e.g. “Make the sky purple”');
+  el.prompt.focus();
+  haptic('tap');
+});
 
 // ── Abstimmen ─────────────────────────────────────────────────────
 el.vote.addEventListener('click', async (e) => {

@@ -9,7 +9,7 @@ import { push, addReminder } from './push.js';
 import { limitSettings, charge, refund, usageOf } from './limits.js';
 import { sourcesFromText } from './models.js';
 import { pickAvailable, isBusy } from './models.js';
-import { generateImage, helperModel, complete } from './models.js';
+import { generateImage, editImage, helperModel, complete } from './models.js';
 import { listModels, findModel, streamChat, displayName, describeModel, modelKey, demoMode } from './models.js';
 
 const MAX_MESSAGES = 40;          // so viele Nachrichten gehen max. ans Modell
@@ -115,7 +115,7 @@ chat.post('/start', wrap(async (req, res) => {
   if (mode === 'agent') {
     picked = ['agent'];
   } else if (mode === 'battle') {
-    const cap = req.body?.images ? 'vision' : MODALITY_CAP[modality];
+    const cap = modality === 'image' ? 'image' : req.body?.images ? 'vision' : MODALITY_CAP[modality];
     const first = await pickAvailable(cap);
     const second = first && await pickAvailable(cap, [first.id]);
     if ((!first || !second) && modality === 'image') throw new HttpError(503, t('Für ein Bild-Battle gibt es gerade nicht genug Bild-Modelle. Nutze „Direkt“.', 'There are not enough image models for an image battle right now. Use “Direct”.'));
@@ -296,7 +296,11 @@ chat.post('/stream', wrap(async (req, res) => {
             const last = clean.at(-1).content;
             const prompt = (typeof display?.text === 'string' && display.text.trim())
               || (Array.isArray(last) ? last.filter((x) => x.type === 'text').map((x) => x.text).join(' ') : last);
-            const img = await generateImage({ model, prompt, signal: controller.signal });
+            // Hängt ein Bild an deiner Nachricht, wird es bearbeitet statt neu erfunden
+            const source = Array.isArray(last) ? last.find((x) => x.type === 'image_url')?.image_url?.url : null;
+            const img = source
+              ? await editImage({ model, prompt, image: source, signal: controller.signal, onStep: (step) => { steps.push(step); res.write(`${JSON.stringify({ step })}\n`); } })
+              : await generateImage({ model, prompt, signal: controller.signal });
             if (img) { images.push(img); res.write(`${JSON.stringify({ image: img })}\n`); }
             break;
           }

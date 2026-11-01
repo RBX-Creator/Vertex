@@ -1641,3 +1641,6 @@ a.set-export { display: flex; justify-content: center; text-decoration: none; bo
 .drawer-folder-head > svg:last-child { width: 16px; height: 16px; color: var(--muted); transition: transform .2s; }
 .drawer-folder.open .drawer-folder-head > svg:last-child { transform: rotate(180deg); }
 .drawer-folder-body { padding-left: 14px; border-left: 1px solid var(--border); margin-left: 18px; }
+.pic-edit { position: absolute; left: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 0; border-radius: 999px; background: rgba(20, 20, 18, .72); color: #fff; font: inherit; font-size: 13px; font-weight: 500; backdrop-filter: blur(6px); cursor: pointer; }
+.pic-edit svg { width: 16px; height: 16px; }
+.pic-edit:active { transform: scale(.96); }

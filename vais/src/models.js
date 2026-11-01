@@ -7,6 +7,7 @@
 // Optional: OPENROUTER_EXTRA_MODELS="anthropic/claude-sonnet-4.5,openai/gpt-5" schaltet
 // zusätzlich kostenpflichtige OpenRouter-Modelle frei (braucht Guthaben bei OpenRouter).
 
+import { randomBytes } from 'node:crypto';
 import { t } from './i18n.js';
 import { getSetting, setSetting } from './db.js';
 
@@ -148,7 +149,11 @@ async function listImageModels() {
     const list = await getJson('https://gen.pollinations.ai/image/models', { Authorization: `Bearer ${IMAGES.key}` });
     return list
       .filter((m) => (m.output_modalities ?? ['image']).includes('image') && !m.paid_only)
-      .map((m) => imageModel(m.name, m.publisher));
+      .map((m) => {
+        const model = imageModel(m.name, m.publisher);
+        if ((m.input_modalities ?? []).includes('image')) model.edit = true; // kann ein Bild als Vorlage nehmen
+        return model;
+      });
   }
   const names = await getJson('https://image.pollinations.ai/models');
   return (Array.isArray(names) ? names : []).filter((n) => typeof n === 'string').map((n) => imageModel(n));
@@ -529,19 +534,68 @@ export async function helperModel() {
 // ── Bilder erstellen ──────────────────────────────────────────────
 // Ohne Schlüssel erlaubt Pollinations nur wenige gleichzeitige Anfragen → nacheinander abarbeiten
 let imageQueue = Promise.resolve();
-export function generateImage({ model, prompt, signal }) {
-  const job = imageQueue.then(() => (signal?.aborted ? null : makeImage({ model, prompt, signal })));
+// Vorlagen-Bilder kurz öffentlich bereitstellen, damit der Bild-Dienst sie abholen kann (10 Minuten, zufällige Adresse)
+const tempImages = new Map();
+export function tempImage(token) {
+  const hit = tempImages.get(token);
+  if (!hit || hit.until < Date.now()) { tempImages.delete(token); return null; }
+  return hit;
+}
+function shareTemp(dataUrl) {
+  const base = (process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/$/, '');
+  const m = String(dataUrl).match(/^data:(image\/(?:png|jpeg|webp));base64,(.+)$/);
+  if (!base || !m) return null;
+  for (const [k, v] of tempImages) if (v.until < Date.now()) tempImages.delete(k);
+  const token = randomBytes(18).toString('base64url');
+  tempImages.set(token, { type: m[1], buf: Buffer.from(m[2], 'base64'), until: Date.now() + 10 * 60 * 1000 });
+  return `${base}/tmpimg/${token}`;
+}
+
+// Bild bearbeiten: Modelle mit Vorlage bekommen das Bild direkt; sonst beschreibt ein Bildmodell
+// das Bild genau, und das Bild wird mit der Änderung neu erzeugt.
+const VISION_FOR_EDIT = [/^groq:meta-llama\/llama-4-maverick/, /^groq:meta-llama\/llama-4-scout/, /^gemini:gemini-2\.5-flash$/, /^openrouter:.*:free$/];
+export async function editImage({ model, prompt, image, signal, onStep = () => {} }) {
+  const info = (await listModels()).find((m) => m.id === model);
+  const url = info?.edit ? shareTemp(image) : null;
+  if (url) {
+    onStep({ kind: 'edit', text: t('mit deinem Bild als Vorlage', 'using your image as a template') });
+    return generateImage({ model, prompt, signal, reference: url });
+  }
+  onStep({ kind: 'look', text: t('Sieht dein Bild an', 'Looking at your image') });
+  let recipe = '';
+  if (demoMode) recipe = `${prompt} (Demo-Bearbeitung)`;
+  else {
+    const all = (await listModels()).filter((m) => m.caps.includes('vision') && !m.busy && !m.paid);
+    const seer = VISION_FOR_EDIT.map((re) => all.find((m) => re.test(m.id))).find(Boolean) ?? all[0];
+    if (!seer) throw new Error(t('Gerade ist kein Modell frei, das Bilder ansehen kann.', 'No model that can see images is free right now.'));
+    const msg = await complete({
+      model: seer.id,
+      signal,
+      messages: [{ role: 'user', content: [
+        { type: 'text', text: `You write prompts for an image generator. Describe this image so precisely that it can be recreated (subject, composition, colors, lighting, style, background, text in the image) and APPLY this change: "${String(prompt).slice(0, 500)}". Keep everything else the same. Answer with ONLY the final English prompt, max 120 words.` },
+        { type: 'image_url', image_url: { url: image } },
+      ] }],
+    });
+    recipe = String(msg.content ?? '').replace(/^["'\s]+|["'\s]+$/g, '').slice(0, 1400);
+    if (!recipe) throw new Error(t('Das Bild konnte nicht beschrieben werden.', 'The image could not be described.'));
+  }
+  onStep({ kind: 'edit', text: String(prompt).slice(0, 80) });
+  return generateImage({ model, prompt: recipe, signal });
+}
+
+export function generateImage({ model, prompt, signal, reference }) {
+  const job = imageQueue.then(() => (signal?.aborted ? null : makeImage({ model, prompt, signal, reference })));
   imageQueue = job.catch(() => {});
   return job;
 }
 
-async function makeImage({ model, prompt, signal }) {
+async function makeImage({ model, prompt, signal, reference }) {
   const [provider, ...rest] = model.split(':');
   const upstream = rest.join(':');
   const text = String(prompt).replace(/\s+/g, ' ').trim().slice(0, 1500);
   if (provider === 'demo') return demoImage(upstream, text);
   const seed = Math.floor(Math.random() * 1_000_000);
-  const query = `model=${encodeURIComponent(upstream)}&width=1024&height=1024&seed=${seed}&nologo=true&private=true`;
+  const query = `model=${encodeURIComponent(upstream)}&width=1024&height=1024&seed=${seed}&nologo=true&private=true${reference ? `&image=${encodeURIComponent(reference)}` : ''}`;
   const url = IMAGES.key
     ? `https://gen.pollinations.ai/image/${encodeURIComponent(text)}?${query}`
     : `https://image.pollinations.ai/prompt/${encodeURIComponent(text)}?${query}`;
