@@ -1547,3 +1547,6 @@ a.menu-item { color: inherit; text-decoration: none; box-sizing: border-box; }
 .model-opt.is-agent .name { flex: 0 1 auto; }
 .model-opt.is-agent .agent-tag { margin-right: auto; }
 .model-opt.is-agent { border-bottom: 1px solid var(--border); border-radius: 0; margin-bottom: 4px; }
+a.drawer-item { color: inherit; text-decoration: none; }
+.drawer-item[hidden], .set-admin[hidden] { display: none !important; }
+a.set-admin { display: flex; justify-content: center; text-decoration: none; margin-top: 8px; box-sizing: border-box; }

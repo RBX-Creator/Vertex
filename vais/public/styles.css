@@ -121,7 +121,7 @@ button { cursor: pointer; }
   color: var(--text);
   text-decoration: none;
 }
-.brand svg { width: 26px; height: 26px; }
+.brand svg { width: 44px; height: 22px; flex-shrink: 0; }
 .brand span {
   font-family: var(--serif);
   font-size: 28px;

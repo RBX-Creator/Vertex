@@ -2087,7 +2087,7 @@ async function init() {
   avatar.textContent = user.email[0].toUpperCase();
   avatar.setAttribute('aria-label', `${t('Konto', 'Account')}: ${user.email}`);
   $('#menu-email').textContent = user.email;
-  $('#open-admin').hidden = !user.admin;
+  ['#open-admin', '#d-admin', '#set-admin'].forEach((sel) => { $(sel).hidden = !user.admin; });
   $('#d-avatar').textContent = user.email[0].toUpperCase();
   $('#d-email').textContent = user.email;
   $('#set-email').textContent = user.email;

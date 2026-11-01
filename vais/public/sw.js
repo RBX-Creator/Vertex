@@ -2,7 +2,7 @@
 // - macht VAIs als App installierbar
 // - zeigt „VAIs wacht auf …“, wenn der kostenlose Server gerade schläft (statt einer leeren Seite)
 // - ohne Internet: die App aus dem Zwischenspeicher, damit man gespeicherte Chats lesen kann
-const CACHE = 'vais-v3';
+const CACHE = 'vais-v4';
 const SHELL = ['/waking.html', '/waking.js', '/boot.js', '/fonts.css', '/styles.css', '/logo.svg', '/icons/app-192.png'];
 // Für den Offline-Modus zusätzlich (Fehler hier stoppen die Installation nicht)
 const APP_FILES = ['/app.css', '/app.js', '/i18n.js', '/render.js', '/tour.js', '/vendor/marked.js', '/vendor/purify.js', '/vendor/hljs.js', '/vendor/katex.js', '/vendor/katex.css', '/icons/app-512.png'];
