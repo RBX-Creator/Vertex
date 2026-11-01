@@ -1,7 +1,9 @@
 // Agent X: arbeitet in mehreren Schritten selbstständig.
-// Werkzeuge: Websuche, Webseiten lesen, Rechnen, Datum/Uhrzeit.
+// Werkzeuge: Websuche (mehrere Anfragen gleichzeitig), Wikipedia, Webseiten lesen, Rechnen,
+// Datum/Uhrzeit, Webseiten prüfen. Angehängte Bilder beschreibt vorher ein Bildmodell.
 import { lookup } from 'node:dns/promises';
 import net from 'node:net';
+import vm from 'node:vm';
 import { t, lang } from './i18n.js';
 import { listModels, complete, demoMode, sourcesFromText, makeSource } from './models.js';
 
@@ -32,8 +34,27 @@ const TOOLS = [
     type: 'function',
     function: {
       name: 'web_search',
-      description: 'Sucht im Internet nach aktuellen Informationen (Nachrichten, Wetter, Preise, Fakten). Liefert eine Zusammenfassung mit Quellen-Links.',
-      parameters: { type: 'object', properties: { query: { type: 'string', description: 'Die Suchanfrage' } }, required: ['query'] },
+      description: 'Sucht im Internet nach aktuellen Informationen (Nachrichten, Wetter, Preise, Fakten). Gib 1–3 unterschiedliche Suchanfragen an (z. B. verschiedene Blickwinkel oder Sprachen); sie laufen gleichzeitig. Liefert Zusammenfassungen mit Quellen-Links.',
+      parameters: {
+        type: 'object',
+        properties: { queries: { type: 'array', items: { type: 'string' }, maxItems: 3, description: '1–3 Suchanfragen' } },
+        required: ['queries'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'wikipedia',
+      description: 'Schlägt einen Begriff, eine Person, einen Ort oder ein Ereignis in Wikipedia nach und liefert die Zusammenfassung der besten Treffer. Gut für Grundwissen und Definitionen.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Suchbegriff, z. B. „Photosynthese“' },
+          language: { type: 'string', description: 'Sprachversion, z. B. de oder en (Standard: Sprache des Nutzers)' },
+        },
+        required: ['query'],
+      },
     },
   },
   {
@@ -60,6 +81,14 @@ const TOOLS = [
       parameters: { type: 'object', properties: { timezone: { type: 'string', description: 'IANA-Zeitzone, Standard Europe/Berlin' } } },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'validate_html',
+      description: 'Prüft eine komplette Webseite (eine HTML-Datei mit eingebettetem CSS/JS), bevor du sie dem Nutzer gibst: Aufbau, nicht geschlossene Tags, JavaScript-Syntaxfehler, fehlende Angaben für Handys. Gibt eine Liste mit Problemen zurück oder „OK“.',
+      parameters: { type: 'object', properties: { html: { type: 'string', description: 'Der komplette HTML-Code der Seite' } }, required: ['html'] },
+    },
+  },
 ];
 
 function systemPrompt() {
@@ -70,27 +99,70 @@ function systemPrompt() {
       ? 'Think in English. Start your reasoning with one short sentence about what the user wants, then plan the steps.'
       : 'Denke auf Deutsch. Beginne deine Überlegungen mit einem kurzen Satz, was der Nutzer genau möchte, und plane dann die Schritte.',
     `Heute ist ${now} (Europe/Berlin).`,
-    'Nutze deine Werkzeuge, wann immer sie die Antwort besser machen: web_search für alles Aktuelle oder Unsichere, read_webpage um Quellen oder Links zu lesen, calculate für jede Rechnung, current_datetime für Zeitfragen.',
-    'Prüfe wichtige Fakten bei Bedarf mit einer zweiten Suche. Erfinde keine Fakten oder Links.',
+    'Nutze deine Werkzeuge, wann immer sie die Antwort besser machen: web_search für alles Aktuelle oder Unsichere (gerne 2–3 verschiedene Suchanfragen auf einmal), wikipedia für Grundwissen, read_webpage um Quellen oder Links zu lesen, calculate für jede Rechnung, current_datetime für Zeitfragen.',
+    'Du kannst mehrere Werkzeuge in einem Schritt gleichzeitig aufrufen – mach das, wenn die Aufrufe unabhängig sind.',
+    'Prüfe wichtige Fakten bei Bedarf mit einer zweiten Suche. Bevorzuge seriöse Quellen (offizielle Seiten, Wikipedia, bekannte Medien). Erfinde keine Fakten oder Links.',
+    'Wenn der Nutzer eine Webseite, App oder ein Spiel möchte: Schreibe EINE komplette HTML-Datei (<!doctype html>, <meta name="viewport">, CSS in <style>, JS in <script>, ohne externe Dateien außer bei Bedarf von cdnjs/jsdelivr), schön gestaltet und fürs Handy geeignet. Prüfe sie mit validate_html, behebe alle gemeldeten Probleme und prüfe erneut. Gib sie am Ende vollständig in einem ```html-Block aus, mit 1–2 Sätzen davor.',
+    'Wenn der Nutzer Bilder angehängt hat, bekommst du eine Beschreibung davon als [Bild …]. Nutze sie, als hättest du das Bild selbst gesehen.',
     'Antworte in der Sprache des Nutzers, klar gegliedert mit Markdown. Wenn du Quellen genutzt hast, liste sie am Ende unter „Quellen“ als Links auf.',
   ].join('\n');
 }
 
 // ── Werkzeuge ─────────────────────────────────────────────────────
-async function webSearch(query, signal, addSources) {
-  const model = await pickModel(SEARCH_PREFERENCE);
-  if (!model) throw new Error(t('Websuche ist nicht verfügbar (GROQ_API_KEY fehlt).', 'Web search is not available (GROQ_API_KEY missing).'));
+async function searchOnce(query, model, signal, addSources) {
   const msg = await complete({
     model: model.id,
     signal,
     messages: [
-      { role: 'system', content: 'Du bist eine Suchmaschine. Suche im Web und antworte knapp mit den wichtigsten Fakten (mit Datum, falls relevant). Liste am Ende die Quellen als vollständige URLs auf.' },
+      { role: 'system', content: 'Du bist eine Suchmaschine. Suche im Web und antworte knapp mit den wichtigsten Fakten (mit Datum, falls relevant). Bevorzuge seriöse, aktuelle Quellen. Liste am Ende die Quellen als vollständige URLs auf.' },
       { role: 'user', content: query },
     ],
   });
   const text = (msg.content || 'Keine Ergebnisse gefunden.').replace(/\s*【[^】]*】/g, '');
   addSources([...(msg.sources ?? []), ...sourcesFromText(text)]);
   return text;
+}
+
+async function webSearch(queries, signal, addSources) {
+  const model = await pickModel(SEARCH_PREFERENCE);
+  if (!model) throw new Error(t('Websuche ist nicht verfügbar (GROQ_API_KEY fehlt).', 'Web search is not available (GROQ_API_KEY missing).'));
+  const results = await Promise.allSettled(queries.map((q) => searchOnce(q, model, signal, addSources)));
+  if (signal?.aborted) throw new Error('aborted');
+  if (results.every((r) => r.status === 'rejected')) throw results[0].reason;
+  return results.map((r, i) => `### Suche: ${queries[i]}\n${r.status === 'fulfilled' ? r.value : `Fehler: ${r.reason?.message}`}`).join('\n\n');
+}
+
+// Wikipedia: beste Treffer suchen und ihre Zusammenfassungen holen
+const WIKI_UA = 'VAIs-AgentX/1.0 (https://vais-dvvk.onrender.com; KI-Assistent)';
+async function wikiJson(url, signal) {
+  const res = await fetch(url, {
+    signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(10_000)]),
+    headers: { 'User-Agent': WIKI_UA, 'Api-User-Agent': WIKI_UA, Accept: 'application/json' },
+  });
+  if (!res.ok) throw new Error(t(`Wikipedia antwortet mit Fehler ${res.status}.`, `Wikipedia responded with error ${res.status}.`));
+  return res.json();
+}
+export async function wikipedia(query, language, signal, addSources) {
+  const code = /^[a-z]{2,3}$/.test(String(language ?? '')) ? language : lang();
+  const q = String(query ?? '').trim().slice(0, 200);
+  if (!q) throw new Error(t('Kein Suchbegriff.', 'No search term.'));
+  const base = `https://${code}.wikipedia.org`;
+  const found = await wikiJson(`${base}/w/rest.php/v1/search/page?q=${encodeURIComponent(q)}&limit=3`, signal);
+  const pages = (found.pages ?? []).slice(0, 3);
+  if (!pages.length) return t(`Kein Wikipedia-Artikel zu „${q}“ gefunden.`, `No Wikipedia article found for “${q}”.`);
+  const summaries = await Promise.allSettled(pages.map((p) => wikiJson(`${base}/api/rest_v1/page/summary/${encodeURIComponent(p.key)}`, signal)));
+  const out = [];
+  const srcs = [];
+  summaries.forEach((r, i) => {
+    const page = pages[i];
+    const sum = r.status === 'fulfilled' ? r.value : null;
+    const url = sum?.content_urls?.desktop?.page || `${base}/wiki/${encodeURIComponent(page.key)}`;
+    const text = sum?.extract || String(page.excerpt ?? '').replace(/<[^>]+>/g, '');
+    out.push(`## ${sum?.title || page.title}\n${sum?.description ? `(${sum.description})\n` : ''}${text}\nURL: ${url}`);
+    srcs.push(makeSource(url, `${sum?.title || page.title} – Wikipedia`));
+  });
+  addSources(srcs.filter(Boolean));
+  return out.join('\n\n');
 }
 
 function isPrivateIp(ip) {
@@ -220,6 +292,61 @@ export function calculate(expr) {
   return Number(result.toPrecision(15));
 }
 
+// Webseite prüfen: Aufbau, offene Tags, JS-Syntax (nur übersetzen, niemals ausführen)
+const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
+const CHECKED = new Set(['div', 'section', 'main', 'header', 'footer', 'nav', 'article', 'aside', 'ul', 'ol', 'table', 'form', 'button', 'select', 'textarea', 'span', 'a', 'canvas', 'svg', 'label', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
+export function validateHtml(html) {
+  const src = String(html ?? '');
+  const problems = [];
+  if (src.length < 40) return 'Problem: Das ist keine komplette Seite.';
+  if (!/^\s*<!doctype html>/i.test(src)) problems.push('Am Anfang fehlt <!doctype html>.');
+  if (!/<html[\s>]/i.test(src)) problems.push('Es fehlt das <html>-Element.');
+  if (!/<head[\s>]/i.test(src)) problems.push('Es fehlt <head>.');
+  if (!/<body[\s>]/i.test(src)) problems.push('Es fehlt <body>.');
+  if (!/<meta[^>]+charset/i.test(src)) problems.push('Es fehlt <meta charset="utf-8">.');
+  if (!/<meta[^>]+name=["']?viewport/i.test(src)) problems.push('Es fehlt <meta name="viewport" content="width=device-width, initial-scale=1"> – sonst ist die Seite auf dem Handy winzig.');
+  if (!/<title>[^<]+<\/title>/i.test(src)) problems.push('Es fehlt ein <title>.');
+
+  // Skripte und Styles herausnehmen, dann Tags zählen
+  const scripts = [];
+  const body = src
+    .replace(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi, (_, attrs, code) => { scripts.push({ attrs, code }); return ''; })
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '');
+  if (/<script\b/i.test(body)) problems.push('Ein <script> wird nicht mit </script> geschlossen.');
+  if (/<style\b/i.test(body)) problems.push('Ein <style> wird nicht mit </style> geschlossen.');
+  const stack = [];
+  for (const m of body.matchAll(/<(\/?)([a-zA-Z][\w-]*)\b[^>]*?(\/?)>/g)) {
+    const [, close, rawName, selfClose] = m;
+    const name = rawName.toLowerCase();
+    if (!CHECKED.has(name) || VOID.has(name) || selfClose) continue;
+    if (!close) { stack.push(name); continue; }
+    const at = stack.lastIndexOf(name);
+    if (at === -1) { problems.push(`</${name}> ohne passendes <${name}>.`); continue; }
+    for (const open of stack.splice(at).slice(1)) problems.push(`<${open}> wird nicht geschlossen (vor </${name}>).`);
+  }
+  for (const open of stack) problems.push(`<${open}> wird nicht geschlossen.`);
+
+  scripts.forEach(({ attrs, code }, i) => {
+    if (/\bsrc\s*=/.test(attrs)) {
+      const url = attrs.match(/src\s*=\s*["']?([^"'\s>]+)/)?.[1] ?? '';
+      if (!/^https:\/\/(cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net|unpkg\.com)\//.test(url)) problems.push(`Externes Skript „${url}“: nur https://cdnjs.cloudflare.com, cdn.jsdelivr.net oder unpkg.com nutzen – oder den Code direkt einbetten.`);
+      return;
+    }
+    if (/type\s*=\s*["']?(module|application\/json|text\/template|importmap)/i.test(attrs) || !code.trim()) return;
+    try { new vm.Script(code, { filename: `script-${i + 1}.js` }); } catch (err) {
+      const line = String(err.stack ?? '').match(/script-\d+\.js:(\d+)/)?.[1];
+      problems.push(`JavaScript-Fehler in <script> Nr. ${i + 1}${line ? `, Zeile ${line}` : ''}: ${err.message}`);
+    }
+  });
+  const ids = [...body.matchAll(/\sid\s*=\s*["']([^"']+)["']/g)].map((m) => m[1]);
+  const dup = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+  if (dup.length) problems.push(`Doppelte id: ${dup.slice(0, 5).join(', ')}.`);
+  for (const m of body.matchAll(/<img\b(?![^>]*\balt=)[^>]*>/gi)) { problems.push('Ein <img> hat kein alt="…".'); break; }
+  if (/(src|href)\s*=\s*["'](?!https?:|data:|#|mailto:|tel:|javascript:)[^"']+\.(js|css|png|jpe?g|gif|svg|webp)["']/i.test(body)) problems.push('Die Seite verweist auf lokale Dateien, die es nicht gibt. Bette CSS/JS ein und nutze für Bilder Daten-URLs, SVG oder https-Links.');
+  return problems.length ? `Probleme gefunden (${problems.length}):\n- ${problems.slice(0, 25).join('\n- ')}` : 'OK – die Seite sieht technisch sauber aus.';
+}
+
 function currentDatetime(tz = 'Europe/Berlin') {
   let zone = tz;
   try { new Intl.DateTimeFormat('de-DE', { timeZone: zone }); } catch { zone = 'Europe/Berlin'; }
@@ -227,18 +354,54 @@ function currentDatetime(tz = 'Europe/Berlin') {
   return `${now.toLocaleString('de-DE', { timeZone: zone, dateStyle: 'full', timeStyle: 'long' })} (${zone}); ISO: ${now.toISOString()}`;
 }
 
-async function runTool(name, args, signal, addSources) {
+function runTool(name, args, signal, addSources, ctx) {
   switch (name) {
-    case 'web_search': return { step: { kind: 'search', text: args.query }, run: () => webSearch(String(args.query ?? ''), signal, addSources) };
+    case 'web_search': {
+      const list = (Array.isArray(args.queries) ? args.queries : [args.query ?? args.queries])
+        .map((q) => String(q ?? '').trim()).filter(Boolean).slice(0, 3);
+      if (!list.length) list.push(ctx.question.slice(0, 120));
+      return { steps: list.map((q) => ({ kind: 'search', text: q })), run: () => webSearch(list, signal, addSources) };
+    }
+    case 'wikipedia': return { steps: [{ kind: 'wiki', text: String(args.query ?? '').slice(0, 80) }], run: () => wikipedia(args.query, args.language, signal, addSources) };
     case 'read_webpage': {
       let label = String(args.url ?? '');
       try { const u = new URL(label); label = u.hostname + (u.pathname.length > 1 ? u.pathname : ''); } catch { /* egal */ }
-      return { step: { kind: 'read', text: label.slice(0, 80) }, run: () => readWebpage(String(args.url ?? ''), signal, addSources) };
+      return { steps: [{ kind: 'read', text: label.slice(0, 80) }], run: () => readWebpage(String(args.url ?? ''), signal, addSources) };
     }
-    case 'calculate': return { step: { kind: 'calc', text: String(args.expression ?? '') }, run: async () => String(calculate(args.expression)) };
-    case 'current_datetime': return { step: { kind: 'time', text: 'Datum und Uhrzeit' }, run: async () => currentDatetime(args.timezone) };
-    default: return { step: { kind: 'other', text: name }, run: async () => `Unbekanntes Werkzeug: ${name}` };
+    case 'calculate': return { steps: [{ kind: 'calc', text: String(args.expression ?? '') }], run: async () => String(calculate(args.expression)) };
+    case 'current_datetime': return { steps: [{ kind: 'time', text: t('Datum und Uhrzeit', 'Date and time') }], run: async () => currentDatetime(args.timezone) };
+    case 'validate_html': {
+      const html = String(args.html ?? '');
+      ctx.lastHtml = html;
+      return { steps: [{ kind: 'check', text: t('Webseite', 'Website') }], run: async () => validateHtml(html) };
+    }
+    default: return { steps: [{ kind: 'other', text: String(name) }], run: async () => `Unbekanntes Werkzeug: ${name}` };
   }
+}
+
+// Quellen aufräumen: gleiche Seiten zusammenfassen, Such- und Weiterleitungslinks weg, seriöse zuerst
+const TRUSTED = /(^|\.)(wikipedia\.org|\.gov|\.gv\.at|admin\.ch|bund\.de|europa\.eu|who\.int|tagesschau\.de|zdf\.de|spiegel\.de|zeit\.de|faz\.net|sueddeutsche\.de|reuters\.com|apnews\.com|bbc\.(co\.uk|com)|nytimes\.com|theguardian\.com|nature\.com|github\.com|mozilla\.org|\.edu)$/i;
+const JUNK = /(^|\.)(google\.[a-z.]+|bing\.com|duckduckgo\.com|vertexaisearch\.cloud\.google\.com)$/i;
+export function sourceCleaner(emit) {
+  const seen = new Set();
+  return (list) => {
+    const fresh = [];
+    for (const src of list ?? []) {
+      if (!src?.url) continue;
+      let u;
+      try { u = new URL(src.url); } catch { continue; }
+      const host = u.hostname.replace(/^www\./, '').replace(/^m\./, '');
+      if (JUNK.test(host)) continue;
+      for (const k of [...u.searchParams.keys()]) if (/^(utm_|fbclid|gclid|ref$|ref_)/i.test(k)) u.searchParams.delete(k);
+      u.hash = '';
+      const key = `${host}${u.pathname.replace(/\/$/, '')}${u.search}`.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      fresh.push({ ...src, url: u.href });
+    }
+    fresh.sort((a, b) => Number(TRUSTED.test(new URL(b.url).hostname)) - Number(TRUSTED.test(new URL(a.url).hostname)));
+    if (fresh.length) emit(fresh);
+  };
 }
 
 // ── Ablauf ────────────────────────────────────────────────────────
@@ -253,35 +416,99 @@ async function emitText(text, onText, signal, words = 3, delay = 12) {
   }
 }
 
+// Bilder für Agent X: ein Modell mit 👁 beschreibt sie, Agent X arbeitet mit der Beschreibung
+const VISION_PREFERENCE = [/^groq:meta-llama\/llama-4-maverick/, /^groq:meta-llama\/llama-4-scout/, /^gemini:gemini-2\.5-flash$/, /^mistral:.*pixtral|mistral-medium/, /^openrouter:.*/];
+async function describeImages(messages, signal, onStep) {
+  const MAX = 4;
+  let count = 0;
+  const jobs = [];
+  for (const m of messages) {
+    if (m.role !== 'user' || !Array.isArray(m.content)) continue;
+    const text = m.content.filter((p) => p.type === 'text').map((p) => p.text).join('\n');
+    const imgs = m.content.filter((p) => p.type === 'image_url');
+    const take = imgs.slice(0, Math.max(0, MAX - count));
+    count += take.length;
+    jobs.push({ m, text, imgs: take, skipped: imgs.length - take.length });
+  }
+  if (!jobs.some((j) => j.imgs.length)) return messages;
+  const all = (await listModels()).filter((m) => m.caps.includes('vision') && !m.paid && !m.busy);
+  let model = null;
+  for (const re of VISION_PREFERENCE) { model = all.find((m) => re.test(m.id)); if (model) break; }
+  const total = jobs.reduce((n, j) => n + j.imgs.length, 0);
+  onStep({ kind: 'look', text: total === 1 ? t('1 Bild', '1 image') : t(`${total} Bilder`, `${total} images`) });
+  const out = new Map();
+  await Promise.all(jobs.map(async (job) => {
+    if (!job.imgs.length) { out.set(job.m, job.text); return; }
+    let desc;
+    if (!model) desc = t('[Bild – konnte nicht angesehen werden, kein Bildmodell frei]', '[Image – could not be viewed, no vision model free]');
+    else {
+      try {
+        const msg = await complete({
+          model: model.id,
+          signal,
+          messages: [{ role: 'user', content: [
+            { type: 'text', text: `Beschreibe ${job.imgs.length > 1 ? 'diese Bilder (nummeriert)' : 'dieses Bild'} sehr genau und sachlich für jemanden, der ${job.imgs.length > 1 ? 'sie' : 'es'} nicht sehen kann: Inhalt, Personen/Objekte, Farben, Anordnung und vor allem JEDEN sichtbaren Text wörtlich (z. B. Aufgaben, Fehlermeldungen, Tabellen, Code). Die Frage des Nutzers dazu: „${job.text.slice(0, 500)}“` },
+            ...job.imgs,
+          ] }],
+        });
+        desc = `[Bild${job.imgs.length > 1 ? 'er' : ''} – Beschreibung von ${model.name}:\n${String(msg.content ?? '').trim()}]`;
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        onStep({ kind: 'error', text: err.message });
+        desc = t('[Bild – konnte nicht angesehen werden]', '[Image – could not be viewed]');
+      }
+    }
+    out.set(job.m, `${job.text}\n\n${desc}${job.skipped ? `\n[+${job.skipped} weitere Bilder ausgelassen]` : ''}`);
+  }));
+  return messages.map((m) => (out.has(m) ? { role: 'user', content: out.get(m) } : m));
+}
+
+const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
+
 export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {} }) {
   if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources });
   const model = await pickModel(AGENT_PREFERENCE);
   if (!model) throw new Error(t('Agent X braucht einen Groq-Schlüssel (GROQ_API_KEY), damit er Werkzeuge benutzen kann.', 'Agent X needs a Groq key (GROQ_API_KEY) to use tools.'));
 
-  const convo = [{ role: 'system', content: systemPrompt() }, ...messages];
+  const addSources = sourceCleaner(onSources);
+  const seeing = await describeImages(messages, signal, onStep);
+  const last = seeing.at(-1)?.content;
+  const ctx = { question: typeof last === 'string' ? last : '', lastHtml: '' };
+  const convo = [{ role: 'system', content: systemPrompt() }, ...seeing];
+
+  // Am Ende: wurde eine Webseite geprüft, aber nicht mitgeschickt, hängen wir die geprüfte Fassung an
+  const finish = (content) => {
+    let text = content || t('Ich konnte leider keine Antwort finden.', 'Sorry, I could not find an answer.');
+    if (ctx.lastHtml && !hasHtmlBlock(text) && /<\/html>/i.test(ctx.lastHtml)) text += `\n\n\`\`\`html\n${ctx.lastHtml.trim()}\n\`\`\``;
+    return emitText(text, onText, signal);
+  };
+
   for (let round = 0; round < MAX_STEPS; round++) {
     const msg = await complete({ model: model.id, messages: convo, tools: TOOLS, signal });
     const thought = msg.reasoning ?? msg.reasoning_content;
     if (thought) await emitText(`${thought.trim()}\n\n`, onReasoning, signal, 6, 8);
     const calls = msg.tool_calls ?? [];
-    if (!calls.length) return emitText(msg.content || t('Ich konnte leider keine Antwort finden.', 'Sorry, I could not find an answer.'), onText, signal);
+    if (!calls.length) return finish(msg.content);
 
     convo.push({ role: 'assistant', content: msg.content ?? '', tool_calls: calls });
-    for (const call of calls) {
+    // Alle Werkzeuge dieses Schritts gleichzeitig ausführen
+    const tools = calls.map((call) => {
       let args = {};
       try { args = JSON.parse(call.function?.arguments || '{}'); } catch { /* leere Argumente */ }
-      const tool = await runTool(call.function?.name, args, signal, onSources);
-      onStep(tool.step);
-      let result;
+      const tool = runTool(call.function?.name, args, signal, addSources, ctx);
+      tool.steps.forEach(onStep);
+      return tool;
+    });
+    const results = await Promise.all(tools.map(async (tool) => {
       try {
-        result = await tool.run();
+        return await tool.run();
       } catch (err) {
         if (signal?.aborted) throw err;
-        result = `Fehler: ${err.message}`;
         onStep({ kind: 'error', text: err.message });
+        return `Fehler: ${err.message}`;
       }
-      convo.push({ role: 'tool', tool_call_id: call.id, content: String(result).slice(0, 14_000) });
-    }
+    }));
+    calls.forEach((call, i) => convo.push({ role: 'tool', tool_call_id: call.id, content: String(results[i]).slice(0, 14_000) }));
   }
   // Zu viele Schritte: mit dem bisher Gesammelten antworten
   const final = await complete({
@@ -289,17 +516,28 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
     signal,
     messages: [...convo, { role: 'user', content: 'Beantworte jetzt meine Frage mit den gesammelten Informationen, ohne weitere Werkzeuge.' }],
   });
-  return emitText(final.content || t('Ich konnte leider keine Antwort finden.', 'Sorry, I could not find an answer.'), onText, signal);
+  return finish(final.content);
 }
 
 async function demoAgent({ messages, onStep, onText, onReasoning, onSources, signal }) {
-  const q = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
-  await emitText(`Der Nutzer möchte: „${q.slice(0, 80)}“. Ich prüfe zuerst das Datum, suche dann aktuelle Infos, lese eine Quelle genauer und rechne zur Kontrolle nach. Danach fasse ich alles übersichtlich zusammen und nenne die Quellen.`, onReasoning, signal, 2, 40);
-  await sleep(400); onStep({ kind: 'time', text: 'Datum und Uhrzeit' });
-  await sleep(500); onStep({ kind: 'search', text: q.slice(0, 60) });
-  onSources([{ url: 'https://www.wetter.com/deutschland/berlin/', title: 'Wetter Berlin | wetter.com' }, { url: 'https://de.wikipedia.org/wiki/Berlin', title: 'Berlin – Wikipedia' }]);
+  const lastMsg = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+  const q = Array.isArray(lastMsg) ? lastMsg.filter((p) => p.type === 'text').map((p) => p.text).join(' ') : String(lastMsg);
+  const pics = Array.isArray(lastMsg) ? lastMsg.filter((p) => p.type === 'image_url').length : 0;
+  const site = /webseite|website|seite|app|spiel|game|html/i.test(q);
+  await emitText(`Der Nutzer möchte: „${q.slice(0, 80)}“. ${site ? 'Ich baue eine Webseite, prüfe sie und verbessere sie.' : 'Ich suche parallel, schlage in Wikipedia nach, lese eine Quelle und rechne nach.'}`, onReasoning, signal, 2, 40);
+  if (pics) { await sleep(400); onStep({ kind: 'look', text: pics === 1 ? '1 Bild' : `${pics} Bilder` }); }
+  if (site) {
+    await sleep(500); onStep({ kind: 'check', text: 'Webseite' });
+    await sleep(500); onStep({ kind: 'check', text: 'Webseite' });
+    const page = '<!doctype html>\n<html lang="de">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>Demo</title>\n<style>body{font-family:system-ui;display:grid;place-items:center;min-height:100vh;margin:0;background:#f6f5f1}button{font-size:20px;padding:12px 20px;border-radius:12px;border:0;background:#1f1e1c;color:#fff}</style>\n</head>\n<body>\n<button id="b">Klick mich: 0</button>\n<script>let n=0;b.onclick=()=>{b.textContent=`Klick mich: ${++n}`;};</script>\n</body>\n</html>';
+    return emitText(`**Agent X (Demo)** – ich habe die Seite gebaut und mit \`validate_html\` geprüft.\n\n\`\`\`html\n${page}\n\`\`\``, onText, signal, 6, 8);
+  }
+  await sleep(400); onStep({ kind: 'search', text: q.slice(0, 60) });
+  onStep({ kind: 'search', text: `${q.slice(0, 40)} aktuell` });
+  onStep({ kind: 'wiki', text: q.split(/\s+/).slice(-1)[0] || 'VAIs' });
+  onSources([{ url: 'https://de.wikipedia.org/wiki/Berlin', title: 'Berlin – Wikipedia' }, { url: 'https://www.wetter.com/deutschland/berlin/', title: 'Wetter Berlin | wetter.com' }]);
   await sleep(700); onStep({ kind: 'read', text: 'example.com/artikel' });
   await sleep(500); onStep({ kind: 'calc', text: '21 * 2' });
   await sleep(400);
-  await emitText(`**Agent X (Demo)**\n\nIch habe gesucht, eine Seite gelesen und gerechnet: 21 × 2 = **${calculate('21*2')}**.\n\nMit einem Groq-Schlüssel arbeite ich mit echten Werkzeugen.\n\n**Quellen**\n- [example.com](https://example.com)`, onText, signal);
+  await emitText(`**Agent X (Demo)**\n\n${pics ? 'Auf dem Bild sehe ich (Demo) etwas Schönes. ' : ''}Ich habe parallel gesucht, Wikipedia gelesen und gerechnet: 21 × 2 = **${calculate('21*2')}**.\n\nMit einem Groq-Schlüssel arbeite ich mit echten Werkzeugen.\n\n**Quellen**\n- [example.com](https://example.com)`, onText, signal);
 }

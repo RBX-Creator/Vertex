@@ -156,7 +156,6 @@ chat.post('/stream', wrap(async (req, res) => {
   let clean = limitImages(messages.slice(-MAX_MESSAGES).map(cleanMessage));
   if (clean.at(-1).role !== 'user') throw new HttpError(400, t('Die letzte Nachricht muss von dir sein.', 'The last message must be yours.'));
   const hasImages = imageCount(clean) > 0;
-  if (hasImages && row.mode === 'agent') throw new HttpError(400, t('Agent X kann noch keine Bilder ansehen. Nutze „Direkt“ mit einem Modell mit 👁-Symbol.', 'Agent X cannot look at images yet. Use “Direct” with a model that has the 👁 icon.'));
   if (hasImages && model !== 'agent' && row.modality !== 'image' && !(await findModel(model))?.caps.includes('vision')) {
     if (row.mode === 'battle') {
       // Im Battle still ein Modell nehmen, das Bilder sehen kann

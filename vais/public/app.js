@@ -46,6 +46,9 @@ Object.assign(ICON, {
   's-time': svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   's-error': svg('<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>'),
   's-other': svg('<circle cx="12" cy="12" r="3"/>'),
+  's-wiki': svg('<path d="M3 6.5 7.5 18 12 8l4.5 10L21 6.5"/>'),
+  's-check': svg('<path d="m9 12 2 2 4-4"/><path d="M4 5h16v12H4zM9 21h6"/>'),
+  's-look': svg('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
   'm-video': svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="m10 9 5 3-5 3z"/>'),
   'm-image': svg('<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><circle cx="15.5" cy="8.5" r="1.8"/><path d="m3.5 17 5-5 5 5 2-2 5 5"/>'),
   'm-web': svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"/>'),
@@ -638,8 +641,8 @@ function renderSources(card, a) {
 
 // Arbeitsschritte von Agent X über der Antwort anzeigen
 const STEP_LABEL = LANG === 'en'
-  ? { search: 'Searching', read: 'Reading', calc: 'Calculating', time: 'Checking', error: 'Problem', other: 'Using' }
-  : { search: 'Sucht', read: 'Liest', calc: 'Rechnet', time: 'Prüft', error: 'Problem', other: 'Nutzt' };
+  ? { search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' }
+  : { search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
 function renderSteps(card, a) {
   let box = $('.agent-steps', card);
   if (!a.steps?.length) { box?.remove(); return; }
@@ -753,7 +756,6 @@ async function send() {
   if (pendingReads) return toast(t('Anhänge werden noch geladen …', 'Attachments are still loading …'));
   if (!state.models.length) return toast(t('Modelle konnten nicht geladen werden. Lade die Seite neu.', 'Models could not be loaded. Reload the page.'));
   const hasImages = attachments.some((a) => a.kind === 'image');
-  if (hasImages && (state.chat?.mode ?? state.mode) === 'agent') return toast(t('Agent X kann noch keine Bilder ansehen. Nutze „Direkt“.', 'Agent X cannot see images yet. Use “Direct”.'));
   if (hasImages && ['sxs', 'direct'].includes(state.chat?.mode ?? state.mode)) {
     const need = (state.chat?.mode ?? state.mode) === 'sxs' ? 2 : 1;
     const blind = state.picks.slice(0, need).findIndex((id) => !modelById(id)?.caps.includes('vision'));
