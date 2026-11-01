@@ -10,6 +10,7 @@ import { limitSettings, saveLimitSettings, LIMIT_FIELDS, usageMap, resetUsage } 
 import { clearBoards } from './chat.js';
 import { listAllSites, removeSite } from './sites.js';
 import { safetyOn, setSafety } from './safety.js';
+import { alarmsOn, setAlarms, alarm } from './alarm.js';
 
 export const admin = Router();
 
@@ -74,6 +75,7 @@ admin.get('/overview', wrap(async (req, res) => {
     busy,
     boardResetAt: resetAt,
     safety: await safetyOn(),
+    alarms: await alarmsOn(),
   });
 }));
 
@@ -180,6 +182,15 @@ admin.post('/sites/remove', wrap(async (req, res) => {
   const id = String(req.body?.id ?? '');
   await removeSite(id);
   await logEvent('admin', null, `Webseite entfernt: /w/${id}`);
+  res.json({ ok: true });
+}));
+
+admin.post('/alarms', wrap(async (req, res) => {
+  await setAlarms(!!req.body?.on);
+  res.json({ ok: true, on: !!req.body?.on });
+}));
+admin.post('/alarms/test', wrap(async (req, res) => {
+  await alarm(`test-${Date.now()}`, 'Test-Alarm', 'So sieht eine Warnung aus, wenn bei VAIs etwas schiefläuft.');
   res.json({ ok: true });
 }));
 

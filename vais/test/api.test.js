@@ -285,3 +285,22 @@ test('👎 mit Gründen landet in der Admin-Auswertung', async () => {
   assert.equal(m.down, 1);
   assert.deepEqual(m.reasons, { long: 1, wrong: 1 });
 });
+
+test('Status-Seite ist öffentlich und verrät keine Schlüssel', async () => {
+  const page = await fetch(`${BASE}/status`);
+  assert.equal(page.status, 200);
+  const html = await page.text();
+  assert.match(html, /Status/);
+  const data = await (await fetch(`${BASE}/api/status`)).json();
+  assert.ok(['ok', 'partial', 'down'].includes(data.state));
+  assert.ok(data.total > 0);
+  assert.doesNotMatch(JSON.stringify(data), /gsk_|sk-or|key/i);
+});
+
+test('Admin-Warnung landet im Protokoll', async () => {
+  const a = client();
+  await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
+  assert.equal((await a.json('/api/admin/alarms/test', {})).status, 200);
+  const events = (await a.json('/api/admin/overview')).data.events;
+  assert.ok(events.some((e) => e.kind === 'alarm' && /Test-Alarm/.test(e.detail)));
+});

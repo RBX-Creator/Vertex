@@ -89,6 +89,7 @@ async function load() {
     events(d.events, d.busy);
     boardState(d.boardResetAt);
     $('#safety-on').checked = d.safety !== false;
+    $('#alarms-on').checked = d.alarms !== false;
   } catch (err) {
     toast(err.message);
   } finally {
@@ -96,6 +97,12 @@ async function load() {
   }
 }
 
+$('#alarms-on').addEventListener('change', async (e) => {
+  try { await api('alarms', { on: e.target.checked }); toast(e.target.checked ? t('Warnungen sind an.', 'Alarms are on.') : t('Warnungen sind aus.', 'Alarms are off.')); } catch (err) { toast(err.message); e.target.checked = !e.target.checked; }
+});
+$('#alarm-test').addEventListener('click', async () => {
+  try { await api('alarms/test', {}); toast(t('Gesendet – schau auf dein Handy.', 'Sent – check your phone.')); load(); } catch (err) { toast(err.message); }
+});
 $('#safety-on').addEventListener('change', async (e) => {
   try { await api('safety', { on: e.target.checked }); toast(e.target.checked ? t('Jugendschutz ist an.', 'Youth protection is on.') : t('Jugendschutz ist aus.', 'Youth protection is off.')); } catch (err) { toast(err.message); e.target.checked = !e.target.checked; }
 });

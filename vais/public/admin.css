@@ -133,3 +133,4 @@ body.admin { background: var(--bg); color: var(--text); font-family: var(--sans)
 .adm-fb-top span { color: var(--muted); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .adm-fb-bar { height: 6px; }
 .adm-fb li small { color: var(--muted); font-size: 12px; }
+a.adm-btn { text-decoration: none; display: inline-flex; align-items: center; }

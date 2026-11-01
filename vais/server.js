@@ -8,6 +8,8 @@ const { mailConfigured } = await import('./src/mailer.js');
 const { chat, share } = await import('./src/chat.js');
 const { admin } = await import('./src/admin.js');
 const { serveSite } = await import('./src/sites.js');
+await import('./src/alarm.js');
+const { statusPage } = await import('./src/status.js');
 const { demoMode, tempImage } = await import('./src/models.js');
 const { OWNER, isAdmin } = await import('./src/config.js');
 const { readFile } = await import('node:fs/promises');
@@ -101,6 +103,10 @@ app.get('/login', async (req, res) => {
   noCache(res);
   res.sendFile(page('login.html'));
 });
+
+// Öffentliche Status-Seite: welche Modelle gerade frei sind
+app.get('/status', statusPage);
+app.get('/api/status', statusPage);
 
 // Veröffentlichte Webseiten (abgeschottet, siehe src/sites.js)
 app.get('/w/:id', serveSite);

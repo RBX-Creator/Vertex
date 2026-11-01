@@ -52,10 +52,14 @@ function freeKeys(provider, model = null) {
   return PROVIDERS[provider].keys.filter((k) => (keyCooldown.get(`k:${provider}:${k}`) ?? 0) <= now
     && (!model || (keyCooldown.get(`m:${model}:${k}`) ?? 0) <= now));
 }
+// Admin-Alarm (wird von src/alarm.js gesetzt)
+let alarmHandler = () => {};
+export const setAlarmHandler = (fn) => { alarmHandler = fn; };
 function markKey(provider, model, key, status, message) {
   const now = Date.now();
-  if (status === 429 && isDailyLimit(message)) keyCooldown.set(`k:${provider}:${key}`, nextMidnightUtc());
-  else if (status === 401 || status === 403) keyCooldown.set(`k:${provider}:${key}`, now + 60 * 60 * 1000);
+  const info = { provider, label: PROVIDERS[provider]?.label ?? provider, id: maskKey(key) };
+  if (status === 429 && isDailyLimit(message)) { keyCooldown.set(`k:${provider}:${key}`, nextMidnightUtc()); queueMicrotask(() => alarmHandler('key-full', info)); }
+  else if (status === 401 || status === 403) { keyCooldown.set(`k:${provider}:${key}`, now + 60 * 60 * 1000); queueMicrotask(() => alarmHandler('key-invalid', info)); }
   else if (status === 429) keyCooldown.set(`m:${model}:${key}`, now + 90 * 1000);
 }
 const maskKey = (k) => `${k.slice(0, 4)}…${k.slice(-4)}`;
