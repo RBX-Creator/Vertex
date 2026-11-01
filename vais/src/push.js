@@ -92,7 +92,7 @@ async function tick() {
     for (const r of due) {
       const late = Date.now() - Number(r.due_at) > 10 * 60_000;
       await run('UPDATE reminders SET sent_at = ? WHERE id = ?', Date.now(), r.id);
-      await sendTo(Number(r.user_id), { title: late ? 'VAIs – Erinnerung (verspätet)' : 'VAIs – Erinnerung', body: r.text, tag: `rem-${r.id}`, url: '/' });
+      await sendTo(Number(r.user_id), { title: late ? '⏰ Erinnerung (verspätet)' : '⏰ Erinnerung', body: r.text, tag: `rem-${r.id}`, url: '/' });
     }
     await run('DELETE FROM reminders WHERE sent_at IS NOT NULL AND sent_at < ?', Date.now() - 30 * 24 * 3600 * 1000);
   } catch (err) {
@@ -132,7 +132,7 @@ push.post('/unsubscribe', wrap(async (req, res) => {
 }));
 
 push.post('/test', wrap(async (req, res) => {
-  const n = await sendTo(req.user.id, { title: 'VAIs', body: t('So sehen deine Erinnerungen aus ✓', 'This is how your reminders look ✓'), tag: 'test', url: '/' });
+  const n = await sendTo(req.user.id, { title: t('Benachrichtigungen sind an ✓', 'Notifications are on ✓'), body: t('So sehen deine Erinnerungen aus.', 'This is how your reminders will look.'), tag: 'test', url: '/' });
   if (!n) throw new HttpError(400, t('Auf diesem Gerät sind Benachrichtigungen noch nicht eingeschaltet.', 'Notifications are not enabled on this device yet.'));
   res.json({ ok: true });
 }));

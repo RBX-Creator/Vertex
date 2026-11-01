@@ -1250,6 +1250,7 @@ function paintVoices() {
   $('#set-voice-rate-val').textContent = `${Number(prefs.rate).toFixed(1)}×`;
   $('#set-voice-pitch-val').textContent = Number(prefs.pitch).toFixed(1);
 }
+if (canSpeak) { try { speechSynthesis.getVoices(); } catch { /* egal */ } }
 if (canSpeak) speechSynthesis.addEventListener?.('voiceschanged', () => { if (!$('#settings').hidden) paintVoices(); });
 function saveVoice() {
   store.set('vais.voice', {
@@ -2616,6 +2617,8 @@ function openSettings() {
   closeDrawer();
   paintSettings();
   paintVoices();
+  // iPhone lädt die Stimmen erst nach und meldet das nicht immer → kurz danach nochmal
+  [400, 1500].forEach((ms) => setTimeout(() => { if (!settingsEl.hidden) paintVoices(); }, ms));
   loadProfile();
   loadPush();
   loadSites();
