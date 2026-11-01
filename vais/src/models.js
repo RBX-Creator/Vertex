@@ -120,6 +120,7 @@ export async function removeKey(provider, id) {
   delete cache[provider];
 }
 export const demoMode = !Object.values(PROVIDERS).some((p) => p.keys.length);
+export const hasProvider = (name) => !!PROVIDERS[name]?.keys.length;
 
 // Bilder: Pollinations funktioniert ohne Schlüssel (wenige Modelle); mit POLLINATIONS_API_KEY gibt es mehr.
 // Mit DISABLE_FREE_IMAGES=true lässt sich der Bild-Modus abschalten.
@@ -622,7 +623,7 @@ function demoImage(name, text) {
 }
 
 // Eine Antwort ohne Streaming, optional mit Werkzeugen (für Agent X)
-export async function complete({ model, messages, tools, signal }) {
+export async function complete({ model, messages, tools, signal, maxTokens }) {
   const [provider, ...rest] = model.split(':');
   let upstream = rest.join(':');
   const search = upstream.endsWith(SEARCH_SUFFIX);
@@ -641,7 +642,7 @@ export async function complete({ model, messages, tools, signal }) {
     body: JSON.stringify({
       model: upstream,
       messages,
-      ...tokenLimit(provider, upstream),
+      ...(maxTokens ? { max_tokens: maxTokens } : tokenLimit(provider, upstream)),
       ...(allTools.length ? { tools: allTools, tool_choice: 'auto' } : {}),
     }),
   }));

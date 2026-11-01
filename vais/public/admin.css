@@ -117,3 +117,12 @@ body.admin { background: var(--bg); color: var(--text); font-family: var(--sans)
 .adm-limit-edit .adm-row { margin: 2px 0 0; }
 .adm-key-role { font-size: 11px; font-weight: 600; color: var(--muted); min-width: 64px; }
 .adm-user b a { color: inherit; }
+.adm-switch { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 10px; cursor: pointer; }
+.adm-switch span { display: grid; gap: 3px; }
+.adm-switch b { font-weight: 500; font-size: 15px; }
+.adm-switch small { color: var(--muted); font-size: 13px; line-height: 1.4; }
+.adm-switch input { appearance: none; -webkit-appearance: none; flex: none; width: 46px; height: 28px; border-radius: 999px; background: var(--border-strong); position: relative; cursor: pointer; transition: background .2s; margin: 0; }
+.adm-switch input::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .2s; }
+.adm-switch input:checked { background: var(--success); }
+.adm-switch input:checked::after { transform: translateX(18px); }
+.adm-events li.blocked .adm-ev-kind, .adm-events li.alarm .adm-ev-kind { color: var(--danger); }

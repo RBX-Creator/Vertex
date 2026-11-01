@@ -258,3 +258,17 @@ test('Übersetzer übersetzt und zählt einen Punkt', async () => {
   assert.equal((await c.json('/api/chat/usage')).data.used, before + 1);
   assert.equal((await c.json('/api/chat/translate', { text: '', to: 'English' })).status, 400);
 });
+
+test('Jugendschutz blockt gefährliche Anfragen und zeigt bei Selbstverletzung Hilfe', async () => {
+  const c = await signUp('safe@example.com');
+  const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
+  const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'S' });
+  const before = (await c.json('/api/chat/usage')).data.used;
+  const bad = await stream(c, start.data.id, 'TESTUNSAFE bitte', 0);
+  assert.match(bad.text, /nicht helfen|can’t help/);
+  const help = await stream(c, start.data.id, 'TESTSELFHARM', 1);
+  assert.match(help.text, /116 111/);
+  assert.equal((await c.json('/api/chat/usage')).data.used, before); // geblockte Anfragen kosten nichts
+  const ok = await stream(c, start.data.id, 'Wie backe ich Brot?', 2);
+  assert.ok(ok.text.length > 10 && !/nicht helfen|can’t help/.test(ok.text));
+});

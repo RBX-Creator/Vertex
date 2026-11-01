@@ -31,7 +31,7 @@ function tiles(c) {
     [t('Fragen heute', 'Questions today'), c.questions24, t(`${num(c.chats)} Chats insgesamt`, `${num(c.chats)} chats in total`)],
     [t('Stimmen', 'Votes'), c.votes, t('im Battle', 'in battles')],
     [t('Fehler heute', 'Errors today'), c.errors24, t(`${num(c.fallbacks24)} Ersatz-Modelle`, `${num(c.fallbacks24)} fallbacks`), c.errors24 > 0],
-    [t('Gesperrt', 'Blocked'), c.blocked, t(`${num(c.verified)} bestätigt`, `${num(c.verified)} verified`)],
+    [t('Gesperrt', 'Blocked'), c.blocked, t(`${num(c.verified)} bestätigt · ${num(c.blocked24 ?? 0)} Anfragen geblockt`, `${num(c.verified)} verified · ${num(c.blocked24 ?? 0)} requests blocked`)],
   ];
   $('#tiles').innerHTML = list.map(([label, value, sub, warn]) => `
     <div class="adm-tile${warn ? ' warn' : ''}"><span class="adm-tile-label">${esc(label)}</span><b>${num(value)}</b><small>${esc(sub)}</small></div>`).join('');
@@ -63,7 +63,7 @@ function models(list, modes) {
 
 function events(list, busy) {
   $('#busy').textContent = busy.length ? `${t('Gerade ausgelastet', 'Busy right now')}: ${busy.slice(0, 8).join(', ')}${busy.length > 8 ? ` +${busy.length - 8}` : ''}` : t('Alle Modelle sind gerade frei.', 'All models are available right now.');
-  const KIND = { error: t('Fehler', 'Error'), fallback: t('Ersatz', 'Fallback'), admin: 'Admin' };
+  const KIND = { error: t('Fehler', 'Error'), fallback: t('Ersatz', 'Fallback'), admin: 'Admin', blocked: t('Geblockt', 'Blocked'), alarm: t('Alarm', 'Alarm') };
   $('#events').innerHTML = list.length ? list.map((e) => `
     <li class="${e.kind}"><span class="adm-ev-kind">${esc(KIND[e.kind] ?? e.kind)}</span>
       <span class="adm-ev-text">${e.model ? `<b>${esc(e.model)}</b> ` : ''}${esc(e.detail)}</span>
@@ -88,12 +88,17 @@ async function load() {
     models(d.models, d.modes);
     events(d.events, d.busy);
     boardState(d.boardResetAt);
+    $('#safety-on').checked = d.safety !== false;
   } catch (err) {
     toast(err.message);
   } finally {
     $('#refresh').classList.remove('spin');
   }
 }
+
+$('#safety-on').addEventListener('change', async (e) => {
+  try { await api('safety', { on: e.target.checked }); toast(e.target.checked ? t('Jugendschutz ist an.', 'Youth protection is on.') : t('Jugendschutz ist aus.', 'Youth protection is off.')); } catch (err) { toast(err.message); e.target.checked = !e.target.checked; }
+});
 
 // ── Nutzer ────────────────────────────────────────────────────────
 let qTimer;

@@ -9,6 +9,7 @@ import { describeModel, listModels, demoMode, keyStatus, addKey, removeKey } fro
 import { limitSettings, saveLimitSettings, LIMIT_FIELDS, usageMap, resetUsage } from './limits.js';
 import { clearBoards } from './chat.js';
 import { listAllSites, removeSite } from './sites.js';
+import { safetyOn, setSafety } from './safety.js';
 
 export const admin = Router();
 
@@ -37,6 +38,7 @@ admin.get('/overview', wrap(async (req, res) => {
     get("SELECT COUNT(*) n FROM events WHERE kind = 'error' AND created_at > ?", now - DAY),
     get("SELECT COUNT(*) n FROM events WHERE kind = 'fallback' AND created_at > ?", now - DAY),
   ]);
+  const blocked24 = await get("SELECT COUNT(*) n FROM events WHERE kind = 'blocked' AND created_at > ?", now - DAY);
 
   // Fragen pro Tag (letzte 14 Tage)
   const since = new Date(now - 13 * DAY); since.setHours(0, 0, 0, 0);
@@ -54,7 +56,7 @@ admin.get('/overview', wrap(async (req, res) => {
   const models = await Promise.all(used.filter((r) => r.model).map(async (r) => ({ id: r.model, ...(await describeModel(r.model)), n: n(r) })));
   const modes = await all('SELECT mode, COUNT(*) n FROM chats WHERE created_at > ? GROUP BY mode ORDER BY n DESC', now - 30 * DAY);
 
-  const events = await all("SELECT kind, model, detail, created_at FROM events WHERE kind IN ('error', 'fallback', 'admin') ORDER BY id DESC LIMIT 60");
+  const events = await all("SELECT kind, model, detail, created_at FROM events WHERE kind IN ('error', 'fallback', 'admin', 'blocked', 'alarm') ORDER BY id DESC LIMIT 60");
   const busy = (await listModels()).filter((m) => m.busy).map((m) => m.name);
   const resetAt = Number(await getSetting('board_reset_at', 0)) || null;
 
@@ -63,7 +65,7 @@ admin.get('/overview', wrap(async (req, res) => {
     admins: ADMIN_EMAILS,
     counts: {
       users: n(users), verified: n(verified), blocked: n(blocked), new7: n(new7), active1: n(active1), active7: n(active7),
-      chats: n(chats), questions24: n(msgs24), votes: n(votes), errors24: n(errors24), fallbacks24: n(fallbacks24),
+      chats: n(chats), questions24: n(msgs24), votes: n(votes), errors24: n(errors24), fallbacks24: n(fallbacks24), blocked24: n(blocked24),
     },
     perDay,
     models,
@@ -71,6 +73,7 @@ admin.get('/overview', wrap(async (req, res) => {
     events: events.map((e) => ({ kind: e.kind, model: e.model, detail: e.detail, at: Number(e.created_at) })),
     busy,
     boardResetAt: resetAt,
+    safety: await safetyOn(),
   });
 }));
 
@@ -178,6 +181,12 @@ admin.post('/sites/remove', wrap(async (req, res) => {
   await removeSite(id);
   await logEvent('admin', null, `Webseite entfernt: /w/${id}`);
   res.json({ ok: true });
+}));
+
+admin.post('/safety', wrap(async (req, res) => {
+  await setSafety(!!req.body?.on);
+  await logEvent('admin', null, `Jugendschutz ${req.body?.on ? 'an' : 'aus'}`);
+  res.json({ ok: true, on: !!req.body?.on });
 }));
 
 admin.use(errorHandler);

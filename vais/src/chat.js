@@ -7,6 +7,7 @@ import { runAgent, quickReaction } from './agent.js';
 import { profile, personalFor, instructionsPrompt, remember } from './profile.js';
 import { push, addReminder, notifyUser } from './push.js';
 import { sites } from './sites.js';
+import { checkText } from './safety.js';
 import { limitSettings, charge, refund, usageOf } from './limits.js';
 import { sourcesFromText } from './models.js';
 import { pickAvailable, isBusy } from './models.js';
@@ -251,7 +252,10 @@ chat.post('/stream', wrap(async (req, res) => {
       : info?.paid ? [L.costPremium, t('Ein Premium-Modell', 'A premium model')]
         : row.modality === 'web' || info?.caps.includes('web') ? [L.costWeb, t('Websuche', 'Web search')]
           : [L.costText, t('Eine Antwort', 'An answer')];
-  const charged = await charge(req.user, cost, what);
+  // Jugendschutz: die neue Nachricht prüfen, bevor ein Modell sie bekommt (nicht bei „ok“ usw.)
+  const lastText = typeof display?.text === 'string' && display.text.trim() ? display.text : plain(clean.at(-1));
+  const blocked = quick ? null : await checkText(lastText, row.modality === 'image' ? 'image' : 'prompt');
+  const charged = blocked ? 0 : await charge(req.user, cost, what);
   const personal = await personalFor(req.user.id);
   const custom = row.modality === 'image' ? null : instructionsPrompt(personal.instructions);
 
@@ -300,6 +304,14 @@ chat.post('/stream', wrap(async (req, res) => {
   // Schreiben nur, solange die Verbindung offen ist (Agent X arbeitet notfalls ohne weiter)
   function out(line) { if (!res.destroyed && !res.writableEnded) res.write(line); }
   if (summarized) out(`${JSON.stringify({ summarized })}\n`);
+
+  if (blocked) {
+    // Freundlich ablehnen, ohne ein Modell zu fragen
+    out(`${JSON.stringify({ t: blocked.message })}\n`);
+    out(`${JSON.stringify({ done: true })}\n`);
+    await save(side === 1 ? 1 : 0, blocked.message, 'done');
+    return res.end();
+  }
 
   const controller = new AbortController();
   const runKey = `${row.id}:${turnNo}:${side === 1 ? 1 : 0}`;
@@ -601,6 +613,8 @@ chat.post('/translate', wrap(async (req, res) => {
   if (!text || !to) throw new HttpError(400, t('Nichts zu übersetzen.', 'Nothing to translate.'));
   const L = await limitSettings();
   limit(req.user.id, L.burst);
+  const unsafe = await checkText(text, 'prompt');
+  if (unsafe) throw new HttpError(400, unsafe.message.replace(/\*\*/g, ''));
   const charged = await charge(req.user, L.costText, t('Eine Übersetzung', 'A translation'));
   try {
     if (demoMode) return res.json({ text: `[${to}] ${text}` });

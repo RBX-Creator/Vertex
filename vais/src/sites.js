@@ -7,6 +7,7 @@ import { get, run, all } from './db.js';
 import { t } from './i18n.js';
 import { HttpError, wrap } from './auth.js';
 import { OWNER } from './config.js';
+import { checkText } from './safety.js';
 
 await run(`CREATE TABLE IF NOT EXISTS sites (
   id TEXT PRIMARY KEY,
@@ -72,6 +73,10 @@ sites.post('/publish', wrap(async (req, res) => {
   if (!html) throw new HttpError(400, t('In dieser Antwort ist keine fertige Webseite.', 'This answer does not contain a finished website.'));
   if (html.length > MAX_HTML) throw new HttpError(400, t('Die Webseite ist zu groß zum Veröffentlichen.', 'The website is too large to publish.'));
   const title = (html.match(/<title[^>]*>([^<]{1,120})<\/title>/i)?.[1] || chat.title || 'Webseite').trim();
+  // Sichtbaren Text der Seite prüfen (Jugendschutz)
+  const visible = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 5000);
+  const unsafe = await checkText(`${title}\n${visible}`, 'site');
+  if (unsafe) throw new HttpError(400, unsafe.message);
   const existing = await get('SELECT id FROM sites WHERE chat_id = ? AND turn = ? AND side = ?', chat.id, turn, side === 1 ? 1 : 0);
   let id = existing?.id;
   if (id) {
