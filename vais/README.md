@@ -18,6 +18,8 @@ KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand:
 - **Offline lesen**: die letzten 25 Chats liegen auf dem Gerät und lassen sich ohne Internet öffnen (beim Abmelden gelöscht)
 - **Willkommens-Tour** beim ersten Besuch (in den Einstellungen wiederholbar), sanfte Animationen und kurzes Vibrieren beim Senden/Abstimmen (Android)
 - **Tageslimit pro Nutzer**: jeder hat Punkte pro Tag (Standard 100), jede Antwort kostet Punkte (Antwort 1, Websuche 2, Bild 3, Agent X 4, Premium 5); Verbrauch in „Meine Statistik“ als 0–100 %; keine Antwort → Punkte zurück
+- **Agent X in der Modell-Liste** ganz oben (auch für „Direkt“ und „Nebeneinander“, z. B. Agent X gegen ein anderes Modell); **reagiert mit Emojis** auf deine Nachricht (👀 beim Arbeiten, z. B. 😂 🎉 ✅ danach), kurze Antworten wie „ok“ oder „danke“ bekommen nur ein Emoji und kosten keine Punkte
+- **Notfall-Modelle**: ist das gewählte Modell oder sein Anbieter voll, antwortet automatisch ein starkes freies Modell (bevorzugt Groq), markiert mit „⚡ Notfall“
 - **Mehrere Schlüssel pro Anbieter**: `GROQ_API_KEY` (auch mehrere mit Komma), `GROQ_API_KEY_2` … `_9` oder im Admin-Bereich; ist einer voll, springt der nächste ein
 - **Admin-Seite** (`/admin`, nur für `ADMIN_EMAILS`): Limits und Kosten einstellen, eigenes Limit pro Nutzer, Verbrauch zurücksetzen, API-Schlüssel verwalten, Nutzerzahlen, Fragen pro Tag, beliebte Modelle, Fehlerprotokoll, Nutzer sperren/entsperren, Bestenliste zurücksetzen (rückgängig machbar)
 - **Datenschutz** (`/datenschutz`) und **Impressum** (`/impressum`) mit Betreiber-Angaben aus `OWNER_NAME`, `OWNER_EMAIL`, `IMPRESSUM_ADDRESS`

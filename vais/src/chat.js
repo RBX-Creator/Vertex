@@ -3,10 +3,10 @@ import { randomBytes } from 'node:crypto';
 import { get, run, all, purgeChats, getSetting, logEvent } from './db.js';
 import { t } from './i18n.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
-import { runAgent } from './agent.js';
+import { runAgent, quickReaction } from './agent.js';
 import { limitSettings, charge, refund, usageOf } from './limits.js';
 import { sourcesFromText } from './models.js';
-import { pickAvailable } from './models.js';
+import { pickAvailable, isBusy } from './models.js';
 import { generateImage, helperModel, complete } from './models.js';
 import { listModels, findModel, streamChat, displayName, describeModel, modelKey, demoMode } from './models.js';
 
@@ -96,8 +96,10 @@ setInterval(() => {
   for (const [k, list] of usage) if (list.every((ts) => now - ts > 5 * 60 * 1000)) usage.delete(k);
 }, 10 * 60 * 1000).unref();
 
+// Agent X steht als eigenes „Modell“ ganz oben in der Liste
+const AGENT_MODEL = { id: 'agent', provider: 'vais', name: 'Agent X', maker: 'VAIs', icon: 'vais', caps: ['text', 'code', 'web', 'vision'], agent: true };
 chat.get('/models', wrap(async (req, res) => {
-  res.json({ models: await listModels(), demo: demoMode });
+  res.json({ models: [AGENT_MODEL, ...(await listModels())], demo: demoMode });
 }));
 
 // Neuen Chat anlegen. Im Battle wählt der Server zwei zufällige Modelle und verrät sie erst nach der Abstimmung.
@@ -117,9 +119,10 @@ chat.post('/start', wrap(async (req, res) => {
   } else if (mode === 'sxs' || mode === 'direct') {
     const need = mode === 'sxs' ? 2 : 1;
     if (!Array.isArray(models) || models.length !== need) throw new HttpError(400, t('Bitte wähle die Modelle aus.', 'Please choose the models.'));
-    for (const id of models) if (!(await findModel(id))) throw new HttpError(400, t('Dieses Modell ist nicht verfügbar.', 'This model is not available.'));
+    for (const id of models) if (id !== 'agent' && !(await findModel(id))) throw new HttpError(400, t('Dieses Modell ist nicht verfügbar.', 'This model is not available.'));
+    if (mode === 'sxs' && models[0] === models[1]) throw new HttpError(400, t('Bitte wähle zwei verschiedene Modelle.', 'Please choose two different models.'));
     if (modality === 'image') {
-      for (const id of models) if (!(await findModel(id))?.caps.includes('image')) throw new HttpError(400, t('Bitte wähle ein Bild-Modell.', 'Please choose an image model.'));
+      for (const id of models) if (id === 'agent' || !(await findModel(id))?.caps.includes('image')) throw new HttpError(400, t('Bitte wähle ein Bild-Modell.', 'Please choose an image model.'));
     }
     picked = models;
   } else {
@@ -134,6 +137,24 @@ chat.post('/start', wrap(async (req, res) => {
   );
   res.json({ id, models: mode === 'battle' ? null : await Promise.all(picked.map(displayName)) });
 }));
+
+// Notfall-Modelle: ist das gewählte Modell voll, antwortet ein starkes freies Modell (bevorzugt Groq)
+const NOTFALL_STATUS = new Set([401, 403, 404, 429, 500, 502, 503, 504]);
+const EMERGENCY = {
+  text: [/^groq:openai\/gpt-oss-120b$/, /^groq:moonshotai\/kimi-k2/, /^groq:.*llama-3\.3-70b/, /^groq:qwen\/qwen3/, /^groq:openai\/gpt-oss-20b$/, /^groq:/, /^gemini:/, /^cerebras:/, /^mistral:/, /^openrouter:.*:free$/],
+  code: [/^groq:openai\/gpt-oss-120b$/, /^groq:moonshotai\/kimi-k2/, /^groq:qwen\/qwen3/, /^groq:/, /^gemini:/, /^openrouter:.*:free$/],
+  web: [/^groq:groq\/compound$/, /^groq:openai\/gpt-oss-120b#search$/, /^groq:.*compound/, /#search$/],
+  vision: [/^groq:meta-llama\/llama-4-maverick/, /^groq:meta-llama\/llama-4-scout/, /^gemini:/, /^openrouter:.*:free$/],
+  image: [/^pollinations:/],
+};
+async function pickEmergency(cap, exclude) {
+  const all = (await listModels()).filter((m) => m.caps.includes(cap) && !m.busy && !exclude.includes(m.id));
+  for (const re of EMERGENCY[cap] ?? EMERGENCY.text) {
+    const hit = all.find((m) => re.test(m.id));
+    if (hit) return hit;
+  }
+  return all[0] ?? null;
+}
 
 // Antwort einer Seite (0 = A, 1 = B) als NDJSON-Stream
 chat.post('/stream', wrap(async (req, res) => {
@@ -166,7 +187,8 @@ chat.post('/stream', wrap(async (req, res) => {
   limit(req.user.id, L.burst);
   // Punkte fürs Tageslimit: je nach Art der Antwort
   const info = model === 'agent' ? null : await findModel(model);
-  const [cost, what] = row.mode === 'agent' ? [L.costAgent, 'Agent X']
+  const quick = model === 'agent' ? quickReaction(clean) : null; // „ok“, „danke“ … → nur Emoji, kostet nichts
+  const [cost, what] = quick ? [0, ''] : model === 'agent' ? [L.costAgent, 'Agent X']
     : row.modality === 'image' ? [L.costImage, t('Ein Bild', 'An image')]
       : info?.paid ? [L.costPremium, t('Ein Premium-Modell', 'A premium model')]
         : row.modality === 'web' || info?.caps.includes('web') ? [L.costWeb, t('Websuche', 'Web search')]
@@ -189,13 +211,15 @@ chat.post('/stream', wrap(async (req, res) => {
   };
   let thinkStart = 0;
   let thinkMs = 0;
+  let reaction = null; // Emoji-Reaktion von Agent X auf deine Nachricht
+  let fallback = null; // Notfall-Modell, falls das gewählte voll war
   const save = (s, content, status = 'done', error = null, attachments = null) => (turnNo === null ? null : run(
     `INSERT INTO messages (chat_id, turn, side, content, status, error, meta, attachments, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(chat_id, turn, side) DO UPDATE SET content = excluded.content, status = excluded.status, error = excluded.error,
        meta = excluded.meta, attachments = COALESCE(excluded.attachments, messages.attachments)`,
     row.id, turnNo, s, content, status, error,
-    s >= 0 && (steps.length || thinking || sources.size || images.length)
-      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, sources: [...sources.values()], images }) : null,
+    s >= 0 && (steps.length || thinking || sources.size || images.length || reaction || fallback)
+      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, sources: [...sources.values()], images, reaction, fallback }) : null,
     attachments, Date.now(),
   ).catch((e) => console.error('Verlauf speichern fehlgeschlagen:', e.message)));
   // Deine Frage so speichern, wie sie angezeigt wird (Text + Anhänge), nicht als Modell-Format
@@ -228,15 +252,20 @@ chat.post('/stream', wrap(async (req, res) => {
       thinking += r;
       res.write(`${JSON.stringify({ r })}\n`);
     };
-    if (row.mode === 'agent') {
-      await runAgent({
-        messages: clean,
-        signal: controller.signal,
-        onText,
-        onReasoning,
-        onSources,
-        onStep: (step) => { steps.push(step); res.write(`${JSON.stringify({ step })}\n`); },
-      });
+    const onReact = (emoji) => { reaction = emoji || null; res.write(`${JSON.stringify({ react: reaction ?? '' })}\n`); };
+    if (model === 'agent') {
+      if (quick) onReact(quick);
+      else {
+        await runAgent({
+          messages: clean,
+          signal: controller.signal,
+          onText,
+          onReasoning,
+          onSources,
+          onReact,
+          onStep: (step) => { steps.push(step); res.write(`${JSON.stringify({ step })}\n`); },
+        });
+      }
     } else {
       // Im Battle springt bei einem Ausfall still ein anderes Modell ein (Namen sind ja geheim)
       const tried = [model];
@@ -265,30 +294,38 @@ chat.post('/stream', wrap(async (req, res) => {
           });
           break;
         } catch (err) {
-          if (controller.signal.aborted || text || row.mode !== 'battle' || attempt >= 3) throw err;
+          if (controller.signal.aborted || text || images.length || attempt >= 3 || err.premium) throw err;
+          const battle = row.mode === 'battle';
+          // In „Direkt“ und „Nebeneinander“ nur, wenn das Modell voll/nicht erreichbar ist – nicht bei anderen Fehlern
+          if (!battle && !NOTFALL_STATUS.has(err.status) && !isBusy(model)) throw err;
           const fresh = await get('SELECT model_a, model_b FROM chats WHERE id = ?', row.id);
           const other = side === 1 ? fresh.model_a : fresh.model_b;
           const premiumIds = paidAllowed(req.user.id, L.paidDaily) ? [] : (await listModels()).filter((m) => m.paid).map((m) => m.id);
           const needCap = row.modality === 'image' ? 'image' : hasImages ? 'vision' : (MODALITY_CAP[row.modality] ?? 'text');
-          const next = await pickAvailable(needCap, [...tried, other, ...premiumIds]);
+          const next = battle ? await pickAvailable(needCap, [...tried, other, ...premiumIds]) : await pickEmergency(needCap, [...tried, ...premiumIds]);
           if (!next) throw err;
-          console.log(`Battle-Ersatz: ${model} → ${next.id} (${err.message})`);
+          console.log(`${battle ? 'Battle-Ersatz' : 'Notfall-Modell'}: ${model} → ${next.id} (${err.message})`);
           logEvent('fallback', model, err.message);
           model = next.id;
           tried.push(model);
           thinking = '';
-          await run(`UPDATE chats SET ${side === 1 ? 'model_b' : 'model_a'} = ? WHERE id = ?`, model, row.id);
+          if (battle) await run(`UPDATE chats SET ${side === 1 ? 'model_b' : 'model_a'} = ? WHERE id = ?`, model, row.id);
+          else {
+            // Dein gewähltes Modell bleibt im Chat – diese eine Antwort kommt vom Notfall-Modell
+            fallback = { id: next.id, name: next.name, maker: next.maker, icon: next.icon };
+            res.write(`${JSON.stringify({ fallback })}\n`);
+          }
         }
       }
       // Websuche: zusätzlich Links aus der Antwort als Quellen sammeln
       if (row.modality === 'web' || /#search$|compound/.test(model)) onSources(sourcesFromText(text));
     }
     res.write(`${JSON.stringify({ done: true })}\n`);
-    const got = text || images.length;
+    const got = text || images.length || reaction;
     if (!got) await refund(req.user, charged);
     await save(side === 1 ? 1 : 0, text, got ? 'done' : 'error', got ? null : t('Das Modell hat keine Antwort geliefert.', 'The model returned no answer.'));
   } catch (err) {
-    if (!text && !images.length) await refund(req.user, charged); // keine Antwort → Punkte zurück
+    if (!text && !images.length && !reaction) await refund(req.user, charged); // keine Antwort → Punkte zurück
     if (controller.signal.aborted) {
       await save(side === 1 ? 1 : 0, text, text || images.length ? 'done' : 'stopped');
     } else {
@@ -522,6 +559,7 @@ async function loadChatData(row, { forShare = false } = {}) {
         text: m.content, status: m.status, error: m.error,
         steps: meta.steps ?? [], thinking: forShare ? '' : meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0,
         feedback: forShare ? 0 : m.feedback ?? 0, sources: meta.sources ?? [], images: meta.images ?? [],
+        reaction: meta.reaction ?? null, fallback: meta.fallback ?? null,
       };
     }
   }

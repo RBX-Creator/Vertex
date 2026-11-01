@@ -277,7 +277,7 @@ function toggleModalityMenu(open = el.modalityMenu.hidden) {
 // Gewählte Modelle passend zur Art machen (z. B. bei „Websuche“ nur Such-Modelle)
 function fitPicks() {
   const cap = currentCap();
-  const fitting = state.models.filter((m) => m.caps.includes(cap));
+  const fitting = state.models.filter((m) => m.caps.includes(cap) && !m.agent); // Agent X nur, wenn man ihn selbst wählt
   [0, 1].forEach((slot) => {
     if (modelById(state.picks[slot])?.caps.includes(cap)) return;
     state.picks[slot] = fitting.find((m) => m.id !== state.picks[1 - slot])?.id ?? state.picks[slot];
@@ -317,10 +317,10 @@ function renderModelList() {
   el.list.innerHTML = items.length
     ? items.map((m) => {
         const selected = m.id === state.picks[sheetSlot];
-        return `<li><button type="button" class="model-opt${selected ? ' selected' : ''}${m.id === other ? ' taken' : ''}${m.busy ? ' busy' : ''}" data-id="${escapeHtml(m.id)}">
-          ${modelLogo(m)}<span class="name">${escapeHtml(m.name)}</span>${m.caps.includes('vision') ? `<span class="vis" title="${t('Kann Bilder ansehen', 'Can see images')}">${ICON.preview}</span>` : ''}
+        return `<li><button type="button" class="model-opt${selected ? ' selected' : ''}${m.id === other ? ' taken' : ''}${m.busy ? ' busy' : ''}${m.agent ? ' is-agent' : ''}" data-id="${escapeHtml(m.id)}">
+          ${modelLogo(m)}<span class="name">${escapeHtml(m.name)}</span>${m.agent ? `<span class="agent-tag">${t('Agent', 'Agent')}</span>` : ''}${m.caps.includes('vision') ? `<span class="vis" title="${t('Kann Bilder ansehen', 'Can see images')}">${ICON.preview}</span>` : ''}
           ${selected ? ICON.check.replace('<svg ', '<svg width="18" height="18" ') : ''}
-          <span class="prov">${m.busy ? t('ausgelastet', 'busy') : `${m.paid ? '<span class="premium">Premium</span> ' : ''}${escapeHtml(m.maker)}`}</span></button></li>`;
+          <span class="prov">${m.agent ? t('VAIs · der Stärkste', 'VAIs · the strongest') : m.busy ? t('ausgelastet', 'busy') : `${m.paid ? '<span class="premium">Premium</span> ' : ''}${escapeHtml(m.maker)}`}</span></button></li>`;
       }).join('')
     : `<li class="model-empty">${q ? t('Kein Modell gefunden.', 'No model found.') : CAP_EMPTY[sheetCap] ?? t('Keine Modelle in dieser Kategorie.', 'No models in this category.')}</li>`;
 }
@@ -550,6 +550,7 @@ function renderTurn(turnIndex) {
     }, { passive: true });
   }
   turn.answers.forEach((_, side) => updateCard(turnIndex, side));
+  paintReactions(turnIndex);
   return node;
 }
 
@@ -564,6 +565,38 @@ function paintLabel(card, side) {
   const won = (chat.winner === 'a' && side === 0) || (chat.winner === 'b' && side === 1);
   card.classList.toggle('winner', won);
   if (won) label.insertAdjacentHTML('beforeend', `<span class="badge">✓ ${t('Gewinner', 'Winner')}</span>`);
+  // Notfall-Modell: das gewählte Modell war voll, ein anderes hat diese Antwort geschrieben
+  const a = chat.turns[Number(card.closest('.turn')?.dataset.index)]?.answers[side];
+  if (a?.fallback && chat.mode !== 'battle') {
+    const note = document.createElement('span');
+    note.className = 'fallback-tag';
+    note.title = t('Das gewählte Modell war gerade voll – dieses hat für dich geantwortet.', 'The chosen model was full – this one answered for you.');
+    note.textContent = `⚡ ${t('Notfall', 'Backup')}: ${a.fallback.name}`;
+    label.append(note);
+  }
+}
+
+// Emoji-Reaktion von Agent X an deiner Nachricht (wie im Messenger)
+function paintReactions(turnIndex) {
+  const node = el.thread.querySelector(`.turn[data-index="${turnIndex}"]`);
+  const turn = state.chat?.turns[turnIndex];
+  if (!node || !turn) return;
+  const holder = $('.turn-user', node);
+  const emojis = [...new Set(turn.answers.map((a) => a.reaction).filter(Boolean))];
+  let box = $('.reactions', holder);
+  if (!emojis.length) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'reactions';
+    $('.bubble', holder).after(box);
+  }
+  const now = box.dataset.e || '';
+  if (now === emojis.join('')) return;
+  box.dataset.e = emojis.join('');
+  box.innerHTML = emojis.map((e) => `<span class="reaction" role="img" aria-label="${t('Agent X reagiert mit', 'Agent X reacted with')} ${e}">${e}</span>`).join('');
+  box.classList.remove('pop');
+  void box.offsetWidth;
+  box.classList.add('pop');
 }
 
 function updateLabels() {
@@ -627,6 +660,8 @@ function updateCard(turnIndex, side) {
   } else if (a.status === 'error') {
     body.innerHTML = `${a.text ? markdown(a.text) : ''}<p class="card-error"></p>${isLast ? `<button class="retry" data-act="regen">${t('Erneut versuchen', 'Try again')}</button>` : ''}`;
     $('.card-error', body).textContent = a.error;
+  } else if (!a.text && a.reaction && a.status === 'done') {
+    body.innerHTML = `<p class="react-only">${t('Hat mit', 'Reacted with')} <span>${escapeHtml(a.reaction)}</span> ${t('reagiert', '')}</p>`;
   } else if (!a.text) {
     body.innerHTML = a.status === 'stopped'
       ? `<p class="card-error" style="color:var(--muted)">${t('Gestoppt.', 'Stopped.')}</p>`
@@ -736,7 +771,8 @@ function scheduleUpdate(turnIndex, side) {
 async function runSide(turnIndex, side) {
   const chat = state.chat;
   const a = chat.turns[turnIndex].answers[side];
-  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, images: [], startedAt: Date.now(), buildMs: 0 });
+  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, images: [], reaction: null, fallback: null, startedAt: Date.now(), buildMs: 0 });
+  paintReactions(turnIndex);
   updateCard(turnIndex, side);
 
   const ctrl = new AbortController();
@@ -783,11 +819,17 @@ async function runSide(turnIndex, side) {
         if (msg.step) { a.steps.push(msg.step); scheduleUpdate(turnIndex, side); }
         if (msg.sources) { a.sources = msg.sources; scheduleUpdate(turnIndex, side); }
         if (msg.image) { a.images = [...(a.images ?? []), msg.image]; scheduleUpdate(turnIndex, side); }
+        if (msg.react !== undefined) {
+          a.reaction = msg.react || null;
+          paintReactions(turnIndex);
+          if (a.reaction && a.reaction !== '👀') haptic('tap');
+        }
+        if (msg.fallback) { a.fallback = msg.fallback; scheduleUpdate(turnIndex, side); }
         if (msg.done) finished = true;
       }
     }
     if (!finished) throw new Error(t('Die Verbindung wurde unterbrochen.', 'The connection was interrupted.'));
-    const got = a.text || a.images?.length;
+    const got = a.text || a.images?.length || a.reaction;
     a.status = got ? 'done' : 'error';
     if (!got) a.error = t('Das Modell hat keine Antwort geliefert.', 'The model returned no answer.');
   } catch (err) {
@@ -2065,8 +2107,9 @@ async function init() {
     else toast(t('Modelle konnten nicht geladen werden.', 'Models could not be loaded.'));
   }
   // Gespeicherte Auswahl prüfen, sonst die ersten Modelle nehmen
-  state.picks = [0, 1].map((i) => (modelById(state.picks[i]) ? state.picks[i] : state.models[i]?.id ?? null));
-  if (state.picks[0] && state.picks[0] === state.picks[1]) state.picks[1] = state.models.find((m) => m.id !== state.picks[0])?.id ?? null;
+  const normal = state.models.filter((m) => !m.agent);
+  state.picks = [0, 1].map((i) => (modelById(state.picks[i]) ? state.picks[i] : normal[i]?.id ?? null));
+  if (state.picks[0] && state.picks[0] === state.picks[1]) state.picks[1] = normal.find((m) => m.id !== state.picks[0])?.id ?? null;
   fitPicks();
   renderControls();
   await route();

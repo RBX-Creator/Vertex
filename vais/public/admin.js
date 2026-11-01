@@ -216,8 +216,8 @@ function renderKeys(providers) {
   $('#keys').innerHTML = providers.map((p) => `
     <div class="adm-keys">
       <p class="adm-keys-head"><b>${esc(p.label)}</b><small>${p.keys.length ? `${p.keys.length} ${p.keys.length === 1 ? t('Schlüssel', 'key') : t('Schlüssel', 'keys')}` : t('kein Schlüssel', 'no key')}</small></p>
-      ${p.keys.length ? `<ul>${p.keys.map((k) => `
-        <li><code>${esc(k.id)}</code>
+      ${p.keys.length ? `<ul>${p.keys.map((k, i) => `
+        <li><span class="adm-key-role">${i === 0 ? t('Haupt', 'Main') : `${t('Notfall', 'Backup')} ${i}`}</span><code>${esc(k.id)}</code>
           <span class="adm-key-state ${k.state}">${STATE[k.state]}${k.until ? ` ${t('bis', 'until')} ${when(k.until)}` : ''}</span>
           <small>${k.source === 'render' ? 'Render' : 'Admin'}</small>
           ${k.source === 'admin' ? `<button class="adm-link danger" data-rm-key="${esc(k.id)}" data-provider="${p.provider}">${t('Entfernen', 'Remove')}</button>` : ''}

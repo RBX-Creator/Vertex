@@ -9,6 +9,45 @@ import { listModels, complete, demoMode, sourcesFromText, makeSource } from './m
 
 const MAX_STEPS = 8;
 
+// Emoji-Reaktionen auf die Nachricht des Nutzers
+export const REACTIONS = ['👍', '❤️', '😂', '😮', '🎉', '🔥', '👀', '✅', '🙏', '💯', '🤔', '👏'];
+const REACT_TAG = /^\s*\[\[\s*react\s*:\s*([^\]\s]{1,8})\s*\]\]\s*/i;
+export function splitReaction(text) {
+  const m = String(text ?? '').match(REACT_TAG);
+  if (!m) return { reaction: null, text: String(text ?? '') };
+  const emoji = REACTIONS.find((r) => r.replace(/\uFE0F/g, '') === m[1].replace(/\uFE0F/g, '')) ?? null;
+  return { reaction: emoji, text: String(text).slice(m[0].length) };
+}
+// Kurze Bestätigungen wie „ok“ oder „danke“ beantwortet Agent X nur mit einem Emoji – ohne Modell, spart das Limit
+const ACK = {
+  '❤️': ['danke', 'dankeschön', 'dankesehr', 'vielen', 'dank', 'thx', 'thanks', 'thank', 'ty', 'merci', 'lieb', 'nett'],
+  '😂': ['haha', 'hahaha', 'hahahaha', 'hehe', 'lol', 'lmao', 'xd', 'rofl'],
+  '👋': ['gute', 'nacht', 'n8', 'good', 'night', 'tschüss', 'tschau', 'ciao', 'bye', 'bis', 'später', 'morgen', 'see', 'you'],
+  '👍': ['ok', 'okay', 'okey', 'oki', 'k', 'kk', 'alles', 'klar', 'passt', 'gut', 'super', 'top', 'perfekt', 'cool', 'nice', 'klasse', 'prima',
+    'verstanden', 'alright', 'got', 'it', 'great', 'perfect', 'sounds', 'mega', 'geil', 'genau', 'stimmt', 'sehr', 'so', 'much', 'dir', 'euch', 'schön', 'a', 'lot', 'ganz', 'echt'],
+};
+const ACK_WORDS = new Map(Object.entries(ACK).flatMap(([emoji, words]) => words.map((w) => [w, emoji])));
+const PRIORITY = ['😂', '❤️', '👋', '👍'];
+export function quickReaction(messages) {
+  if (messages.length < 2) return null; // erste Nachricht immer richtig beantworten
+  const last = messages.at(-1);
+  if (typeof last.content !== 'string') return null;
+  const text = last.content.trim().toLowerCase();
+  if (!text || text.length > 40) return null;
+  // Hat Agent X gerade etwas gefragt, ist „ok“ eine echte Antwort → normal weiterarbeiten
+  const prev = [...messages].reverse().find((m) => m.role === 'assistant');
+  const prevText = typeof prev?.content === 'string' ? prev.content : '';
+  if (/\?\s*$|\?[^?]{0,160}$/.test(prevText.trim().slice(-200))) return null;
+  const emojis = text.match(/\p{Extended_Pictographic}/gu) ?? [];
+  const words = text.replace(/\p{Extended_Pictographic}|\uFE0F|\u200D/gu, ' ').split(/[\s,.!?:;]+/).filter(Boolean);
+  if (!words.length && emojis.length) return REACTIONS.find((r) => text.includes(r.replace(/\uFE0F/g, ''))) || '👍';
+  if (!words.length || !words.every((w) => ACK_WORDS.has(w) || /^(ha){2,}h?$|^(he){2,}$|^x+d+$/.test(w))) return null;
+  const found = new Set(words.map((w) => ACK_WORDS.get(w) ?? '😂'));
+  // „sehr“, „so“ usw. allein sind keine Bestätigung
+  if (words.every((w) => ['sehr', 'so', 'much', 'dir', 'euch', 'a', 'lot', 'ganz', 'echt', 'it', 'you', 'bis', 'see', 'good', 'gute'].includes(w))) return null;
+  return PRIORITY.find((e) => found.has(e)) ?? '👍';
+}
+
 // Das stärkste verfügbare Modell mit Werkzeug-Unterstützung
 const AGENT_PREFERENCE = [
   /^groq:openai\/gpt-oss-120b$/,
@@ -104,6 +143,8 @@ function systemPrompt() {
     'Prüfe wichtige Fakten bei Bedarf mit einer zweiten Suche. Bevorzuge seriöse Quellen (offizielle Seiten, Wikipedia, bekannte Medien). Erfinde keine Fakten oder Links.',
     'Wenn der Nutzer eine Webseite, App oder ein Spiel möchte: Schreibe EINE komplette HTML-Datei (<!doctype html>, <meta name="viewport">, CSS in <style>, JS in <script>, ohne externe Dateien außer bei Bedarf von cdnjs/jsdelivr), schön gestaltet und fürs Handy geeignet. Prüfe sie mit validate_html, behebe alle gemeldeten Probleme und prüfe erneut. Gib sie am Ende vollständig in einem ```html-Block aus, mit 1–2 Sätzen davor.',
     'Wenn der Nutzer Bilder angehängt hat, bekommst du eine Beschreibung davon als [Bild …]. Nutze sie, als hättest du das Bild selbst gesehen.',
+    `Du kannst auf die Nachricht des Nutzers mit genau EINEM Emoji reagieren (wie in einem Messenger), indem du ganz an den Anfang deiner Antwort [[react:EMOJI]] schreibst. Erlaubt: ${REACTIONS.join(' ')}. Mach das, wenn es passt (z. B. 🎉 bei guten Nachrichten, 😂 bei Witzen, ❤️ bei Dank, 🔥 bei coolen Ideen, ✅ wenn eine Aufgabe erledigt ist), aber nicht bei jeder Nachricht.`,
+    'Braucht eine Nachricht keine Antwort (z. B. „ok“, „danke“, „passt“, „gute Nacht“), antworte NUR mit der Reaktion, ohne Text.',
     'Antworte in der Sprache des Nutzers, klar gegliedert mit Markdown. Wenn du Quellen genutzt hast, liste sie am Ende unter „Quellen“ als Links auf.',
   ].join('\n');
 }
@@ -465,8 +506,9 @@ async function describeImages(messages, signal, onStep) {
 
 const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 
-export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {} }) {
-  if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources });
+export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {} }) {
+  onReact('👀'); // „hab’s gesehen, bin dran“
+  if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources, onReact });
   const model = await pickModel(AGENT_PREFERENCE);
   if (!model) throw new Error(t('Agent X braucht einen Groq-Schlüssel (GROQ_API_KEY), damit er Werkzeuge benutzen kann.', 'Agent X needs a Groq key (GROQ_API_KEY) to use tools.'));
 
@@ -478,7 +520,10 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
 
   // Am Ende: wurde eine Webseite geprüft, aber nicht mitgeschickt, hängen wir die geprüfte Fassung an
   const finish = (content) => {
-    let text = content || t('Ich konnte leider keine Antwort finden.', 'Sorry, I could not find an answer.');
+    const split = splitReaction(content);
+    onReact(split.reaction); // 👀 durch die passende Reaktion ersetzen (oder entfernen)
+    if (split.reaction && !split.text.trim() && !ctx.lastHtml) return undefined; // nur Emoji, kein Text
+    let text = split.text || t('Ich konnte leider keine Antwort finden.', 'Sorry, I could not find an answer.');
     if (ctx.lastHtml && !hasHtmlBlock(text) && /<\/html>/i.test(ctx.lastHtml)) text += `\n\n\`\`\`html\n${ctx.lastHtml.trim()}\n\`\`\``;
     return emitText(text, onText, signal);
   };
@@ -519,7 +564,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   return finish(final.content);
 }
 
-async function demoAgent({ messages, onStep, onText, onReasoning, onSources, signal }) {
+async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onReact, signal }) {
   const lastMsg = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
   const q = Array.isArray(lastMsg) ? lastMsg.filter((p) => p.type === 'text').map((p) => p.text).join(' ') : String(lastMsg);
   const pics = Array.isArray(lastMsg) ? lastMsg.filter((p) => p.type === 'image_url').length : 0;
@@ -530,6 +575,7 @@ async function demoAgent({ messages, onStep, onText, onReasoning, onSources, sig
     await sleep(500); onStep({ kind: 'check', text: 'Webseite' });
     await sleep(500); onStep({ kind: 'check', text: 'Webseite' });
     const page = '<!doctype html>\n<html lang="de">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>Demo</title>\n<style>body{font-family:system-ui;display:grid;place-items:center;min-height:100vh;margin:0;background:#f6f5f1}button{font-size:20px;padding:12px 20px;border-radius:12px;border:0;background:#1f1e1c;color:#fff}</style>\n</head>\n<body>\n<button id="b">Klick mich: 0</button>\n<script>let n=0;b.onclick=()=>{b.textContent=`Klick mich: ${++n}`;};</script>\n</body>\n</html>';
+    onReact('🔥');
     return emitText(`**Agent X (Demo)** – ich habe die Seite gebaut und mit \`validate_html\` geprüft.\n\n\`\`\`html\n${page}\n\`\`\``, onText, signal, 6, 8);
   }
   await sleep(400); onStep({ kind: 'search', text: q.slice(0, 60) });
@@ -539,5 +585,6 @@ async function demoAgent({ messages, onStep, onText, onReasoning, onSources, sig
   await sleep(700); onStep({ kind: 'read', text: 'example.com/artikel' });
   await sleep(500); onStep({ kind: 'calc', text: '21 * 2' });
   await sleep(400);
+  onReact(/witz|joke/i.test(q) ? '😂' : null);
   await emitText(`**Agent X (Demo)**\n\n${pics ? 'Auf dem Bild sehe ich (Demo) etwas Schönes. ' : ''}Ich habe parallel gesucht, Wikipedia gelesen und gerechnet: 21 × 2 = **${calculate('21*2')}**.\n\nMit einem Groq-Schlüssel arbeite ich mit echten Werkzeugen.\n\n**Quellen**\n- [example.com](https://example.com)`, onText, signal);
 }

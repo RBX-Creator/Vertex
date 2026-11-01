@@ -368,7 +368,7 @@ export function modelKey(id) {
   return id.replace(/^openrouter:/, '').replace(/#search$/, '');
 }
 export async function describeModel(id) {
-  if (id === 'agent') return { name: 'Agent X', maker: 'VAIs', icon: null };
+  if (id === 'agent') return { name: 'Agent X', maker: 'VAIs', icon: 'vais' };
   const live = await findModel(id) ?? await findModel(`openrouter:${id}`);
   if (live) return { name: live.name, maker: live.maker, icon: live.icon };
   const upstream = modelKey(id).replace(/^(gemini|groq|demo):/, '');
