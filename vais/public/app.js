@@ -73,6 +73,58 @@ const store = {
   get(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
   set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* egal */ } },
 };
+// ── Offline: letzte Chats auf dem Gerät, damit man sie ohne Internet lesen kann ──
+const OFFLINE_KEY = 'vais_offline_v1';
+const OFFLINE_CHATS = 25;
+let offline = false;
+const offlineData = () => store.get(OFFLINE_KEY, null);
+function slimForOffline(data) {
+  const big = (url) => typeof url === 'string' && url.startsWith('data:') && url.length > 80_000;
+  return {
+    ...data,
+    savedAt: Date.now(),
+    turns: (data.turns ?? []).map((tn) => ({
+      ...tn,
+      attachments: (tn.attachments ?? []).map((a) => (a.kind === 'image' && big(a.url) ? { kind: 'file', name: `🖼 ${a.name}`, text: '' } : a.kind === 'file' ? { kind: 'file', name: a.name, text: (a.text ?? '').slice(0, 4000) } : a)),
+      answers: tn.answers.map((a) => {
+        const images = (a.images ?? []).filter((img) => !big(img?.url ?? img));
+        const lost = (a.images?.length ?? 0) - images.length;
+        return { ...a, thinking: '', images, text: a.text || (lost ? t('_(Bild – offline nicht gespeichert)_', '_(Image – not saved offline)_') : '') };
+      }),
+    })),
+  };
+}
+function saveOffline(patch) {
+  const cur = offlineData() ?? { chats: {}, order: [] };
+  const next = { ...cur, ...patch, savedAt: Date.now() };
+  for (let keep = OFFLINE_CHATS; keep >= 0; keep -= 5) {
+    next.order = (next.order ?? []).slice(0, keep);
+    next.chats = Object.fromEntries(next.order.filter((id) => next.chats?.[id]).map((id) => [id, next.chats[id]]));
+    try { localStorage.setItem(OFFLINE_KEY, JSON.stringify(next)); return; } catch { /* zu groß → weniger Chats */ }
+  }
+}
+function rememberChat(data) {
+  if (!data?.id) return;
+  const cur = offlineData() ?? { chats: {}, order: [] };
+  saveOffline({ chats: { ...cur.chats, [data.id]: slimForOffline(data) }, order: [data.id, ...(cur.order ?? []).filter((id) => id !== data.id)] });
+}
+async function refreshOfflineChat(id) {
+  try {
+    const res = await fetch(`/api/chat/${encodeURIComponent(id)}`);
+    if (res.ok) rememberChat(await res.json());
+  } catch { /* egal */ }
+}
+async function forgetOffline() {
+  try { localStorage.removeItem(OFFLINE_KEY); } catch { /* egal */ }
+  try { for (const key of await caches.keys()) { const c = await caches.open(key); await c.delete('/'); } } catch { /* egal */ }
+}
+function setOffline(on) {
+  offline = on;
+  document.body.classList.toggle('is-offline', on);
+  $('#offline-banner').hidden = !on;
+  updateSend?.();
+}
+
 const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 let toastTimer;
@@ -753,6 +805,7 @@ async function send() {
   const text = el.prompt.value.trim();
   const attachments = state.pending;
   if ((!text && !attachments.length) || busy()) return;
+  if (offline) return toast(t('Du bist offline – Chats kannst du nur lesen.', 'You are offline – chats are read-only.'));
   if (pendingReads) return toast(t('Anhänge werden noch geladen …', 'Attachments are still loading …'));
   if (!state.models.length) return toast(t('Modelle konnten nicht geladen werden. Lade die Seite neu.', 'Models could not be loaded. Reload the page.'));
   const hasImages = attachments.some((a) => a.kind === 'image');
@@ -817,7 +870,8 @@ async function runTurn(chat, text, attachments) {
 
   await Promise.all(chat.turns[index].answers.map((_, side) => runSide(index, side)));
   if (state.chat === chat) afterTurn();
-  loadExtras(chat, index);
+  await loadExtras(chat, index);
+  refreshOfflineChat(chat.id);
 }
 
 // Nach einer Antwort: automatischer Titel (beim ersten Mal) + 3 Vorschläge für die nächste Frage
@@ -869,6 +923,7 @@ el.vote.addEventListener('click', async (e) => {
     const data = await post('/api/chat/vote', { chatId: chat.id, winner: btn.dataset.vote });
     chat.names = data.models;
     chat.winner = data.winner;
+    refreshOfflineChat(chat.id);
     updateLabels();
     el.vote.hidden = true;
     el.voteResult.innerHTML = chat.mode === 'battle'
@@ -1458,7 +1513,8 @@ function toggleAccount(open) {
 }
 avatar.addEventListener('click', (e) => { e.stopPropagation(); toggleAccount($('#account-menu').hidden); });
 $('#logout').addEventListener('click', async () => {
-  await fetch('/api/auth/logout', { method: 'POST' });
+  await forgetOffline();
+  await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
   location.replace('/login');
 });
 
@@ -1492,14 +1548,22 @@ window.addEventListener('popstate', route);
 async function loadChat(id) {
   for (const c of state.controllers) c.abort();
   let data;
+  const cached = offlineData()?.chats?.[id];
   try {
+    if (offline) throw new TypeError('offline');
     const res = await fetch(`/api/chat/${encodeURIComponent(id)}`);
     if (res.status === 401) return location.replace('/login');
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t('Chat nicht gefunden.', 'Chat not found.'));
     data = await res.json();
+    rememberChat(data);
   } catch (err) {
-    toast(err.message);
-    return go('');
+    if (err instanceof TypeError && cached) {
+      data = cached; // kein Internet: gespeicherte Fassung zeigen
+      if (!offline) setOffline(true);
+    } else {
+      toast(err instanceof TypeError ? t('Dieser Chat ist offline nicht gespeichert.', 'This chat is not saved offline.') : err.message);
+      return go('');
+    }
   }
   state.chat = {
     id: data.id,
@@ -1573,12 +1637,23 @@ async function openDrawer() {
   if (historyDirty || !historyItems.length) {
     if (!historyItems.length) el.dList.innerHTML = `<p class="drawer-empty">${t('Lädt …', 'Loading …')}</p>`;
     try {
+      if (offline) throw new TypeError('offline');
       const res = await fetch('/api/chat/list');
       historyItems = (await res.json()).chats ?? [];
       historyDirty = false;
+      saveOffline({ list: historyItems.slice(0, 200) });
     } catch {
-      el.dList.innerHTML = `<p class="drawer-empty">${t('Verlauf konnte nicht geladen werden.', 'History could not be loaded.')}</p>`;
-      return;
+      const saved = offlineData();
+      if (saved?.order?.length) {
+        // Offline: nur die Chats zeigen, die auf dem Gerät gespeichert sind
+        historyItems = saved.order.filter((id) => saved.chats?.[id]).map((id) => {
+          const c = saved.chats[id];
+          return { ...(saved.list?.find((x) => x.id === id) ?? {}), id, title: c.title, mode: c.mode, updated: c.savedAt ?? saved.savedAt };
+        }).sort((a, b) => b.updated - a.updated);
+      } else {
+        el.dList.innerHTML = `<p class="drawer-empty">${t('Verlauf konnte nicht geladen werden.', 'History could not be loaded.')}</p>`;
+        return;
+      }
     }
   }
   renderHistory();
@@ -1885,6 +1960,7 @@ $('#set-clear').addEventListener('click', async () => {
   if (!confirm(t('Wirklich alle Chats löschen? Das kann nicht rückgängig gemacht werden.', 'Really delete all chats? This cannot be undone.'))) return;
   try {
     await post('/api/chat/clear', {});
+    saveOffline({ chats: {}, order: [], list: [] });
     historyItems = [];
     historyDirty = true;
     if (state.chat) go('');
@@ -1902,6 +1978,7 @@ $('#set-delete').addEventListener('submit', async (e) => {
   if (!confirm(t('Konto wirklich endgültig löschen? Alle Chats gehen verloren.', 'Really delete your account permanently? All chats will be lost.'))) return;
   try {
     await post('/api/auth/delete', { password });
+    await forgetOffline();
     location.replace('/login');
   } catch (err) {
     setMsg(form, err.message, 'error');
@@ -1910,9 +1987,20 @@ $('#set-delete').addEventListener('submit', async (e) => {
 
 // ── Start ─────────────────────────────────────────────────────────
 async function init() {
-  const me = await fetch('/api/auth/me');
-  if (!me.ok) return location.replace('/login');
-  const { user } = await me.json();
+  let user;
+  try {
+    const me = await fetch('/api/auth/me');
+    if (me.status === 401) { await forgetOffline(); return location.replace('/login'); }
+    if (!me.ok) throw new TypeError('server');
+    user = (await me.json()).user;
+    saveOffline({ email: user.email });
+  } catch (err) {
+    const saved = offlineData();
+    if (!(err instanceof TypeError) || !saved?.email) return location.replace('/login');
+    user = { email: saved.email };
+    setOffline(true);
+  }
+  window.addEventListener('online', () => { if (offline) location.reload(); });
   avatar.textContent = user.email[0].toUpperCase();
   avatar.setAttribute('aria-label', `${t('Konto', 'Account')}: ${user.email}`);
   $('#menu-email').textContent = user.email;
@@ -1925,12 +2013,15 @@ async function init() {
   renderControls();
   updateSend();
   try {
+    if (offline) throw new Error('offline');
     const res = await fetch('/api/chat/models');
     const data = await res.json();
     state.models = data.models ?? [];
     $('#demo-note').hidden = !data.demo;
+    saveOffline({ models: state.models });
   } catch {
-    toast(t('Modelle konnten nicht geladen werden.', 'Models could not be loaded.'));
+    if (offline) state.models = offlineData()?.models ?? [];
+    else toast(t('Modelle konnten nicht geladen werden.', 'Models could not be loaded.'));
   }
   // Gespeicherte Auswahl prüfen, sonst die ersten Modelle nehmen
   state.picks = [0, 1].map((i) => (modelById(state.picks[i]) ? state.picks[i] : state.models[i]?.id ?? null));

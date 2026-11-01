@@ -1451,3 +1451,15 @@ a.menu-item { color: inherit; text-decoration: none; box-sizing: border-box; }
 .followups .followup:nth-child(3) { animation: fadeUp .35s .12s ease both; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .followups, .followup { animation: none !important; transition: none; } }
+
+/* ── Offline ──────────────────────────────────────────────────────── */
+.offline-banner {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin: 0 16px 6px; padding: 7px 12px; border-radius: 999px;
+  background: var(--surface-2); color: var(--muted); font-size: 13px; font-weight: 500;
+  animation: fadeUp .3s ease both;
+}
+.offline-banner[hidden] { display: none; }
+.offline-banner svg { width: 16px; height: 16px; flex: none; }
+.is-offline .composer { opacity: .6; }
+.is-offline .card-btn[data-act="regen"], .is-offline .turn-user [data-act="edit"], .is-offline .followups { display: none; }
