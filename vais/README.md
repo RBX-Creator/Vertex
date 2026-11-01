@@ -5,7 +5,7 @@ KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand:
 - **Agent X**: arbeitet selbstständig in mehreren Schritten (Websuche, Webseiten lesen, Rechnen, Datum/Uhrzeit) mit dem stärksten verfügbaren Modell; braucht `GROQ_API_KEY`
 - **Chat** in drei Modi: **Battle** (2 anonyme Modelle, Namen erst nach der Abstimmung), **Side by Side** (2 Modelle deiner Wahl), **Direkt** (1 Modell)
 - Antworten nebeneinander (PC) bzw. zum Wischen (Handy), Abstimmen mit „A ist besser“, Unentschieden, Beide schlecht, „B ist besser“
-- **Art der Anfrage** (zweites Menü): Auto, Text, Code (mit Vorschau für erstellte Webseiten), Websuche; Bild und Video folgen
+- **Art der Anfrage** (zweites Menü): Auto, Text, Code (mit Vorschau für erstellte Webseiten), Websuche, **Bild** (Bilder aus Text, kostenlos über Pollinations – ohne Schlüssel; mit `POLLINATIONS_API_KEY` mehr Modelle und Bild-Battles); Video folgt
 - **Anhänge (+)**: Bilder (werden verkleinert, für Modelle mit 👁), **PDFs** (Text wird im Browser ausgelesen, bis ca. 60.000 Zeichen) und Textdateien/Code bis 200 KB; auch per Einfügen oder Drag & Drop
 - **Chats teilen**: Link erstellen, den jeder ohne Konto lesen kann (`/s/…`); Teilen jederzeit beendbar, Dateiinhalte werden nicht mitgeteilt
 - **Meine Statistik**: Chats, Fragen, Stimmen, 👍, genutzte Modi, Lieblings- und meistgenutzte Modelle

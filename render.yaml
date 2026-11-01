@@ -33,6 +33,9 @@ services:
         sync: false
       - key: MISTRAL_API_KEY
         sync: false
+      # Bilder: funktionieren ohne Schlüssel; mit Pollinations-Schlüssel mehr Modelle
+      - key: POLLINATIONS_API_KEY
+        sync: false
       # Datenbank bei Turso
       - key: DATABASE_URL
         sync: false

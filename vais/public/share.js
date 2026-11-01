@@ -61,7 +61,16 @@ function renderTurn(chat, turn) {
     if (won) lab.append(el('span', 'badge', ` ✓ ${t('Gewinner', 'Winner')}`));
     head.append(lab);
     const body = el('div', 'card-body md');
-    body.innerHTML = a.text ? markdown(a.text) : `<p class="card-error" style="color:var(--muted)">${t('Noch keine Antwort.', 'No answer yet.')}</p>`;
+    body.innerHTML = a.text ? markdown(a.text) : (a.images?.length ? '' : `<p class="card-error" style="color:var(--muted)">${t('Noch keine Antwort.', 'No answer yet.')}</p>`);
+    for (const src of a.images ?? []) {
+      if (!/^data:image\//.test(src)) continue;
+      const fig = el('figure', 'gen-img');
+      const img = el('img');
+      img.src = src;
+      img.alt = turn.user || '';
+      fig.append(img);
+      body.append(fig);
+    }
     body.querySelectorAll('a').forEach((link) => { link.target = '_blank'; link.rel = 'noopener noreferrer'; });
     card.append(head, body);
     if (a.sources?.length) {

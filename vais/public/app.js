@@ -23,13 +23,14 @@ const ICON = {
 // Zweites Menü: Art der Anfrage (wie „Modality“ bei Arena), von oben nach unten
 const MODALITIES = {
   video: { label: t('Video', 'Video'), desc: t('Videos erstellen', 'Create videos'), soon: true },
-  image: { label: t('Bild', 'Image'), desc: t('Bilder erstellen', 'Create images'), soon: true },
+  image: { label: t('Bild', 'Image'), desc: t('Bilder aus Text erstellen', 'Create images from text'), cap: 'image' },
   web: { label: t('Websuche', 'Web search'), desc: t('Mit aktuellen Infos aus dem Internet', 'With current info from the internet'), cap: 'web' },
   code: { label: 'Code', desc: t('Webseiten und Apps programmieren', 'Build websites and apps'), cap: 'code' },
   text: { label: 'Text', desc: t('Chatten mit Text-Modellen', 'Chat with text models'), cap: 'text' },
   auto: { label: 'Auto', desc: t('Wählt automatisch passende Modelle', 'Picks suitable models automatically'), cap: 'text' },
 };
 Object.assign(ICON, {
+  download: svg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>'),
   speak: svg('<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>'),
   speakStop: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>',
   edit: svg('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>'),
@@ -251,7 +252,7 @@ el.modalityMenu.addEventListener('click', (e) => {
 let sheetSlot = 0;
 let sheetCap = 'text';
 const CAP_EMPTY = {
-  image: t('Bild-Modelle kommen bald.', 'Image models are coming soon.'),
+  image: t('Gerade ist kein Bild-Modell verfügbar.', 'No image model is available right now.'),
   web: t('Für Websuche bitte einen Groq-Schlüssel eintragen (GROQ_API_KEY).', 'For web search, please add a Groq key (GROQ_API_KEY).'),
 };
 function renderModelList() {
@@ -526,8 +527,9 @@ function updateCard(turnIndex, side) {
   paintLabel(card, side);
   const actBtn = (name) => card.querySelector(`.card-actions [data-act="${name}"], .card-foot [data-act="${name}"]`);
   actBtn('regen').disabled = !isLast || a.status === 'streaming';
+  const pics = a.images ?? [];
   actBtn('copy').disabled = !a.text;
-  actBtn('expand').disabled = !a.text;
+  actBtn('expand').disabled = !a.text && !pics.length;
   actBtn('speak').disabled = !a.text || a.status === 'streaming';
   actBtn('preview').hidden = !(a.status === 'done' && htmlBlock(a.text));
   const foot = $('.card-foot', card);
@@ -535,7 +537,7 @@ function updateCard(turnIndex, side) {
     foot.hidden = a.status === 'streaming';
     $('[data-act="like"]', foot).setAttribute('aria-pressed', String(a.feedback === 1));
     $('[data-act="dislike"]', foot).setAttribute('aria-pressed', String(a.feedback === -1));
-    $('[data-act="like"]', foot).hidden = $('[data-act="dislike"]', foot).hidden = !a.text;
+    $('[data-act="like"]', foot).hidden = $('[data-act="dislike"]', foot).hidden = !a.text && !pics.length;
   }
 
   const body = $('.card-body', card);
@@ -545,7 +547,21 @@ function updateCard(turnIndex, side) {
   renderSteps(card, a);
   renderSources(card, a, turnIndex === chat.turns.length - 1);
   if (pv.turn === turnIndex && pv.side === side) refreshPreview();
-  if (part || (codeChat() && a.status === 'streaming')) {
+  if (pics.length || (chat.modality === 'image' && a.status === 'streaming')) {
+    // Bild-Antwort: Platzhalter beim Erstellen, danach das Bild mit Download
+    body.innerHTML = pics.length
+      ? pics.map((src, i) => `<figure class="gen-img"><img alt="${escapeHtml(chat.turns[turnIndex].user || t('Erstelltes Bild', 'Generated image'))}" data-pic="${i}"><a class="pic-dl" data-pic-dl="${i}" aria-label="${t('Bild herunterladen', 'Download image')}" title="${t('Herunterladen', 'Download')}">${ICON.download}</a></figure>`).join('')
+      : `<div class="pic-wait"><span class="shimmer">${t('Erstellt Bild …', 'Creating image …')}</span>${a.startedAt ? ` <small data-since="${a.startedAt}"></small>` : ''}</div>`;
+    body.querySelectorAll('[data-pic]').forEach((img) => { img.src = pics[Number(img.dataset.pic)]; });
+    body.querySelectorAll('[data-pic-dl]').forEach((link) => {
+      const src = pics[Number(link.dataset.picDl)];
+      link.href = src;
+      link.download = `vais-${Date.now()}.${(/^data:image\/(\w+)/.exec(src)?.[1] || 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg')}`;
+    });
+    if (a.status === 'error') body.insertAdjacentHTML('beforeend', `<p class="card-error"></p>${isLast ? `<button class="retry" data-act="regen">${t('Erneut versuchen', 'Try again')}</button>` : ''}`);
+    if (a.status === 'error') $('.card-error', body).textContent = a.error;
+    tickTimers();
+  } else if (part || (codeChat() && a.status === 'streaming')) {
     // Webseite: Code als kompakter Datei-Chip statt riesigem Codeblock, dazu Fortschritt
     const lines = part ? part.code.split('\n').filter((l, i, all) => l || i < all.length - 1).length : 0;
     const chip = part ? `<button type="button" class="code-chip" data-act="code">${ICON['m-code']}<span>index.html</span><small>${lines} ${t('Zeilen', 'lines')}</small></button>` : '';
@@ -667,7 +683,7 @@ function scheduleUpdate(turnIndex, side) {
 async function runSide(turnIndex, side) {
   const chat = state.chat;
   const a = chat.turns[turnIndex].answers[side];
-  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, startedAt: Date.now(), buildMs: 0 });
+  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, images: [], startedAt: Date.now(), buildMs: 0 });
   updateCard(turnIndex, side);
 
   const ctrl = new AbortController();
@@ -713,14 +729,16 @@ async function runSide(turnIndex, side) {
         }
         if (msg.step) { a.steps.push(msg.step); scheduleUpdate(turnIndex, side); }
         if (msg.sources) { a.sources = msg.sources; scheduleUpdate(turnIndex, side); }
+        if (msg.image) { a.images = [...(a.images ?? []), msg.image]; scheduleUpdate(turnIndex, side); }
         if (msg.done) finished = true;
       }
     }
     if (!finished) throw new Error(t('Die Verbindung wurde unterbrochen.', 'The connection was interrupted.'));
-    a.status = a.text ? 'done' : 'error';
-    if (!a.text) a.error = t('Das Modell hat keine Antwort geliefert.', 'The model returned no answer.');
+    const got = a.text || a.images?.length;
+    a.status = got ? 'done' : 'error';
+    if (!got) a.error = t('Das Modell hat keine Antwort geliefert.', 'The model returned no answer.');
   } catch (err) {
-    if (ctrl.signal.aborted) a.status = a.text ? 'done' : 'stopped';
+    if (ctrl.signal.aborted) a.status = a.text || a.images?.length ? 'done' : 'stopped';
     else Object.assign(a, { status: 'error', error: err.message || t('Das Modell konnte nicht antworten.', 'The model could not answer.') });
   } finally {
     a.buildMs = Date.now() - a.startedAt;
@@ -735,7 +753,7 @@ function afterTurn() {
   if (!chat || chat.mode === 'direct' || chat.mode === 'agent' || chat.winner) return;
   const last = chat.turns.at(-1);
   if (!last) return;
-  el.vote.hidden = !last.answers.every((a) => a.status === 'done' && a.text);
+  el.vote.hidden = !last.answers.every((a) => a.status === 'done' && (a.text || a.images?.length));
 }
 
 async function send() {
@@ -899,7 +917,8 @@ el.thread.addEventListener('click', async (e) => {
     openPreview(turnIndex, side, act === 'code' ? 'code' : 'view');
   } else if (act === 'expand') {
     $('#expand-title').textContent = labelFor(state.chat, side);
-    $('#expand-body').innerHTML = markdown(a.text);
+    $('#expand-body').innerHTML = a.text ? markdown(a.text) : '';
+    for (const src of a.images ?? []) $('#expand-body').append(Object.assign(document.createElement('img'), { src, className: 'att-full', alt: '' }));
     $('#expand').hidden = false;
     $('#expand [data-close]').focus();
   } else if (act === 'regen') {

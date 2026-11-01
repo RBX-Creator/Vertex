@@ -1373,3 +1373,38 @@ body { overflow: hidden; }
 .share-sources a { color: inherit; }
 .share-end { display: grid; justify-items: center; gap: 14px; margin: 48px 0 0; padding: 28px 16px; border-top: 1px solid var(--border); text-align: center; color: var(--muted); }
 .share-end .btn { max-width: 260px; text-decoration: none; }
+
+/* ── Erstellte Bilder ──────────────────────────────────── */
+.gen-img { position: relative; margin: 0 0 8px; }
+.gen-img img { display: block; width: 100%; max-width: 560px; aspect-ratio: 1; object-fit: cover; border-radius: 14px; background: var(--surface-2); }
+.answers:not(.single) .gen-img img { max-width: none; }
+.pic-dl {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, .55);
+  color: #fff;
+}
+.pic-dl svg { width: 20px; height: 20px; }
+.answers.single .pic-dl { right: auto; left: min(calc(100% - 50px), 510px); }
+.pic-wait {
+  width: 100%;
+  max-width: 560px;
+  aspect-ratio: 1;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+  text-align: center;
+  border-radius: 14px;
+  background: linear-gradient(110deg, var(--surface-2) 30%, var(--surface) 50%, var(--surface-2) 70%);
+  background-size: 250% 100%;
+  animation: shimmer 1.6s linear infinite;
+  color: var(--muted);
+}
+.pic-wait .shimmer { color: var(--text); font-weight: 500; }
+.pic-wait small { color: var(--muted); }

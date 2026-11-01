@@ -24,6 +24,40 @@ const EXTRA = (process.env.OPENROUTER_EXTRA_MODELS || '').split(',').map((s) => 
 
 export const demoMode = !Object.values(PROVIDERS).some((p) => p.key);
 
+// Bilder: Pollinations funktioniert ohne Schlüssel (wenige Modelle); mit POLLINATIONS_API_KEY gibt es mehr.
+// Mit DISABLE_FREE_IMAGES=true lässt sich der Bild-Modus abschalten.
+const IMAGES = {
+  key: process.env.POLLINATIONS_API_KEY?.trim(),
+  enabled: process.env.DISABLE_FREE_IMAGES !== 'true',
+  label: 'Pollinations',
+  env: 'POLLINATIONS_API_KEY',
+};
+const IMAGE_MAKERS = [
+  [/flux|kontext/i, 'Black Forest Labs', 'bfl'],
+  [/sana|nvidia/i, 'NVIDIA', 'nvidia-color'],
+  [/z-image|qwen|wan|tongyi/i, 'Alibaba', 'qwen-color'],
+  [/gpt|openai/i, 'OpenAI', 'openai'],
+  [/seedream|bytedance/i, 'ByteDance', 'bytedance-color'],
+  [/gemini|imagen|nano/i, 'Google', 'google-color'],
+];
+function imageModel(name, publisher) {
+  const hit = IMAGE_MAKERS.find(([re]) => re.test(name) || re.test(publisher || ''));
+  return {
+    id: `pollinations:${name}`, provider: 'pollinations', upstream: name,
+    name: name.split('/').pop(), maker: hit?.[1] ?? publisher ?? 'Pollinations', icon: hit?.[2] ?? 'pollinations', caps: ['image'],
+  };
+}
+async function listImageModels() {
+  if (IMAGES.key) {
+    const list = await getJson('https://gen.pollinations.ai/image/models', { Authorization: `Bearer ${IMAGES.key}` });
+    return list
+      .filter((m) => (m.output_modalities ?? ['image']).includes('image') && !m.paid_only)
+      .map((m) => imageModel(m.name, m.publisher));
+  }
+  const names = await getJson('https://image.pollinations.ai/models');
+  return (Array.isArray(names) ? names : []).filter((n) => typeof n === 'string').map((n) => imageModel(n));
+}
+
 // ── Logos & Hersteller ────────────────────────────────────────────
 // Schlüssel = Präfix der Modell-ID beim Anbieter (z. B. "openai/gpt-oss-120b")
 const MAKERS = {
@@ -169,19 +203,23 @@ const DEMO_MODELS = [
   { id: 'demo:dune', provider: 'demo', upstream: 'dune', name: 'dune-demo', maker: 'VAIs Demo', icon: null, caps: ['text'] },
   { id: 'demo:echo', provider: 'demo', upstream: 'echo', name: 'echo-search-demo', maker: 'VAIs Demo', icon: null, caps: ['web'] },
   { id: 'demo:fjord', provider: 'demo', upstream: 'fjord', name: 'fjord-search-demo', maker: 'VAIs Demo', icon: null, caps: ['web'] },
+  { id: 'demo:prisma', provider: 'demo', upstream: 'prisma', name: 'prisma-image-demo', maker: 'VAIs Demo', icon: null, caps: ['image'] },
+  { id: 'demo:quarz', provider: 'demo', upstream: 'quarz', name: 'quarz-image-demo', maker: 'VAIs Demo', icon: null, caps: ['image'] },
 ];
 
-const ORDER = { gemini: 0, groq: 1, cerebras: 2, mistral: 3, openrouter: 4 };
+const ORDER = { gemini: 0, groq: 1, cerebras: 2, mistral: 3, openrouter: 4, pollinations: 5 };
 const cache = {}; // provider → { at, list }
 
 export async function listModels() {
   if (demoMode) return DEMO_MODELS;
-  const lists = await Promise.all(Object.entries(PROVIDERS).map(async ([name, p]) => {
+  const sources = Object.entries(PROVIDERS).map(([name, p]) => [name, p, () => LISTERS[name](p)]);
+  if (IMAGES.enabled) sources.push(['pollinations', { ...IMAGES, key: 'free' }, listImageModels]);
+  const lists = await Promise.all(sources.map(async ([name, p, lister]) => {
     if (!p.key) return [];
     const c = cache[name];
     if (c?.list.length && Date.now() - c.at < 30 * 60 * 1000) return c.list;
     try {
-      const list = await LISTERS[name](p);
+      const list = await lister();
       if (list.length) cache[name] = { at: Date.now(), list };
     } catch (err) {
       console.error(`Modell-Liste von ${p.label} konnte nicht geladen werden:`, err.message);
@@ -374,6 +412,47 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
     }
   }
   }
+}
+
+// ── Bilder erstellen ──────────────────────────────────────────────
+// Ohne Schlüssel erlaubt Pollinations nur wenige gleichzeitige Anfragen → nacheinander abarbeiten
+let imageQueue = Promise.resolve();
+export function generateImage({ model, prompt, signal }) {
+  const job = imageQueue.then(() => (signal?.aborted ? null : makeImage({ model, prompt, signal })));
+  imageQueue = job.catch(() => {});
+  return job;
+}
+
+async function makeImage({ model, prompt, signal }) {
+  const [provider, ...rest] = model.split(':');
+  const upstream = rest.join(':');
+  const text = String(prompt).replace(/\s+/g, ' ').trim().slice(0, 1500);
+  if (provider === 'demo') return demoImage(upstream, text);
+  const seed = Math.floor(Math.random() * 1_000_000);
+  const query = `model=${encodeURIComponent(upstream)}&width=1024&height=1024&seed=${seed}&nologo=true&private=true`;
+  const url = IMAGES.key
+    ? `https://gen.pollinations.ai/image/${encodeURIComponent(text)}?${query}`
+    : `https://image.pollinations.ai/prompt/${encodeURIComponent(text)}?${query}`;
+  const res = await fetch(url, {
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000),
+    headers: IMAGES.key ? { Authorization: `Bearer ${IMAGES.key}` } : {},
+  });
+  const type = res.headers.get('content-type') || '';
+  if (!res.ok || !type.startsWith('image/')) {
+    const body = await res.text().catch(() => '');
+    throw fail(model, res.ok ? 502 : res.status, body.slice(0, 200), IMAGES);
+  }
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > 4_000_000) throw new Error(t('Das Bild ist zu groß.', 'The image is too large.'));
+  return `data:${type.split(';')[0]};base64,${buf.toString('base64')}`;
+}
+
+// Platzhalter-Bild im Demo-Modus (SVG mit Farbverlauf und dem Text)
+function demoImage(name, text) {
+  const hue = [...text].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, name === 'quarz' ? 200 : 20);
+  const safe = text.replace(/[<>&"]/g, '').slice(0, 60);
+  const svgText = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue} 70% 55%)"/><stop offset="1" stop-color="hsl(${(hue + 80) % 360} 70% 35%)"/></linearGradient></defs><rect width="1024" height="1024" fill="url(#g)"/><text x="512" y="520" font-family="sans-serif" font-size="44" fill="#fff" text-anchor="middle">${safe}</text></svg>`;
+  return new Promise((resolve) => setTimeout(() => resolve(`data:image/svg+xml;base64,${Buffer.from(svgText).toString('base64')}`), 900));
 }
 
 // Eine Antwort ohne Streaming, optional mit Werkzeugen (für Agent X)
