@@ -345,3 +345,15 @@ test('Mitteilungen erreichen alle bzw. nur ausgewählte Personen', async () => {
   await one.json('/api/chat/announcements/read', { id: first.id });
   assert.deepEqual((await one.json('/api/chat/announcements')).data.announcements.map((x) => x.title), ['Nur für dich']);
 });
+
+test('Inkognito-Chats tauchen nirgends auf und verschwinden beim Verlassen', async () => {
+  const c = await signUp('inco@example.com');
+  const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
+  const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'Geheim', incognito: true });
+  await stream(c, start.data.id, 'Geheime Frage');
+  assert.equal((await c.json(`/api/chat/${start.data.id}`)).data.incognito, true);
+  assert.equal((await c.json('/api/chat/list')).data.chats.length, 0);
+  assert.equal((await (await c.call('/api/chat/export')).json()).chats.length, 0);
+  await c.json('/api/chat/forget', { chatId: start.data.id });
+  assert.equal((await c.json(`/api/chat/${start.data.id}`)).status, 404);
+});

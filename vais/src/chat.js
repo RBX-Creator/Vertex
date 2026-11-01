@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { randomBytes, createHash } from 'node:crypto';
 import { get, run, all, purgeChats, getSetting, logEvent } from './db.js';
 import { t } from './i18n.js';
@@ -139,9 +139,10 @@ chat.post('/start', wrap(async (req, res) => {
 
   const id = randomBytes(12).toString('base64url');
   const now = Date.now();
+  const incognito = req.body?.incognito ? 1 : null; // wird nicht gespeichert (verschwindet beim Verlassen)
   await run(
-    'INSERT INTO chats (id, user_id, mode, modality, model_a, model_b, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    id, req.user.id, mode, modality, picked[0], picked[1] ?? null, String(title ?? '').trim().slice(0, 80) || t('Neuer Chat', 'New chat'), now, now,
+    'INSERT INTO chats (id, user_id, mode, modality, model_a, model_b, title, created_at, updated_at, incognito) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    id, req.user.id, mode, modality, picked[0], picked[1] ?? null, String(title ?? '').trim().slice(0, 80) || t('Neuer Chat', 'New chat'), now, now, incognito,
   );
   res.json({ id, models: mode === 'battle' ? null : await Promise.all(picked.map(displayName)) });
 }));
@@ -212,6 +213,14 @@ async function pickEmergency(cap, exclude) {
 
 const running = new Map(); // 'chat:turn:side' → { controller, userId }
 
+// Vergessene Inkognito-Chats (Seite einfach zugemacht) nach 2 Stunden ohne Aktivität löschen
+setInterval(async () => {
+  try {
+    const old = await all('SELECT id, user_id FROM chats WHERE incognito = 1 AND COALESCE(updated_at, created_at) < ?', Date.now() - 2 * 3600 * 1000);
+    for (const r of old) await purgeChats(Number(r.user_id), r.id);
+  } catch { /* egal */ }
+}, 15 * 60 * 1000).unref();
+
 // Antwort einer Seite (0 = A, 1 = B) als NDJSON-Stream
 chat.post('/stream', wrap(async (req, res) => {
   const { chatId, side = 0, messages, turn, display } = req.body ?? {};
@@ -257,6 +266,7 @@ chat.post('/stream', wrap(async (req, res) => {
   const blocked = quick ? null : await checkText(lastText, row.modality === 'image' ? 'image' : 'prompt');
   const charged = blocked ? 0 : await charge(req.user, cost, what);
   const personal = await personalFor(req.user.id);
+  if (row.incognito) { personal.memoryOn = false; personal.memories = []; } // Inkognito: nichts merken
   const custom = row.modality === 'image' ? null : instructionsPrompt(personal.instructions);
 
   // Verlauf speichern: deine Frage sofort, die Antwort am Ende
@@ -474,7 +484,7 @@ chat.post('/stop', wrap(async (req, res) => {
 chat.get('/list', wrap(async (req, res) => {
   const rows = await all(
     `SELECT id, title, mode, pinned, folder, COALESCE(updated_at, created_at) AS updated FROM chats
-     WHERE user_id = ? AND EXISTS (SELECT 1 FROM messages WHERE messages.chat_id = chats.id)
+     WHERE user_id = ? AND incognito IS NULL AND EXISTS (SELECT 1 FROM messages WHERE messages.chat_id = chats.id)
      ORDER BY updated DESC LIMIT 300`,
     req.user.id,
   );
@@ -556,13 +566,13 @@ chat.get('/leaderboard', wrap(async (req, res) => {
 // ── Extras nach einer Antwort: Titel (beim ersten Mal) und 3 Folgefragen ──
 chat.post('/extras', wrap(async (req, res) => {
   const { chatId, turn } = req.body ?? {};
-  const row = await get('SELECT id, mode, modality, title, renamed FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
+  const row = await get('SELECT id, mode, modality, title, renamed, incognito FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
   if (!row || !Number.isInteger(turn)) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
   const msgs = await all('SELECT side, content FROM messages WHERE chat_id = ? AND turn = ? ORDER BY side', row.id, turn);
   const question = msgs.find((m) => m.side === -1)?.content ?? '';
   const answer = msgs.find((m) => m.side === 0)?.content ?? '';
   if (!question) return res.json({ suggestions: [] });
-  const wantTitle = turn === 0 && !row.renamed;
+  const wantTitle = turn === 0 && !row.renamed && !row.incognito;
 
   if (demoMode) {
     const s = t(['Erklär das genauer', 'Gib mir ein Beispiel', 'Fasse es kurz zusammen'], ['Explain that in more detail', 'Give me an example', 'Summarize it briefly']);
@@ -706,7 +716,7 @@ chat.post('/translate', wrap(async (req, res) => {
 chat.get('/export', wrap(async (req, res) => {
   const uid = req.user.id;
   const user = await get('SELECT email, created_at, instructions, memory_off, daily_limit FROM users WHERE id = ?', uid);
-  const chats = await all('SELECT * FROM chats WHERE user_id = ? ORDER BY created_at', uid);
+  const chats = await all('SELECT * FROM chats WHERE user_id = ? AND incognito IS NULL ORDER BY created_at', uid);
   const out = [];
   for (const row of chats) {
     const data = await loadChatData(row);
@@ -837,6 +847,7 @@ async function loadChatData(row, { forShare = false } = {}) {
     models: forShare || row.mode === 'battle' || row.mode === 'agent' ? null : ids,
     labels: reveal ? names : null,
     shared: forShare ? undefined : Boolean(row.share_id),
+    incognito: forShare ? undefined : Boolean(row.incognito),
     turns: turns.filter((x) => x && (x.user || x.attachments?.length)),
   };
 }
@@ -859,6 +870,15 @@ chat.post('/feedback', wrap(async (req, res) => {
   const reasons = value === -1 && Array.isArray(req.body?.reasons)
     ? [...new Set(req.body.reasons.map(String).filter((r) => FEEDBACK_REASONS.includes(r)))].join(',') || null : null;
   await run('UPDATE messages SET feedback = ?, feedback_reason = ? WHERE chat_id = ? AND turn = ? AND side = ?', value || null, reasons, row.id, turn, side);
+  res.json({ ok: true });
+}));
+
+// Inkognito-Chat beim Verlassen löschen (auch per sendBeacon beim Schließen der Seite)
+chat.post('/forget', express.text({ type: '*/*', limit: '2kb' }), wrap(async (req, res) => {
+  let id = req.body?.chatId;
+  if (!id && typeof req.body === 'string') { try { id = JSON.parse(req.body).chatId; } catch { /* egal */ } }
+  const row = await get('SELECT id FROM chats WHERE id = ? AND user_id = ? AND incognito = 1', String(id ?? ''), req.user.id);
+  if (row) await purgeChats(req.user.id, row.id);
   res.json({ ok: true });
 }));
 

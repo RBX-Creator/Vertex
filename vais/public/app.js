@@ -1,6 +1,7 @@
 import { t, LANG, LOCALE, LANGUAGES, EXTRA_LANGS, translateDom, setLang, getTheme, setTheme } from './i18n.js';
 import { markdown, enhance } from './render.js';
 import { startTour, tourDone } from './tour.js';
+import { CHANGES, LATEST } from './changelog.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 translateDom();
@@ -114,11 +115,12 @@ function saveOffline(patch) {
   }
 }
 function rememberChat(data) {
-  if (!data?.id) return;
+  if (!data?.id || data.incognito) return;
   const cur = offlineData() ?? { chats: {}, order: [] };
   saveOffline({ chats: { ...cur.chats, [data.id]: slimForOffline(data) }, order: [data.id, ...(cur.order ?? []).filter((id) => id !== data.id)] });
 }
 async function refreshOfflineChat(id) {
+  if (state.chat?.id === id && state.chat.incognito) return;
   try {
     const res = await fetch(`/api/chat/${encodeURIComponent(id)}`);
     if (res.ok) rememberChat(await res.json());
@@ -198,6 +200,7 @@ const state = {
   picks: store.get('vais.picks', [null, null]),
   models: [],
   queue: [], // vorgemerkte Nachrichten (während die KI antwortet)
+  incognito: false, // nächster Chat wird nicht gespeichert
   pending: [], // Anhänge für die nächste Nachricht: { kind: 'image', name, url } | { kind: 'file', name, text }
   chat: null, // { id, mode, labels, names, winner, turns: [{ user, answers: [{ text, status, error }] }] }
   controllers: new Set(),
@@ -402,6 +405,8 @@ function showView(view) {
   el.newChat.hidden = view === 'home';
   $('#share-chat').hidden = view !== 'thread';
   $('#suggest').hidden = view !== 'home';
+  if (view === 'home' || view === 'thread') paintIncognito();
+  else { $('#incognito-btn').hidden = true; $('#incognito-banner').hidden = true; }
   if (view === 'board' || view === 'stats') el.title.textContent = '';
 }
 
@@ -454,7 +459,31 @@ $('#suggest-track').addEventListener('click', (e) => {
   el.prompt.setSelectionRange(el.prompt.value.length, el.prompt.value.length);
 });
 
+// Inkognito-Chat verlassen → sofort löschen
+function forgetIncognito(chat) {
+  if (!chat?.incognito || !chat.id) return;
+  post('/api/chat/forget', { chatId: chat.id }).catch(() => {});
+}
+window.addEventListener('pagehide', () => {
+  if (state.chat?.incognito) navigator.sendBeacon?.('/api/chat/forget', new Blob([JSON.stringify({ chatId: state.chat.id })], { type: 'application/json' }));
+});
+function paintIncognito() {
+  const on = state.chat ? !!state.chat.incognito : state.incognito;
+  $('#incognito-btn').setAttribute('aria-pressed', String(on));
+  $('#incognito-btn').hidden = !!state.chat && !state.chat.incognito; // in normalen Chats nicht umschaltbar
+  $('#incognito-banner').hidden = !on;
+  document.body.classList.toggle('incognito', on);
+}
+$('#incognito-btn').addEventListener('click', () => {
+  if (state.chat) return toast(t('Inkognito gilt für diesen ganzen Chat. Starte einen neuen Chat, um es zu ändern.', 'Incognito applies to this whole chat. Start a new chat to change it.'));
+  state.incognito = !state.incognito;
+  haptic('tap');
+  paintIncognito();
+  toast(state.incognito ? t('Inkognito an – der nächste Chat wird nicht gespeichert 🕶️', 'Incognito on – the next chat will not be saved 🕶️') : t('Inkognito aus', 'Incognito off'));
+});
+
 function resetChat() {
+  forgetIncognito(state.chat);
   if (!$('#preview').hidden) closePreview();
   stopSpeaking();
   for (const c of state.controllers) c.abort();
@@ -921,13 +950,13 @@ async function send() {
       if (missing !== -1) return openSheet(missing);
     }
     const title = text || attachments.map((a) => a.name).join(', ') || t('Anhang', 'Attachment');
-    const body = { mode: state.mode, modality: state.modality, title: title.slice(0, 80), images: hasImages };
+    const body = { mode: state.mode, modality: state.modality, title: title.slice(0, 80), images: hasImages, incognito: state.incognito };
     if (state.mode === 'sxs') body.models = state.picks.slice(0, 2);
     if (state.mode === 'direct') body.models = [state.picks[0]];
     el.send.disabled = true;
     try {
       const data = await post('/api/chat/start', body);
-      state.chat = { id: data.id, mode: state.mode, modality: state.modality, labels: data.models, names: null, winner: null, turns: [] };
+      state.chat = { id: data.id, mode: state.mode, modality: state.modality, labels: data.models, names: null, winner: null, turns: [], incognito: state.incognito };
     } catch (err) {
       return toast(err.message);
     } finally {
@@ -1093,7 +1122,7 @@ async function loadExtras(chat, index) {
   try {
     data = await post('/api/chat/extras', { chatId: chat.id, turn: index });
   } catch { return; }
-  if (data.title) {
+  if (data.title && !chat.incognito) {
     const item = historyItems.find((c) => c.id === chat.id);
     if (item) { item.title = data.title; renderHistory(); } else historyDirty = true;
     if (state.chat === chat) el.title.textContent = data.title.length > 40 ? `${data.title.slice(0, 40)}…` : data.title;
@@ -2135,6 +2164,7 @@ async function route() {
 window.addEventListener('popstate', route);
 
 async function loadChat(id) {
+  if (state.chat?.id !== id) forgetIncognito(state.chat);
   for (const c of state.controllers) c.abort();
   let data;
   const cached = offlineData()?.chats?.[id];
@@ -2162,6 +2192,7 @@ async function loadChat(id) {
     winner: data.winner,
     modality: data.modality,
     shared: data.shared,
+    incognito: data.incognito,
     turns: data.turns,
   };
   state.mode = data.mode;
@@ -2928,6 +2959,23 @@ $('#set-delete').addEventListener('submit', async (e) => {
   }
 });
 
+// ── „Was ist neu?“ ───────────────────────────────────────────────
+function showNews(since = 0) {
+  const groups = CHANGES().filter((c) => c.id > since);
+  const list = groups.length ? groups : CHANGES().slice(0, 2);
+  $('#news-list').innerHTML = list.map((g) => `
+    <li class="news-group"><p class="news-date">${new Date(g.date).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+      <ul>${g.items.map(([icon, title, text]) => `<li><span class="news-icon" aria-hidden="true">${icon}</span><span><b>${escapeHtml(title)}</b><small>${escapeHtml(text)}</small></span></li>`).join('')}</ul></li>`).join('');
+  const sheet = $('#news-sheet');
+  sheet.hidden = false;
+  return new Promise((resolve) => {
+    const close = () => { sheet.hidden = true; store.set('vais.news', LATEST()); resolve(); };
+    $('#news-ok').onclick = close;
+    sheet.querySelector('.sheet-backdrop').onclick = close;
+  });
+}
+$('#set-news').addEventListener('click', () => { closeSettings(); showNews(0); });
+
 // ── Mitteilungen vom Admin (einmal anzeigen, dann als gelesen merken) ──
 async function showAnnouncements() {
   let list = [];
@@ -2998,8 +3046,16 @@ async function init() {
   fitPicks();
   renderControls();
   await route();
-  if (!tourDone() && !offline && !location.hash) setTimeout(startTour, 500);
-  else if (!offline) setTimeout(showAnnouncements, 800);
+  const seen = Number(store.get('vais.news', 0));
+  if (!tourDone() && !offline && !location.hash) {
+    store.set('vais.news', LATEST()); // Neue Nutzer bekommen die Tour statt der Neuigkeiten
+    setTimeout(startTour, 500);
+  } else if (!offline) {
+    setTimeout(async () => {
+      if (seen < LATEST()) await showNews(seen);
+      showAnnouncements();
+    }, 800);
+  }
 }
 
 $('#set-tour').addEventListener('click', () => {

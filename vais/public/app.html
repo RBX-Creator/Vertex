@@ -39,6 +39,9 @@
         <button class="round-btn" id="share-chat" aria-label="Chat teilen" data-en-aria-label="Share chat" title="Teilen" data-en-title="Share" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>
         </button>
+        <button class="round-btn incognito-btn" id="incognito-btn" aria-pressed="false" aria-label="Inkognito-Chat" data-en-aria-label="Incognito chat" title="Inkognito: wird nicht gespeichert" data-en-title="Incognito: not saved">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11h18M5 11l2-6h10l2 6"/><circle cx="7" cy="16" r="3"/><circle cx="17" cy="16" r="3"/><path d="M10 16h4"/></svg>
+        </button>
         <button class="round-btn" id="new-chat" aria-label="Neuer Chat" data-en-aria-label="New chat" title="Neuer Chat" data-en-title="New chat" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v8M8 12h8"/><path d="M21 12a9 9 0 0 1-13.5 7.8L3 21l1.2-4.5A9 9 0 1 1 21 12Z"/></svg>
         </button>
@@ -67,6 +70,7 @@
       <span data-en="Offline – read only">Offline – nur Lesen</span>
     </p>
 
+    <p class="incognito-banner" id="incognito-banner" hidden><span aria-hidden="true">🕶️</span> <span data-en="Incognito – this chat will not be saved and disappears when you leave it.">Inkognito – dieser Chat wird nicht gespeichert und verschwindet, wenn du ihn verlässt.</span></p>
     <main class="stage" id="stage">
       <section class="home" id="home">
         <h1 class="home-title" data-en="What would you like to do?">Was möchtest du tun?</h1>
@@ -332,6 +336,16 @@
     </div>
   </div>
 
+  <div class="sheet small-sheet" id="news-sheet" hidden>
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="news-title">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <h2 class="ann-title" id="news-title" data-en="What’s new 🆕">Was ist neu? 🆕</h2>
+      <ol class="news-list" id="news-list"></ol>
+      <button type="button" class="btn" id="news-ok" data-en="Great!">Super!</button>
+    </div>
+  </div>
+
   <div class="sheet small-sheet" id="ann-sheet" hidden>
     <div class="sheet-backdrop"></div>
     <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="ann-title">
@@ -445,6 +459,7 @@
 
         <section class="set-group">
           <h3 data-en="About VAIs">Über VAIs</h3>
+          <button class="btn ghost-btn set-tour" id="set-news" type="button" data-en="What’s new?">Was ist neu?</button>
           <button class="btn ghost-btn set-tour" id="set-tour" type="button" data-en="Show the welcome tour again">Willkommens-Tour noch mal ansehen</button>
           <p class="set-hint legal-inline"><a href="/datenschutz" target="_blank" rel="noopener" data-en="Privacy policy">Datenschutzerklärung</a> · <a href="/impressum" target="_blank" rel="noopener" data-en="Legal notice">Impressum</a> · <a href="/status" target="_blank" rel="noopener">Status</a></p>
         </section>
