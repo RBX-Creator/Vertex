@@ -28,9 +28,10 @@ after(() => server?.kill());
 // Kleiner Browser-Ersatz mit Cookie
 function client() {
   let cookie = '';
-  const call = async (path, body, method = body === undefined ? 'GET' : 'POST') => {
+  const call = async (path, body, method = body === undefined ? 'GET' : 'POST', signal = undefined) => {
     const res = await fetch(BASE + path, {
       method,
+      signal,
       headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(cookie ? { Cookie: cookie } : {}), Origin: BASE },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       redirect: 'manual',
@@ -190,4 +191,37 @@ test('Sehr lange Chats werden zusammengefasst statt abzubrechen', async () => {
   const note = lines.find((l) => l.summarized);
   assert.ok(note && note.summarized > 10, 'Hinweis „zusammengefasst“ kommt');
   assert.ok(lines.some((l) => l.done));
+});
+
+test('Agent X arbeitet weiter, wenn die Verbindung abbricht – „Stopp“ hält ihn an', async () => {
+  const c = await signUp('bg@example.com');
+  const cookieRes = await c.call('/api/auth/me');
+  assert.equal(cookieRes.status, 200);
+  const start = await c.json('/api/chat/start', { mode: 'agent', modality: 'auto', title: 'BG' });
+  const id = start.data.id;
+  // Verbindung nach kurzer Zeit kappen
+  const ctrl = new AbortController();
+  const pending = c.call('/api/chat/stream', { chatId: id, side: 0, turn: 0, messages: [{ role: 'user', content: 'Wie ist das Wetter in Berlin?' }], display: { text: 'Wetter' } }, 'POST', ctrl.signal)
+    .then((r) => r.text()).catch((e) => e.name);
+  setTimeout(() => ctrl.abort(), 500);
+  assert.equal(await pending, 'AbortError'); // Verbindung wirklich gekappt
+  // Ohne Leser bricht die Verbindung spätestens hier ab; der Agent muss trotzdem fertig werden
+  let answer;
+  for (let i = 0; i < 40; i++) {
+    await new Promise((r) => setTimeout(r, 300));
+    answer = (await c.json(`/api/chat/${id}`)).data.turns[0]?.answers[0];
+    if (answer?.status === 'done') break;
+  }
+  assert.equal(answer.status, 'done');
+  assert.ok(answer.text.length > 20);
+
+  // Stopp über den Server
+  const s2 = await c.json('/api/chat/start', { mode: 'agent', modality: 'auto', title: 'Stop' });
+  const res = c.call('/api/chat/stream', { chatId: s2.data.id, side: 0, turn: 0, messages: [{ role: 'user', content: 'Such mir aktuelle Nachrichten' }], display: { text: 'News' } });
+  await new Promise((r) => setTimeout(r, 400));
+  const stop = await c.json('/api/chat/stop', { chatId: s2.data.id, turn: 0, side: 0 });
+  assert.equal(stop.data.stopped, true);
+  await (await res).text();
+  const after = (await c.json(`/api/chat/${s2.data.id}`)).data.turns[0].answers[0];
+  assert.notEqual(after.status, 'streaming');
 });

@@ -5,7 +5,7 @@ import { t } from './i18n.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { runAgent, quickReaction } from './agent.js';
 import { profile, personalFor, instructionsPrompt, remember } from './profile.js';
-import { push, addReminder } from './push.js';
+import { push, addReminder, notifyUser } from './push.js';
 import { limitSettings, charge, refund, usageOf } from './limits.js';
 import { sourcesFromText } from './models.js';
 import { pickAvailable, isBusy } from './models.js';
@@ -207,6 +207,8 @@ async function pickEmergency(cap, exclude) {
   return all[0] ?? null;
 }
 
+const running = new Map(); // 'chat:turn:side' → { controller, userId }
+
 // Antwort einer Seite (0 = A, 1 = B) als NDJSON-Stream
 chat.post('/stream', wrap(async (req, res) => {
   const { chatId, side = 0, messages, turn, display } = req.body ?? {};
@@ -263,7 +265,7 @@ chat.post('/stream', wrap(async (req, res) => {
       sources.set(src.url, src);
       added = true;
     }
-    if (added) res.write(`${JSON.stringify({ sources: [...sources.values()] })}\n`);
+    if (added) out(`${JSON.stringify({ sources: [...sources.values()] })}\n`);
   };
   let thinkStart = 0;
   let thinkMs = 0;
@@ -293,24 +295,35 @@ chat.post('/stream', wrap(async (req, res) => {
     'X-Accel-Buffering': 'no',
   });
   res.flushHeaders();
-  if (summarized) res.write(`${JSON.stringify({ summarized })}\n`);
+  // Schreiben nur, solange die Verbindung offen ist (Agent X arbeitet notfalls ohne weiter)
+  function out(line) { if (!res.destroyed && !res.writableEnded) res.write(line); }
+  if (summarized) out(`${JSON.stringify({ summarized })}\n`);
 
   const controller = new AbortController();
-  res.on('close', () => { if (!res.writableFinished) controller.abort(); });
+  const runKey = `${row.id}:${turnNo}:${side === 1 ? 1 : 0}`;
+  running.set(runKey, { controller, userId: req.user.id });
+  // Verbindung weg (App zu, Funkloch): Agent X macht weiter und meldet sich, alles andere bricht ab
+  let detached = false;
+  res.on('close', () => {
+    if (res.writableFinished) return;
+    if (model === 'agent' && turnNo !== null && !controller.signal.aborted) detached = true;
+    else controller.abort();
+  });
+  if (model === 'agent' && turnNo !== null) await save(side === 1 ? 1 : 0, '', 'streaming');
 
   let text = '';
   try {
     const onText = (t) => {
       if (thinkStart && !thinkMs) thinkMs = Date.now() - thinkStart;
       text += t;
-      res.write(`${JSON.stringify({ t })}\n`);
+      out(`${JSON.stringify({ t })}\n`);
     };
     const onReasoning = (r) => {
       if (!thinkStart) thinkStart = Date.now();
       thinking += r;
-      res.write(`${JSON.stringify({ r })}\n`);
+      out(`${JSON.stringify({ r })}\n`);
     };
-    const onReact = (emoji) => { reaction = emoji || null; res.write(`${JSON.stringify({ react: reaction ?? '' })}\n`); };
+    const onReact = (emoji) => { reaction = emoji || null; out(`${JSON.stringify({ react: reaction ?? '' })}\n`); };
     if (model === 'agent') {
       if (quick) onReact(quick);
       else {
@@ -324,7 +337,7 @@ chat.post('/stream', wrap(async (req, res) => {
           personal: { ...personal, summary: fitted.summary },
           onRemember: (fact) => remember(req.user.id, fact),
           onReminder: (args) => addReminder(req.user.id, args.text, args.when, args.in_minutes),
-          onStep: (step) => { steps.push(step); res.write(`${JSON.stringify({ step })}\n`); },
+          onStep: (step) => { steps.push(step); out(`${JSON.stringify({ step })}\n`); },
         });
       }
     } else {
@@ -344,9 +357,9 @@ chat.post('/stream', wrap(async (req, res) => {
             // Hängt ein Bild an deiner Nachricht, wird es bearbeitet statt neu erfunden
             const source = Array.isArray(last) ? last.find((x) => x.type === 'image_url')?.image_url?.url : null;
             const img = source
-              ? await editImage({ model, prompt, image: source, signal: controller.signal, onStep: (step) => { steps.push(step); res.write(`${JSON.stringify({ step })}\n`); } })
+              ? await editImage({ model, prompt, image: source, signal: controller.signal, onStep: (step) => { steps.push(step); out(`${JSON.stringify({ step })}\n`); } })
               : await generateImage({ model, prompt, signal: controller.signal });
-            if (img) { images.push(img); res.write(`${JSON.stringify({ image: img })}\n`); }
+            if (img) { images.push(img); out(`${JSON.stringify({ image: img })}\n`); }
             break;
           }
           await streamChat({
@@ -378,14 +391,14 @@ chat.post('/stream', wrap(async (req, res) => {
           else {
             // Dein gewähltes Modell bleibt im Chat – diese eine Antwort kommt vom Notfall-Modell
             fallback = { id: next.id, name: next.name, maker: next.maker, icon: next.icon };
-            res.write(`${JSON.stringify({ fallback })}\n`);
+            out(`${JSON.stringify({ fallback })}\n`);
           }
         }
       }
       // Websuche: zusätzlich Links aus der Antwort als Quellen sammeln
       if (row.modality === 'web' || /#search$|compound/.test(model)) onSources(sourcesFromText(text));
     }
-    res.write(`${JSON.stringify({ done: true })}\n`);
+    out(`${JSON.stringify({ done: true })}\n`);
     const got = text || images.length || reaction;
     if (!got) await refund(req.user, charged);
     await save(side === 1 ? 1 : 0, text, got ? 'done' : 'error', got ? null : t('Das Modell hat keine Antwort geliefert.', 'The model returned no answer.'));
@@ -397,12 +410,32 @@ chat.post('/stream', wrap(async (req, res) => {
       console.error(`Stream-Fehler (${model}):`, err.message);
       logEvent('error', model, err.message);
       const message = err.message || t('Das Modell konnte nicht antworten.', 'The model could not answer.');
-      res.write(`${JSON.stringify({ error: message })}\n`);
+      out(`${JSON.stringify({ error: message })}\n`);
       await save(side === 1 ? 1 : 0, text, 'error', message);
     }
+  } finally {
+    running.delete(runKey);
   }
-  res.end();
+  if (detached && !controller.signal.aborted) {
+    const chatTitle = (await get('SELECT title FROM chats WHERE id = ?', row.id))?.title || 'Agent X';
+    notifyUser(req.user.id, {
+      title: text || reaction ? t('Agent X ist fertig ✓', 'Agent X is done ✓') : t('Agent X hatte ein Problem', 'Agent X ran into a problem'),
+      body: `${chatTitle}: ${text.replace(/```[\s\S]*?(```|$)/g, '').replace(/[#*_`>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 120) || reaction || ''}`,
+      tag: `agent-${row.id}`,
+      url: `/#c/${row.id}`,
+    }).catch(() => {});
+  }
+  if (!res.writableEnded) res.end();
 }));
+
+// Laufende Antworten (für „Stopp“ – auch wenn die Verbindung schon weg ist)
+chat.post('/stop', wrap(async (req, res) => {
+  const { chatId, turn, side } = req.body ?? {};
+  const job = running.get(`${chatId}:${turn}:${side === 1 ? 1 : 0}`);
+  if (job && job.userId === req.user.id) job.controller.abort();
+  res.json({ ok: true, stopped: !!job });
+}));
+
 
 // ── Verlauf ───────────────────────────────────────────────────────
 chat.get('/list', wrap(async (req, res) => {

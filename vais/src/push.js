@@ -64,6 +64,8 @@ export async function addReminder(userId, text, when, inMinutes) {
   return `Erinnerung gespeichert für ${when2} (deutsche Zeit): „${clean}“.${Number(subs?.n ?? 0) ? '' : ' ACHTUNG: Der Nutzer hat Benachrichtigungen noch nicht erlaubt – sag ihm, dass er sie in den Einstellungen unter „Erinnerungen“ einschalten muss.'}`;
 }
 
+export const notifyUser = (userId, payload) => sendTo(userId, payload);
+
 async function sendTo(userId, payload) {
   const subs = await all('SELECT endpoint, sub FROM push_subs WHERE user_id = ?', userId);
   let ok = 0;

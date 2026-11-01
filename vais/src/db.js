@@ -91,6 +91,9 @@ await client.execute(`CREATE TABLE IF NOT EXISTS usage (
   PRIMARY KEY (user_id, day)
 )`);
 
+// Antworten, die beim letzten Neustart noch liefen, als unterbrochen markieren
+try { await client.execute("UPDATE messages SET status = 'error', error = 'Unterbrochen (Server-Neustart).' WHERE status = 'streaming'"); } catch { /* egal */ }
+
 // Ereignisse für die Admin-Seite (Fehler, Modell-Nutzung) – wird klein gehalten
 await client.execute(`CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

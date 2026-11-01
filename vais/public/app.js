@@ -850,8 +850,13 @@ async function runSide(turnIndex, side) {
     a.status = got ? 'done' : 'error';
     if (!got) a.error = t('Das Modell hat keine Antwort geliefert.', 'The model returned no answer.');
   } catch (err) {
+    const agentSide = chat.mode === 'agent' || (chat.labels?.[side] === 'Agent X');
     if (ctrl.signal.aborted) a.status = a.text || a.images?.length ? 'done' : 'stopped';
-    else Object.assign(a, { status: 'error', error: err.message || t('Das Modell konnte nicht antworten.', 'The model could not answer.') });
+    else if (agentSide && (err instanceof TypeError || /unterbrochen|interrupted/i.test(err.message))) {
+      // Verbindung weg, aber Agent X arbeitet auf dem Server weiter
+      Object.assign(a, { status: 'streaming', background: true });
+      watchBackground(chat.id);
+    } else Object.assign(a, { status: 'error', error: err.message || t('Das Modell konnte nicht antworten.', 'The model could not answer.') });
   } finally {
     a.buildMs = Date.now() - a.startedAt;
     state.controllers.delete(ctrl);
@@ -1732,6 +1737,10 @@ el.prompt.addEventListener('keydown', (e) => {
 el.form.addEventListener('submit', (e) => {
   e.preventDefault();
   if (busy()) {
+    // Agent X läuft auf dem Server weiter, wenn nur die Verbindung abbricht – „Stopp“ muss es ihm sagen
+    const chat = state.chat;
+    const ti = chat ? chat.turns.length - 1 : -1;
+    chat?.turns[ti]?.answers.forEach((a, side) => { if (a.status === 'streaming') post('/api/chat/stop', { chatId: chat.id, turn: ti, side }).catch(() => {}); });
     for (const c of state.controllers) c.abort();
     return;
   }
@@ -1844,7 +1853,39 @@ async function loadChat(id) {
   updateSend();
   afterTurn();
   requestAnimationFrame(() => { el.stage.scrollTop = el.stage.scrollHeight; });
+  if (!data.shared && data.turns.some((tn) => tn.answers.some((a) => a.status === 'streaming'))) watchBackground(data.id);
 }
+
+// Agent X arbeitet im Hintergrund: alle paar Sekunden nachsehen, bis er fertig ist
+let bgTimer = null;
+function watchBackground(id) {
+  clearTimeout(bgTimer);
+  const note = () => {
+    const card = el.thread.querySelector('.turn:last-child .card');
+    if (card && !$('.bg-note', card)) {
+      const p = document.createElement('p');
+      p.className = 'bg-note';
+      p.textContent = t('Agent X arbeitet im Hintergrund weiter. Du kannst die App schließen – mit eingeschalteten Erinnerungen bekommst du eine Benachrichtigung, wenn er fertig ist.', 'Agent X keeps working in the background. You can close the app – with notifications on, you will be notified when he is done.');
+      $('.card-body', card).before(p);
+    }
+  };
+  note();
+  bgTimer = setTimeout(async () => {
+    if (state.chat?.id !== id) return;
+    if (document.hidden) return watchBackground(id);
+    try {
+      const res = await fetch(`/api/chat/${encodeURIComponent(id)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const still = data.turns.some((tn) => tn.answers.some((a) => a.status === 'streaming'));
+      if (still) return watchBackground(id);
+      if (state.chat?.id === id && !busy()) { state.chat = null; loadChat(id); haptic('success'); }
+    } catch { watchBackground(id); }
+  }, 4000);
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && state.chat && state.chat.turns.some((tn) => tn.answers.some((a) => a.background))) watchBackground(state.chat.id);
+});
 
 // ── Seitenleiste mit Verlauf ──────────────────────────────────────
 let historyDirty = true;
