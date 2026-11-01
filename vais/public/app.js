@@ -47,6 +47,7 @@ Object.assign(ICON, {
   's-time': svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   's-error': svg('<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>'),
   's-other': svg('<circle cx="12" cy="12" r="3"/>'),
+  's-memory': svg('<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/>'),
   's-wiki': svg('<path d="M3 6.5 7.5 18 12 8l4.5 10L21 6.5"/>'),
   's-check': svg('<path d="m9 12 2 2 4-4"/><path d="M4 5h16v12H4zM9 21h6"/>'),
   's-look': svg('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
@@ -736,8 +737,8 @@ function renderSources(card, a) {
 
 // Arbeitsschritte von Agent X über der Antwort anzeigen
 const STEP_LABEL = LANG === 'en'
-  ? { search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' }
-  : { search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
+  ? { memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' }
+  : { memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
 function renderSteps(card, a) {
   let box = $('.agent-steps', card);
   if (!a.steps?.length) { box?.remove(); return; }
@@ -1985,10 +1986,66 @@ function paintSettings() {
       : t('Öffne das Browser-Menü (⋮) und wähle „App installieren“ oder „Zum Startbildschirm hinzufügen“.', 'Open the browser menu (⋮) and choose “Install app” or “Add to home screen”.');
 }
 
+// ── Persönliches: eigene Anweisungen und Gedächtnis ─────────────
+let profileData = null;
+async function loadProfile() {
+  try {
+    const res = await fetch('/api/chat/profile');
+    if (!res.ok) return;
+    profileData = await res.json();
+    $('#set-instr').value = profileData.instructions ?? '';
+    countInstr();
+    $('#set-memory-on').checked = profileData.memoryOn;
+    renderMemories();
+  } catch { /* offline */ }
+}
+function countInstr() { $('#set-instr-count').textContent = `${$('#set-instr').value.length} / 1500`; }
+function renderMemories() {
+  const list = $('#set-memories');
+  const items = profileData?.memories ?? [];
+  $('#set-memory-clear').hidden = !items.length;
+  if (!items.length) {
+    list.innerHTML = `<li class="mem-empty">${profileData?.memoryOn ? t('Noch nichts gemerkt. Erzähl Agent X etwas über dich, z. B. „Merk dir, dass ich Fußball mag“.', 'Nothing yet. Tell Agent X something about you, e.g. “Remember that I like football”.') : t('Das Gedächtnis ist aus.', 'Memory is off.')}</li>`;
+    return;
+  }
+  list.innerHTML = items.map((m) => `<li><span></span><button type="button" class="mem-del" data-mem="${m.id}" aria-label="${t('Vergessen', 'Forget')}" title="${t('Vergessen', 'Forget')}">×</button></li>`).join('');
+  list.querySelectorAll('li > span').forEach((sp, i) => { sp.textContent = items[i].text; });
+}
+$('#set-instr').addEventListener('input', countInstr);
+$('#set-instr-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.currentTarget;
+  try {
+    await post('/api/chat/profile', { instructions: $('#set-instr').value });
+    setMsg(form, t('Gespeichert – gilt ab der nächsten Nachricht.', 'Saved – applies from your next message.'), 'ok');
+  } catch (err) { setMsg(form, err.message, 'error'); }
+});
+$('#set-memory-on').addEventListener('change', async (e) => {
+  try {
+    await post('/api/chat/profile', { memoryOn: e.target.checked });
+    if (profileData) profileData.memoryOn = e.target.checked;
+    renderMemories();
+  } catch (err) { toast(err.message); e.target.checked = !e.target.checked; }
+});
+$('#set-memories').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-mem]');
+  if (!btn) return;
+  try {
+    await post('/api/chat/profile/memory/delete', { id: Number(btn.dataset.mem) });
+    profileData.memories = profileData.memories.filter((m) => m.id !== Number(btn.dataset.mem));
+    renderMemories();
+  } catch (err) { toast(err.message); }
+});
+$('#set-memory-clear').addEventListener('click', async () => {
+  if (!confirm(t('Alles vergessen, was Agent X über dich weiß?', 'Forget everything Agent X knows about you?'))) return;
+  try { await post('/api/chat/profile/memory/clear', {}); profileData.memories = []; renderMemories(); } catch (err) { toast(err.message); }
+});
+
 function openSettings() {
   toggleAccount(false);
   closeDrawer();
   paintSettings();
+  loadProfile();
   settingsEl.querySelectorAll('.msg').forEach((m) => { m.textContent = ''; m.className = m.className.replace(/ (ok|error)$/, ''); });
   settingsEl.hidden = false;
   $('.settings-head [data-close]', settingsEl).focus();

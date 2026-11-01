@@ -320,6 +320,23 @@
           </div>
         </section>
 
+        <section class="set-group">
+          <h3 data-en="Personalization">Persönlich</h3>
+          <form id="set-instr-form" class="set-form" novalidate>
+            <label class="set-label" for="set-instr" data-en="How should the AI answer you?">Wie soll die KI dir antworten?</label>
+            <textarea class="input set-instr" id="set-instr" rows="4" maxlength="1500" placeholder="z. B. Antworte kurz und locker, duz mich und erklär Fachwörter." data-en-placeholder="e.g. Answer briefly and casually and explain technical terms."></textarea>
+            <p class="set-hint set-count" id="set-instr-count">0 / 1500</p>
+            <p class="msg" role="status"></p>
+            <button class="btn" type="submit" data-en="Save">Speichern</button>
+          </form>
+          <label class="set-switch">
+            <span><b data-en="Agent X memory">Gedächtnis von Agent X</b><small data-en="Agent X remembers things about you (e.g. your name or hobbies) for later chats.">Agent X merkt sich Dinge über dich (z. B. Name, Hobbys) für spätere Chats.</small></span>
+            <input type="checkbox" id="set-memory-on" role="switch">
+          </label>
+          <ul class="mem-list" id="set-memories"></ul>
+          <button type="button" class="btn ghost-btn" id="set-memory-clear" hidden data-en="Forget everything">Alles vergessen</button>
+        </section>
+
         <section class="set-group" id="set-install-group" hidden>
           <h3 data-en="App">App</h3>
           <p class="set-hint" id="set-install-text"></p>

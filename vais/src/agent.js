@@ -68,6 +68,15 @@ async function pickModel(preferences) {
 }
 const SEARCH_PREFERENCE = [/^groq:groq\/compound$/, /^groq:.*compound(?!-mini)/, /^groq:.*compound/, /^groq:openai\/gpt-oss-120b#search$/, /#search$/];
 
+const REMEMBER_TOOL = {
+  type: 'function',
+  function: {
+    name: 'remember',
+    description: 'Speichert eine kurze, dauerhafte Info über den Nutzer im Gedächtnis (z. B. Name, Hobbys, Vorlieben), damit du sie in späteren Chats weißt.',
+    parameters: { type: 'object', properties: { fact: { type: 'string', description: 'Kurzer Satz in der dritten Person, z. B. „Spielt gern Fußball“' } }, required: ['fact'] },
+  },
+};
+
 const TOOLS = [
   {
     type: 'function',
@@ -130,7 +139,7 @@ const TOOLS = [
   },
 ];
 
-function systemPrompt() {
+function systemPrompt(personal = {}) {
   const now = new Date().toLocaleString('de-DE', { timeZone: 'Europe/Berlin', dateStyle: 'full', timeStyle: 'short' });
   return [
     'Du bist Agent X, der stärkste Assistent von VAIs. Du arbeitest gründlich und selbstständig in mehreren Schritten.',
@@ -145,6 +154,11 @@ function systemPrompt() {
     'Wenn der Nutzer Bilder angehängt hat, bekommst du eine Beschreibung davon als [Bild …]. Nutze sie, als hättest du das Bild selbst gesehen.',
     `Du kannst auf die Nachricht des Nutzers mit genau EINEM Emoji reagieren (wie in einem Messenger), indem du ganz an den Anfang deiner Antwort [[react:EMOJI]] schreibst. Erlaubt: ${REACTIONS.join(' ')}. Mach das, wenn es passt (z. B. 🎉 bei guten Nachrichten, 😂 bei Witzen, ❤️ bei Dank, 🔥 bei coolen Ideen, ✅ wenn eine Aufgabe erledigt ist), aber nicht bei jeder Nachricht.`,
     'Braucht eine Nachricht keine Antwort (z. B. „ok“, „danke“, „passt“, „gute Nacht“), antworte NUR mit der Reaktion, ohne Text.',
+    ...(personal.memoryOn ? [
+      'Du hast ein Gedächtnis: Erzählt der Nutzer etwas Dauerhaftes über sich (Name, Alter, Hobbys, Schule/Beruf, Vorlieben, Projekte, wie er angesprochen werden will) oder bittet er dich, dir etwas zu merken, speichere es mit remember – kurz, in der dritten Person (z. B. „Heißt Leeam, mag Grok“). Speichere nichts Sensibles (Passwörter, Gesundheit, Adressen) und nichts Vorübergehendes.',
+      personal.memories?.length ? `Was du über den Nutzer weißt:\n${personal.memories.map((m) => `- ${m.text}`).join('\n')}\nNutze das natürlich, ohne es ständig zu erwähnen.` : 'Du weißt noch nichts über den Nutzer.',
+    ] : []),
+    ...(personal.instructions ? [`So möchte der Nutzer, dass du antwortest (aus seinen Einstellungen):\n"""\n${personal.instructions}\n"""`] : []),
     'Antworte in der Sprache des Nutzers, klar gegliedert mit Markdown. Wenn du Quellen genutzt hast, liste sie am Ende unter „Quellen“ als Links auf.',
   ].join('\n');
 }
@@ -411,6 +425,7 @@ function runTool(name, args, signal, addSources, ctx) {
     }
     case 'calculate': return { steps: [{ kind: 'calc', text: String(args.expression ?? '') }], run: async () => String(calculate(args.expression)) };
     case 'current_datetime': return { steps: [{ kind: 'time', text: t('Datum und Uhrzeit', 'Date and time') }], run: async () => currentDatetime(args.timezone) };
+    case 'remember': return { steps: [{ kind: 'memory', text: String(args.fact ?? '').slice(0, 80) }], run: () => (ctx.remember ? ctx.remember(args.fact) : 'Gedächtnis nicht verfügbar.') };
     case 'validate_html': {
       const html = String(args.html ?? '');
       ctx.lastHtml = html;
@@ -506,17 +521,18 @@ async function describeImages(messages, signal, onStep) {
 
 const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 
-export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {} }) {
+export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, personal = {}, onRemember = null }) {
   onReact('👀'); // „hab’s gesehen, bin dran“
-  if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources, onReact });
+  if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null });
   const model = await pickModel(AGENT_PREFERENCE);
   if (!model) throw new Error(t('Agent X braucht einen Groq-Schlüssel (GROQ_API_KEY), damit er Werkzeuge benutzen kann.', 'Agent X needs a Groq key (GROQ_API_KEY) to use tools.'));
 
   const addSources = sourceCleaner(onSources);
   const seeing = await describeImages(messages, signal, onStep);
   const last = seeing.at(-1)?.content;
-  const ctx = { question: typeof last === 'string' ? last : '', lastHtml: '' };
-  const convo = [{ role: 'system', content: systemPrompt() }, ...seeing];
+  const ctx = { question: typeof last === 'string' ? last : '', lastHtml: '', remember: personal.memoryOn ? onRemember : null };
+  const convo = [{ role: 'system', content: systemPrompt(personal) }, ...seeing];
+  const agentTools = personal.memoryOn && onRemember ? [...TOOLS, REMEMBER_TOOL] : TOOLS;
 
   // Am Ende: wurde eine Webseite geprüft, aber nicht mitgeschickt, hängen wir die geprüfte Fassung an
   const finish = (content) => {
@@ -529,7 +545,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   };
 
   for (let round = 0; round < MAX_STEPS; round++) {
-    const msg = await complete({ model: model.id, messages: convo, tools: TOOLS, signal });
+    const msg = await complete({ model: model.id, messages: convo, tools: agentTools, signal });
     const thought = msg.reasoning ?? msg.reasoning_content;
     if (thought) await emitText(`${thought.trim()}\n\n`, onReasoning, signal, 6, 8);
     const calls = msg.tool_calls ?? [];
@@ -564,11 +580,18 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   return finish(final.content);
 }
 
-async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onReact, signal }) {
+async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onReact, signal, remember }) {
   const lastMsg = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
   const q = Array.isArray(lastMsg) ? lastMsg.filter((p) => p.type === 'text').map((p) => p.text).join(' ') : String(lastMsg);
   const pics = Array.isArray(lastMsg) ? lastMsg.filter((p) => p.type === 'image_url').length : 0;
   const site = /webseite|website|seite|app|spiel|game|html/i.test(q);
+  const fact = q.match(/(?:merk dir|ich heiße|mein name ist)\s*:?\s*(.{2,80})/i)?.[1];
+  if (fact && remember) {
+    onStep({ kind: 'memory', text: fact });
+    await remember(fact);
+    onReact('👍');
+    return emitText(`**Agent X (Demo)** – gemerkt: „${fact}“.`, onText, signal);
+  }
   await emitText(`Der Nutzer möchte: „${q.slice(0, 80)}“. ${site ? 'Ich baue eine Webseite, prüfe sie und verbessere sie.' : 'Ich suche parallel, schlage in Wikipedia nach, lese eine Quelle und rechne nach.'}`, onReasoning, signal, 2, 40);
   if (pics) { await sleep(400); onStep({ kind: 'look', text: pics === 1 ? '1 Bild' : `${pics} Bilder` }); }
   if (site) {

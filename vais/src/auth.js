@@ -287,6 +287,7 @@ auth.post('/delete', wrap(async (req, res) => {
   }
   await purgeChats(me.id);
   await run('DELETE FROM sessions WHERE user_id = ?', me.id);
+  await run('DELETE FROM memories WHERE user_id = ?', me.id);
   await run('DELETE FROM codes WHERE email = ?', me.email);
   await run('DELETE FROM users WHERE id = ?', me.id);
   res.clearCookie(COOKIE, { path: '/' });

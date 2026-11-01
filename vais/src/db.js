@@ -71,6 +71,17 @@ try { await client.execute('ALTER TABLE messages ADD COLUMN feedback INTEGER'); 
 try { await client.execute('ALTER TABLE messages ADD COLUMN attachments TEXT'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE users ADD COLUMN blocked INTEGER'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE users ADD COLUMN daily_limit INTEGER'); } catch { /* gibt es schon */ }
+try { await client.execute('ALTER TABLE users ADD COLUMN instructions TEXT'); } catch { /* gibt es schon */ }
+try { await client.execute('ALTER TABLE users ADD COLUMN memory_off INTEGER'); } catch { /* gibt es schon */ }
+
+// Gedächtnis von Agent X: kurze Fakten über den Nutzer
+await client.execute(`CREATE TABLE IF NOT EXISTS memories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+)`);
+await client.execute('CREATE INDEX IF NOT EXISTS memories_user ON memories (user_id)');
 
 // Verbrauch pro Nutzer und Tag (in Punkten)
 await client.execute(`CREATE TABLE IF NOT EXISTS usage (

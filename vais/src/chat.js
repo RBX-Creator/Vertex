@@ -4,6 +4,7 @@ import { get, run, all, purgeChats, getSetting, logEvent } from './db.js';
 import { t } from './i18n.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { runAgent, quickReaction } from './agent.js';
+import { profile, personalFor, instructionsPrompt, remember } from './profile.js';
 import { limitSettings, charge, refund, usageOf } from './limits.js';
 import { sourcesFromText } from './models.js';
 import { pickAvailable, isBusy } from './models.js';
@@ -65,6 +66,8 @@ chat.use(wrap(async (req, res, next) => {
   if (!req.user) throw new HttpError(401, t('Bitte melde dich erneut an.', 'Please sign in again.'));
   next();
 }));
+
+chat.use('/profile', profile);
 
 // Premium-Modelle (kosten Guthaben): höchstens „paidDaily“ Antworten pro Nutzer und Tag (im Admin-Bereich einstellbar)
 const paidUse = new Map();
@@ -138,6 +141,12 @@ chat.post('/start', wrap(async (req, res) => {
   res.json({ id, models: mode === 'battle' ? null : await Promise.all(picked.map(displayName)) });
 }));
 
+// Eine einzige Systemnachricht vorne (manche Anbieter mögen keine mehreren)
+function withSystem(parts, messages) {
+  const text = parts.filter(Boolean).join('\n\n');
+  return text ? [{ role: 'system', content: text }, ...messages] : messages;
+}
+
 // Notfall-Modelle: ist das gewählte Modell voll, antwortet ein starkes freies Modell (bevorzugt Groq)
 const NOTFALL_STATUS = new Set([401, 403, 404, 429, 500, 502, 503, 504]);
 const EMERGENCY = {
@@ -194,6 +203,8 @@ chat.post('/stream', wrap(async (req, res) => {
         : row.modality === 'web' || info?.caps.includes('web') ? [L.costWeb, t('Websuche', 'Web search')]
           : [L.costText, t('Eine Antwort', 'An answer')];
   const charged = await charge(req.user, cost, what);
+  const personal = await personalFor(req.user.id);
+  const custom = row.modality === 'image' ? null : instructionsPrompt(personal.instructions);
 
   // Verlauf speichern: deine Frage sofort, die Antwort am Ende
   const steps = [];
@@ -263,6 +274,8 @@ chat.post('/stream', wrap(async (req, res) => {
           onReasoning,
           onSources,
           onReact,
+          personal,
+          onRemember: (fact) => remember(req.user.id, fact),
           onStep: (step) => { steps.push(step); res.write(`${JSON.stringify({ step })}\n`); },
         });
       }
@@ -286,7 +299,7 @@ chat.post('/stream', wrap(async (req, res) => {
           }
           await streamChat({
             model,
-            messages: row.modality === 'code' ? [{ role: 'system', content: CODE_PROMPT }, ...(hasImages ? clean : flatten(clean))] : clean,
+            messages: withSystem([row.modality === 'code' ? CODE_PROMPT : null, custom], clean),
             signal: controller.signal,
             onText,
             onReasoning,

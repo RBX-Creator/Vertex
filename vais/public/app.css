@@ -1550,3 +1550,23 @@ a.menu-item { color: inherit; text-decoration: none; box-sizing: border-box; }
 a.drawer-item { color: inherit; text-decoration: none; }
 .drawer-item[hidden], .set-admin[hidden] { display: none !important; }
 a.set-admin { display: flex; justify-content: center; text-decoration: none; margin-top: 8px; box-sizing: border-box; }
+
+/* ── Persönlich: Anweisungen & Gedächtnis ─────────────────────────── */
+.set-label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 6px; }
+.set-instr { width: 100%; box-sizing: border-box; resize: vertical; min-height: 96px; font: inherit; line-height: 1.45; }
+.set-count { text-align: right; margin: 4px 0 0; font-variant-numeric: tabular-nums; }
+.set-switch { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 18px 0 8px; cursor: pointer; }
+.set-switch span { display: grid; gap: 2px; }
+.set-switch b { font-weight: 500; font-size: 15px; }
+.set-switch small { color: var(--muted); font-size: 13px; line-height: 1.4; }
+.set-switch input { appearance: none; -webkit-appearance: none; flex: none; width: 46px; height: 28px; border-radius: 999px; background: var(--border-strong); position: relative; cursor: pointer; transition: background .2s; margin: 0; }
+.set-switch input::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .2s cubic-bezier(.2, .8, .2, 1); }
+.set-switch input:checked { background: var(--success); }
+.set-switch input:checked::after { transform: translateX(18px); }
+.set-switch input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.mem-list { list-style: none; margin: 4px 0 10px; padding: 0; display: grid; gap: 6px; }
+.mem-list li { display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 12px; border-radius: 10px; background: var(--surface-2); font-size: 14px; animation: fadeUp .25s ease both; }
+.mem-list li span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mem-list .mem-empty { background: none; padding: 4px 0; color: var(--muted); font-size: 13px; }
+.mem-del { flex: none; width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; }
+.mem-del:hover { background: var(--border); color: var(--text); }
