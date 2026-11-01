@@ -70,7 +70,7 @@ function html({ title, body, valid }, code) {
 }
 
 export async function sendCode(email, code, purpose) {
-  const L = TEXTS[lang()] ?? TEXTS.de;
+  const L = TEXTS[lang()] ?? (lang() === 'de' ? TEXTS.de : TEXTS.en);
   const t = { ...L[purpose], valid: L.valid, yourCode: L.yourCode };
   if (BREVO_API_KEY) return sendViaBrevoApi(email, code, t);
   if (!transport) {

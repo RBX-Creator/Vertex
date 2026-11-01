@@ -7,8 +7,12 @@
   var theme = read('vais.theme');
   if (theme === 'light' || theme === 'dark') root.setAttribute('data-theme', theme);
 
+  var LANGS = ['de', 'en', 'tr', 'es', 'fr', 'uk'];
   var lang = read('vais.lang');
-  if (lang !== 'de' && lang !== 'en') lang = /^de\b/i.test(navigator.language || '') ? 'de' : 'en';
+  if (LANGS.indexOf(lang) === -1) {
+    var nav = String(navigator.language || '').slice(0, 2).toLowerCase();
+    lang = LANGS.indexOf(nav) !== -1 ? nav : 'en';
+  }
   root.setAttribute('lang', lang);
   root.setAttribute('data-lang', lang);
   try { document.cookie = 'vais_lang=' + lang + '; path=/; max-age=31536000; samesite=lax'; } catch (e) { /* egal */ }

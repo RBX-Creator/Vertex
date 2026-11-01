@@ -168,7 +168,7 @@ function systemPrompt(personal = {}) {
   const now = new Date().toLocaleString('de-DE', { timeZone: 'Europe/Berlin', dateStyle: 'full', timeStyle: 'short' });
   return [
     'Du bist Agent X, der stärkste Assistent von VAIs. Du arbeitest gründlich und selbstständig in mehreren Schritten.',
-    lang() === 'en'
+    lang() !== 'de'
       ? 'Think in English. Start your reasoning with one short sentence about what the user wants, then plan the steps.'
       : 'Denke auf Deutsch. Beginne deine Überlegungen mit einem kurzen Satz, was der Nutzer genau möchte, und plane dann die Schritte.',
     `Heute ist ${now} (Europe/Berlin).`,

@@ -31,6 +31,10 @@ KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand:
 - **Agent X im Hintergrund**: Verbindung weg oder App zu → er arbeitet weiter und meldet sich per Benachrichtigung; „Stopp“ hält ihn wirklich an
 - **Live-Übersetzer** (Seitenleiste → Übersetzer): zwei Sprachen, sprechen oder tippen, Übersetzung wird vorgelesen
 - **Lange Chats** werden automatisch zusammengefasst statt abzubrechen
+- **Jugendschutz** (Llama Guard, kostenlos bei Groq): blockt Gewalt, Hass, sexuelle Inhalte, Waffen; bei Selbstverletzung Hilfe-Nummern; im Admin-Bereich abschaltbar
+- **👎 mit Gründen** (Auswertung pro Modell im Admin-Bereich), **Status-Seite** (`/status`), **Warnungen für Admins** per Push
+- **Plan zuerst** (Agent X bei großen Aufgaben), **Kamera-Knopf** (+ → Foto aufnehmen), **QR-Codes** zum Teilen
+- **6 Sprachen**: Deutsch, Englisch und Türkisch, Spanisch, Französisch, Ukrainisch (von VAIs selbst übersetzt; nach neuen Texten `npm run strings`)
 - **Admin-Seite** (`/admin`, nur für `ADMIN_EMAILS`): Limits und Kosten einstellen, eigenes Limit pro Nutzer, Verbrauch zurücksetzen, API-Schlüssel verwalten, Nutzerzahlen, Fragen pro Tag, beliebte Modelle, Fehlerprotokoll, Nutzer sperren/entsperren, Bestenliste zurücksetzen (rückgängig machbar)
 - **Datenschutz** (`/datenschutz`) und **Impressum** (`/impressum`) mit Betreiber-Angaben aus `OWNER_NAME`, `OWNER_EMAIL`, `IMPRESSUM_ADDRESS`
 - **Bestenliste**: Elo-Wertung aus allen Battle-Stimmen, getrennt nach Alle/Text/Code/Websuche, mit Siegquote (Unentschieden und „beide schlecht“ zählen halb)

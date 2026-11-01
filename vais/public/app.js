@@ -1,4 +1,4 @@
-import { t, LANG, LOCALE, translateDom, setLang, getTheme, setTheme } from './i18n.js';
+import { t, LANG, LOCALE, LANGUAGES, EXTRA_LANGS, translateDom, setLang, getTheme, setTheme } from './i18n.js';
 import { markdown, enhance } from './render.js';
 import { startTour, tourDone } from './tour.js';
 
@@ -751,9 +751,9 @@ function renderSources(card, a) {
 }
 
 // Arbeitsschritte von Agent X über der Antwort anzeigen
-const STEP_LABEL = LANG === 'en'
-  ? { edit: 'Editing', reminder: 'Reminder', video: 'Watching', memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' }
-  : { edit: 'Bearbeitet', reminder: 'Erinnerung', video: 'Schaut Video', memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
+const STEP_EN = { edit: 'Editing', reminder: 'Reminder', video: 'Watching', memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' };
+const STEP_DE = { edit: 'Bearbeitet', reminder: 'Erinnerung', video: 'Schaut Video', memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
+const STEP_LABEL = Object.fromEntries(Object.keys(STEP_EN).map((k) => [k, t(STEP_DE[k], STEP_EN[k])]));
 function renderSteps(card, a) {
   let box = $('.agent-steps', card);
   if (!a.steps?.length) { box?.remove(); return; }
@@ -1315,8 +1315,8 @@ $('#set-voice-test')?.addEventListener('click', () => {
   stopSpeaking();
   const prefs = voicePrefs();
   const u = new SpeechSynthesisUtterance(t('Hallo! So klinge ich, wenn ich dir Antworten vorlese.', 'Hi! This is how I sound when I read answers to you.'));
-  u.lang = LANG === 'en' ? 'en-US' : 'de-DE';
-  const v = pickVoice(LANG === 'en' ? 'en' : 'de');
+  u.lang = LOCALE;
+  const v = pickVoice(LANG);
   if (v) u.voice = v;
   u.rate = prefs.rate;
   u.pitch = prefs.pitch;
@@ -1330,7 +1330,7 @@ function speak(btn, card) {
   const text = speakableText(card);
   const parts = speechChunks(text);
   if (!parts.length) return;
-  const lang = guessLang(text);
+  const lang = EXTRA_LANGS.includes(LANG) ? LANG : guessLang(text);
   const voice = pickVoice(lang);
   const prefs = voicePrefs();
   speakingBtn = btn;
@@ -1338,7 +1338,7 @@ function speak(btn, card) {
   btn.innerHTML = ICON.speakStop;
   parts.forEach((part, i) => {
     const u = new SpeechSynthesisUtterance(part);
-    u.lang = lang === 'en' ? 'en-US' : 'de-DE';
+    u.lang = { de: 'de-DE', en: 'en-US' }[lang] ?? LOCALE;
     if (voice) u.voice = voice;
     u.rate = prefs.rate;
     u.pitch = prefs.pitch;
@@ -1449,14 +1449,14 @@ async function voiceAsk(text) {
   const spoken = answer?.text ? speakableText(card) : answer?.reaction ? '' : t('Das hat leider nicht geklappt.', 'Sorry, that did not work.');
   if (!spoken) return voiceListen(); // nur ein Emoji als Antwort
   voicePhase('speak', spoken.length > 220 ? `${spoken.slice(0, 220)} …` : spoken);
-  const lang = guessLang(spoken);
+  const lang = EXTRA_LANGS.includes(LANG) ? LANG : guessLang(spoken);
   const v = pickVoice(lang);
   const prefs = voicePrefs();
   const parts = speechChunks(spoken);
   speechSynthesis.cancel();
   parts.forEach((part, i) => {
     const u = new SpeechSynthesisUtterance(part);
-    u.lang = lang === 'en' ? 'en-US' : 'de-DE';
+    u.lang = { de: 'de-DE', en: 'en-US' }[lang] ?? LOCALE;
     if (v) u.voice = v;
     u.rate = prefs.rate;
     u.pitch = prefs.pitch;
@@ -1519,7 +1519,7 @@ function trPaint() {
 }
 function openTranslator() {
   closeDrawer();
-  const saved = store.get('vais.tr', { a: LANG === 'en' ? 'en-US' : 'de-DE', b: LANG === 'en' ? 'de-DE' : 'en-US' });
+  const saved = store.get('vais.tr', { a: LOCALE, b: LANG === 'en' ? 'de-DE' : 'en-US' });
   for (const sel of ['#tr-a', '#tr-b']) {
     $(sel).innerHTML = TR_LANGS.map(([code, name, flag]) => `<option value="${code}">${flag} ${name}</option>`).join('');
   }
@@ -2503,7 +2503,10 @@ window.addEventListener('appinstalled', () => { installPrompt = null; toast(t('V
 function paintSettings() {
   const theme = getTheme();
   document.querySelectorAll('[data-theme-opt]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.themeOpt === theme)));
-  document.querySelectorAll('[data-lang-opt]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.langOpt === LANG)));
+  const langSel = $('#set-lang-select');
+  if (!langSel.options.length) langSel.innerHTML = LANGUAGES.map(([code, name]) => `<option value="${code}">${name}</option>`).join('');
+  langSel.value = LANG;
+  $('#set-lang-hint').hidden = !EXTRA_LANGS.includes(LANG);
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   $('#set-install-group').hidden = standalone;
@@ -2711,13 +2714,13 @@ function openSettings() {
 function closeSettings() { settingsEl.hidden = true; }
 
 $('#open-settings').addEventListener('click', openSettings);
+$('#set-lang-select').addEventListener('change', (e) => { if (e.target.value !== LANG) setLang(e.target.value); });
 $('#d-settings').addEventListener('click', openSettings);
 settingsEl.addEventListener('click', (e) => {
   if (e.target.closest('[data-close]')) return closeSettings();
   const th = e.target.closest('[data-theme-opt]');
   if (th) { setTheme(th.dataset.themeOpt); paintSettings(); }
-  const lg = e.target.closest('[data-lang-opt]');
-  if (lg && lg.dataset.langOpt !== LANG) setLang(lg.dataset.langOpt);
+
 });
 $('#set-install').addEventListener('click', async () => {
   if (!installPrompt) return;

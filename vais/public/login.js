@@ -1,4 +1,4 @@
-import { t, LANG, translateDom, setLang } from './i18n.js';
+import { t, LANG, LANGUAGES, translateDom, setLang } from './i18n.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -310,10 +310,10 @@ $('#year').textContent = new Date().getFullYear();
 
 // Sprache umschalten (DE / EN)
 translateDom();
-document.querySelectorAll('[data-lang-opt]').forEach((b) => {
-  b.setAttribute('aria-pressed', String(b.dataset.langOpt === LANG));
-  b.addEventListener('click', () => { if (b.dataset.langOpt !== LANG) setLang(b.dataset.langOpt); });
-});
+const langSel = $('#lang-select');
+langSel.innerHTML = LANGUAGES.map(([code, name]) => `<option value="${code}">${code.toUpperCase()} · ${name}</option>`).join('');
+langSel.value = LANG;
+langSel.addEventListener('change', () => setLang(langSel.value));
 show(current);
 
 // „Mit Google anmelden“ nur zeigen, wenn es eingerichtet ist; Fehler aus der Weiterleitung anzeigen

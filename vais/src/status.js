@@ -35,7 +35,7 @@ export async function statusPage(req, res) {
   const data = await snapshot();
   res.set('Cache-Control', 'no-cache');
   if (req.path.startsWith('/api/')) return res.json(data);
-  const en = lang() === 'en';
+  const en = lang() !== 'de';
   const T = (de, e2) => (en ? e2 : de);
   const head = {
     ok: ['✓', T('Alles läuft', 'All systems running')],

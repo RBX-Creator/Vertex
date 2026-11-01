@@ -9,6 +9,7 @@ const { chat, share } = await import('./src/chat.js');
 const { admin } = await import('./src/admin.js');
 const { serveSite } = await import('./src/sites.js');
 await import('./src/alarm.js');
+const { serveDict } = await import('./src/ui-i18n.js');
 const { statusPage } = await import('./src/status.js');
 const { demoMode, tempImage } = await import('./src/models.js');
 const { OWNER, isAdmin } = await import('./src/config.js');
@@ -113,6 +114,9 @@ app.get('/qr', async (req, res) => {
   const svg = await QRCode.toString(url.href, { type: 'svg', margin: 1, errorCorrectionLevel: 'M', color: { dark: '#111111', light: '#ffffff' } });
   res.set('Cache-Control', 'public, max-age=86400').type('image/svg+xml').send(svg);
 });
+
+// Übersetzungen der Oberfläche (Türkisch, Spanisch, Französisch, Ukrainisch)
+app.get('/i18n/:lang.json', serveDict);
 
 // Öffentliche Status-Seite: welche Modelle gerade frei sind
 app.get('/status', statusPage);

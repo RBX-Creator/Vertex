@@ -362,7 +362,7 @@ form { display: grid; gap: 12px; }
 .auth-foot a, .legal-inline a, .share-end small a { color: inherit; text-underline-offset: 3px; }
 
 /* ── Datenschutz & Impressum ───────────────────────────── */
-html[data-lang='en'] .l-de, html:not([data-lang='en']) .l-en { display: none; }
+html:not([data-lang='de']) .l-de, html[data-lang='de'] .l-en { display: none; }
 .legal { min-height: 100%; }
 .legal-top { padding: max(20px, env(safe-area-inset-top)) 16px 0; max-width: 760px; margin: 0 auto; }
 .legal-main { max-width: 760px; margin: 0 auto; padding: 24px 16px 60px; line-height: 1.6; }
@@ -384,3 +384,5 @@ html[data-lang='en'] .l-de, html:not([data-lang='en']) .l-en { display: none; }
 .google-btn:hover { background: var(--surface-2); }
 .google-btn svg { width: 20px; height: 20px; flex: none; }
 .google-box[hidden] { display: none; }
+
+.lang-select { font: inherit; font-size: 13px; font-weight: 500; padding: 7px 28px 7px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
