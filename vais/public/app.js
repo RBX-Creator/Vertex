@@ -1460,7 +1460,7 @@ function pickVoice(lang) {
 }
 // Vorlesen: „online“ (natürliche Stimme als Audiodatei, Standard auf iPhone/Mac) oder „device“ (Stimme des Geräts)
 const onlineVoice = new OnlineVoice();
-const useOnline = () => !onlineVoice.broken && (voicePrefs().engine ?? (appleDevice ? 'online' : 'device')) === 'online';
+const useOnline = () => !onlineVoice.broken && (voicePrefs().engine ?? 'device') === 'online';
 let voiceErrShown = '';
 // Anruf-Modus (Hörer): eine einzige Ton-Einstellung für das ganze Gespräch, Mikrofon bleibt an.
 // Lautsprecher: Mikrofon zum Sprechen kurz aus – das iPhone wechselt dabei zwischen Anruf- und Medien-Lautstärke.
@@ -1523,7 +1523,7 @@ function paintVoices() {
     sel.value = list.some((v) => v.voiceURI === prefs[lang]) ? prefs[lang] : '';
     sel.closest('label').hidden = !list.length;
   }
-  $('#set-voice-engine').value = prefs.engine ?? (appleDevice ? 'online' : 'device');
+  $('#set-voice-engine').value = prefs.engine ?? 'device';
   $('#set-voice-online').value = prefs.online ?? 'nova';
   $('#set-voice-online').closest('label').hidden = $('#set-voice-engine').value !== 'online';
   $('#set-voice-rate').value = prefs.rate;
@@ -1672,7 +1672,9 @@ function startListening() {
 // die eingebaute Spracherkennung des Browsers – dann „Tippen zum Sprechen“.
 const voiceEl = $('#voice');
 const voice = { on: false, paused: false, rec: null, phase: 'idle', mode: 'record', misses: 0, listener: null, earpiece: store.get('vais.earpiece', false) };
-if ((canRecord || SpeechRec) && canSpeak) $('#voice-btn').hidden = false;
+// Sprach-Modus vorerst ausgeblendet (Online-Stimme braucht noch einen Pollinations-Schlüssel) – zum Einschalten auf true setzen
+const VOICE_MODE = false;
+if (VOICE_MODE && (canRecord || SpeechRec) && canSpeak) $('#voice-btn').hidden = false;
 function voicePhase(phase, said) {
   voice.phase = phase;
   voiceEl.dataset.phase = phase;

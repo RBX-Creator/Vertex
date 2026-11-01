@@ -3,17 +3,9 @@ import { t } from './i18n.js';
 
 export const CHANGES = () => [
   {
-    id: 10, date: '2026-11-01',
-    items: [
-      ['🗣️', t('Natürliche Stimme', 'Natural voice'), t('VAIs spricht jetzt mit einer natürlichen Online-Stimme – auch auf dem iPhone mit Ton. In den Einstellungen unter „Vorlesen“ kannst du die Stimme wählen.', 'VAIs now speaks with a natural online voice – with sound on iPhone too. Pick the voice in Settings under “Read aloud”.')],
-    ],
-  },
-  {
     id: 9, date: '2026-11-01',
     items: [
-      ['🎙️', t('Sprach-Modus repariert', 'Voice mode fixed'), t('Funktioniert jetzt auch auf dem iPhone: Der Kreis zeigt, dass du gehört wirst – antippen, wenn du fertig bist.', 'Now works on iPhone too: the circle shows you are being heard – tap it when you are done.')],
-      ['🔊', t('Antworten mit Ton und schneller', 'Answers with sound, and faster'), t('Im Sprach-Modus liest VAIs schon den ersten Satz vor, während der Rest noch geschrieben wird.', 'In voice mode, VAIs starts reading the first sentence while the rest is still being written.')],
-      ['🗣️', t('Bessere Spracherkennung', 'Better speech recognition'), t('Mikrofon, Sprach-Modus und Übersetzer erkennen Sprache jetzt genauer.', 'Microphone, voice mode and translator now recognise speech more accurately.')],
+      ['🗣️', t('Bessere Spracherkennung', 'Better speech recognition'), t('Mikrofon und Übersetzer erkennen Sprache jetzt genauer.', 'Microphone and translator now recognise speech more accurately.')],
     ],
   },
   {
