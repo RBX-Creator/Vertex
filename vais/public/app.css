@@ -1408,3 +1408,28 @@ body { overflow: hidden; }
 }
 .pic-wait .shimmer { color: var(--text); font-weight: 500; }
 .pic-wait small { color: var(--muted); }
+
+/* ── Code-Blöcke ───────────────────────────────────────── */
+.codeblock { margin: 0 0 .85em; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--code-bg); }
+.codeblock .md pre, .md .codeblock pre { margin: 0; border-radius: 0; background: none; }
+.code-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.code-copy { border: 0; background: none; color: var(--muted); font-size: 12px; padding: 4px 8px; border-radius: 6px; font-family: var(--sans); }
+.code-copy:hover { background: var(--surface-2); color: var(--text); }
+.md .codeblock pre { background: none; }
+.hljs { color: var(--text); background: none; }
+.hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-doctag, .hljs-meta .hljs-keyword { color: var(--hl-keyword); }
+.hljs-string, .hljs-regexp, .hljs-addition, .hljs-meta .hljs-string { color: var(--hl-string); }
+.hljs-number, .hljs-literal, .hljs-symbol, .hljs-bullet { color: var(--hl-number); }
+.hljs-title, .hljs-title.function_, .hljs-section, .hljs-selector-id { color: var(--hl-title); }
+.hljs-built_in, .hljs-type, .hljs-title.class_, .hljs-class .hljs-title { color: var(--hl-type); }
+.hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable, .hljs-property { color: var(--hl-attr); }
+.hljs-tag, .hljs-name, .hljs-selector-class { color: var(--hl-tag); }
+.hljs-meta { color: var(--hl-comment); }
+.hljs-deletion { color: var(--danger); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }
+
+/* ── Formeln ───────────────────────────────────────────── */
+.md .katex { font-size: 1.08em; }
+.md .katex-display { margin: .8em 0; overflow-x: auto; overflow-y: hidden; padding: 4px 0; }

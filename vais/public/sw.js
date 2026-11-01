@@ -1,8 +1,8 @@
 // Service Worker für VAIs:
 // - macht VAIs als App installierbar
 // - zeigt „VAIs wacht auf …“, wenn der kostenlose Server gerade schläft (statt einer leeren Seite)
-const CACHE = 'vais-v1';
-const SHELL = ['/waking.html', '/waking.js', '/boot.js', '/styles.css', '/logo.svg', '/icons/app-192.png'];
+const CACHE = 'vais-v2';
+const SHELL = ['/waking.html', '/waking.js', '/boot.js', '/fonts.css', '/styles.css', '/logo.svg', '/icons/app-192.png'];
 const WAKE_AFTER = 4500; // so lange warten wir auf den Server, bevor die Aufwach-Seite kommt
 
 self.addEventListener('install', (event) => {

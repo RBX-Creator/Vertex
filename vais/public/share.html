@@ -8,13 +8,14 @@
   <meta name="robots" content="noindex">
   <script src="/boot.js"></script>
   <link rel="icon" href="/logo.svg" type="image/svg+xml">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/fonts.css">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/app.css">
   <script src="/vendor/marked.js" defer></script>
   <script src="/vendor/purify.js" defer></script>
+  <script src="/vendor/hljs.js" defer></script>
+  <script src="/vendor/katex.js" defer></script>
+  <link rel="stylesheet" href="/vendor/katex.css">
 </head>
 <body class="share-page">
   <header class="topbar">
@@ -37,6 +38,7 @@
     <p class="share-end" id="share-end" hidden>
       <span data-en="Compare the best AI models yourself – for free.">Vergleiche die besten KI-Modelle selbst – kostenlos.</span>
       <a class="btn" href="/login" data-en="Try VAIs">VAIs ausprobieren</a>
+      <small><a href="/datenschutz" data-en="Privacy">Datenschutz</a> · <a href="/impressum" data-en="Legal notice">Impressum</a></small>
     </p>
   </main>
   <script src="/share.js" type="module"></script>

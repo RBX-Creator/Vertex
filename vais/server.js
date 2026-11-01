@@ -7,6 +7,8 @@ const { auth, currentUser } = await import('./src/auth.js');
 const { mailConfigured } = await import('./src/mailer.js');
 const { chat, share } = await import('./src/chat.js');
 const { demoMode } = await import('./src/models.js');
+const { OWNER } = await import('./src/config.js');
+const { readFile } = await import('node:fs/promises');
 
 // Abstürze vermeiden: unerwartete Fehler nur protokollieren
 process.on('unhandledRejection', (err) => console.error('Unbehandelter Fehler:', err));
@@ -25,8 +27,8 @@ app.use(langMiddleware);
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:",
   "img-src 'self' data: blob: https:",
   "connect-src 'self'",
   "frame-src 'self'",
@@ -96,6 +98,42 @@ app.get('/s/:id', (req, res) => {
   res.sendFile(page('share.html'));
 });
 
+// Datenschutz & Impressum (mit Betreiber-Angaben aus der Konfiguration)
+const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+async function legalPage(res, file) {
+  const html = (await readFile(page(`legal/${file}`), 'utf8'))
+    .replaceAll('{{NAME}}', esc(OWNER.name))
+    .replaceAll('{{EMAIL}}', esc(OWNER.email))
+    .replaceAll('{{ADDRESS_HTML}}', OWNER.address ? `${esc(OWNER.address).replace(/\s*[,;|]\s*/g, '<br>')}<br>` : '')
+    .replaceAll('{{DATE}}', '01.11.2026');
+  res.type('html').send(html);
+}
+app.get('/datenschutz', (req, res) => legalPage(res, 'datenschutz.html'));
+app.get('/impressum', (req, res) => legalPage(res, 'impressum.html'));
+app.use('/legal', (req, res) => res.status(404).end());
+
+// Webseiten-Symbole für Quellen über unseren Server holen (der Browser spricht nicht mit Google)
+const icons = new Map();
+app.get('/favicon/:host', async (req, res) => {
+  const host = String(req.params.host).toLowerCase();
+  if (!/^[a-z0-9.-]{1,253}$/.test(host) || !host.includes('.')) return res.status(400).end();
+  let hit = icons.get(host);
+  if (!hit) {
+    try {
+      const r = await fetch(`https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(host)}`, { signal: AbortSignal.timeout(6000) });
+      const type = r.headers.get('content-type') || '';
+      if (!r.ok || !type.startsWith('image/')) return res.status(404).end();
+      hit = { type, body: Buffer.from(await r.arrayBuffer()) };
+      if (hit.body.length > 50_000) return res.status(404).end();
+      if (icons.size > 1000) icons.delete(icons.keys().next().value);
+      icons.set(host, hit);
+    } catch {
+      return res.status(404).end();
+    }
+  }
+  res.set({ 'Content-Type': hit.type, 'Cache-Control': 'public, max-age=604800' }).send(hit.body);
+});
+
 // Service Worker und Manifest immer frisch laden
 app.get('/sw.js', (req, res) => {
   res.set({ 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' });
@@ -113,6 +151,27 @@ app.use(express.static(new URL('./public', import.meta.url).pathname, { index: f
 const vendor = (file) => new URL(`./node_modules/${file}`, import.meta.url).pathname;
 app.get('/vendor/marked.js', (req, res) => res.sendFile(vendor('marked/lib/marked.umd.js')));
 app.get('/vendor/purify.js', (req, res) => res.sendFile(vendor('dompurify/dist/purify.min.js')));
+// Code-Farben (highlight.js), Formeln (KaTeX) und Schriften
+app.get('/vendor/hljs.js', (req, res) => res.sendFile(vendor('@highlightjs/cdn-assets/highlight.min.js')));
+app.get('/vendor/hljs-light.css', (req, res) => res.sendFile(vendor('@highlightjs/cdn-assets/styles/github.min.css')));
+app.get('/vendor/hljs-dark.css', (req, res) => res.sendFile(vendor('@highlightjs/cdn-assets/styles/github-dark.min.css')));
+app.get('/vendor/katex.js', (req, res) => res.sendFile(vendor('katex/dist/katex.min.js')));
+app.get('/vendor/katex.css', (req, res) => res.sendFile(vendor('katex/dist/katex.min.css')));
+app.use('/vendor/fonts', express.static(vendor('katex/dist/fonts'), { maxAge: '30d', immutable: true }));
+const FONT_FILES = {
+  'inter-latin-400-normal.woff2': '@fontsource/inter/files/inter-latin-400-normal.woff2',
+  'inter-latin-500-normal.woff2': '@fontsource/inter/files/inter-latin-500-normal.woff2',
+  'inter-latin-600-normal.woff2': '@fontsource/inter/files/inter-latin-600-normal.woff2',
+  'instrument-serif-latin-400-normal.woff2': '@fontsource/instrument-serif/files/instrument-serif-latin-400-normal.woff2',
+  'jetbrains-mono-latin-400-normal.woff2': '@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2',
+  'jetbrains-mono-latin-500-normal.woff2': '@fontsource/jetbrains-mono/files/jetbrains-mono-latin-500-normal.woff2',
+};
+app.get('/fonts/:file', (req, res) => {
+  const file = FONT_FILES[req.params.file];
+  if (!file) return res.status(404).end();
+  res.set('Cache-Control', 'public, max-age=2592000, immutable');
+  res.sendFile(vendor(file));
+});
 // PDF-Text im Browser auslesen (wird nur geladen, wenn jemand ein PDF anhängt)
 app.get('/vendor/pdf.mjs', (req, res) => res.type('text/javascript').sendFile(vendor('pdfjs-dist/build/pdf.min.mjs')));
 app.get('/vendor/pdf.worker.mjs', (req, res) => res.type('text/javascript').sendFile(vendor('pdfjs-dist/build/pdf.worker.min.mjs')));

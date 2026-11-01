@@ -1,20 +1,11 @@
 // Geteilter Chat: nur lesen, ohne Anmeldung
 import { t, translateDom } from './i18n.js';
+import { markdown, enhance } from './render.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 translateDom();
 
 const MODE = { agent: 'Agent X', battle: 'Battle', sxs: 'Side by Side', direct: t('Direkt', 'Direct') };
-
-function markdown(text) {
-  const clean = String(text ?? '').replace(/\s*【(\d+)[^】]*】/g, ' <span class="cite">$1</span>').replace(/\s*【[^】]*】/g, '');
-  if (window.marked && window.DOMPurify) {
-    return DOMPurify.sanitize(marked.parse(clean, { gfm: true, breaks: true }), { ADD_ATTR: ['target'] });
-  }
-  const div = document.createElement('div');
-  div.textContent = clean;
-  return div.innerHTML.replace(/\n/g, '<br>');
-}
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -71,7 +62,7 @@ function renderTurn(chat, turn) {
       fig.append(img);
       body.append(fig);
     }
-    body.querySelectorAll('a').forEach((link) => { link.target = '_blank'; link.rel = 'noopener noreferrer'; });
+    enhance(body);
     card.append(head, body);
     if (a.sources?.length) {
       const src = el('ol', 'share-sources');

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Datenschutz – VAIs</title>
+  <meta name="title-en" content="Privacy – VAIs">
+  <script src="/boot.js"></script>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/fonts.css">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="legal">
+  <header class="legal-top">
+    <a class="brand" href="/" aria-label="VAIs"><svg viewBox="0 0 26 26" fill="none" aria-hidden="true"><path d="M4.5 6 13 21 21.5 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4.5" cy="6" r="2.4" fill="currentColor"/><circle cx="21.5" cy="6" r="2.4" fill="currentColor"/></svg><span>VAIs</span></a>
+  </header>
+  <main class="legal-main">
+    <article class="l-de" lang="de">
+      <h1>Datenschutzerklärung</h1>
+      <p class="legal-date">Stand: {{DATE}}</p>
+
+      <h2>1. Verantwortlich</h2>
+      <p>{{NAME}}<br>{{ADDRESS_HTML}}E-Mail: <a href="mailto:{{EMAIL}}">{{EMAIL}}</a></p>
+
+      <h2>2. Welche Daten wir speichern</h2>
+      <ul>
+        <li><b>Konto:</b> deine E-Mail-Adresse und dein Passwort (nur als sicherer Hash, nie im Klartext).</li>
+        <li><b>Chats:</b> deine Nachrichten, angehängte Bilder und Dateien, die Antworten der Modelle, Abstimmungen und Bewertungen – damit du deinen Verlauf wiederfindest.</li>
+        <li><b>Technisch nötig:</b> eine Sitzungs-Kennung (Cookie), damit du angemeldet bleibst, und vorübergehend die IP-Adresse zum Schutz vor Missbrauch (z. B. zu viele Anmeldeversuche). Server-Protokolle werden nur kurz aufbewahrt.</li>
+      </ul>
+      <p>Wir verwenden <b>kein Tracking, keine Werbung und keine Analyse-Dienste</b>.</p>
+
+      <h2>3. Cookies und lokaler Speicher</h2>
+      <ul>
+        <li><code>vais_session</code> – hält dich angemeldet (30 Tage, technisch notwendig).</li>
+        <li><code>vais_lang</code> – merkt sich die Sprache.</li>
+        <li>Im lokalen Speicher deines Browsers: Design, Sprache, zuletzt gewählte Modelle und – für den Offline-Modus – eine Kopie deiner letzten Chats auf deinem Gerät.</li>
+      </ul>
+
+      <h2>4. Weitergabe an Dienstleister</h2>
+      <p>Damit VAIs funktioniert, werden Daten an folgende Dienste übertragen. Einige haben ihren Sitz in den USA; dabei kann ein Zugriff durch dortige Behörden nicht ausgeschlossen werden.</p>
+      <ul>
+        <li><b>Render</b> (Hosting der Webseite, USA)</li>
+        <li><b>Turso</b> (Datenbank für Konten und Chats)</li>
+        <li><b>Brevo</b> (Versand der Bestätigungs-E-Mails, Frankreich)</li>
+        <li><b>KI-Anbieter</b>, an die deine Nachrichten zur Beantwortung geschickt werden: OpenRouter und Groq (USA), ggf. Google; für Bilder Pollinations. Diese Anbieter erhalten den Inhalt deiner Anfrage, aber nicht deine E-Mail-Adresse.</li>
+        <li><b>Webseiten-Symbole</b> bei Quellen werden über unseren Server von Google abgerufen – dein Browser verbindet sich dabei nicht selbst mit Google.</li>
+      </ul>
+      <p><b>Bitte gib keine sensiblen Daten</b> (z. B. Passwörter, Gesundheits- oder Bankdaten) in Chats ein.</p>
+
+      <h2>5. Geteilte Chats</h2>
+      <p>Wenn du einen Chat teilst, kann ihn jeder mit dem Link lesen. Inhalte angehängter Dateien werden dabei nicht angezeigt. Du kannst das Teilen jederzeit beenden.</p>
+
+      <h2>6. Speicherdauer und Löschung</h2>
+      <p>Deine Daten bleiben gespeichert, bis du sie löschst. In den <b>Einstellungen</b> kannst du einzelne oder alle Chats und dein ganzes Konto löschen. Abgestimmte Battles bleiben danach nur anonym (ohne Inhalt und ohne Bezug zu dir) in der Bestenliste.</p>
+
+      <h2>7. Deine Rechte</h2>
+      <p>Du hast das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung, Datenübertragbarkeit und Widerspruch (Art. 15–21 DSGVO). Schreib dafür einfach an die oben genannte E-Mail-Adresse. Außerdem kannst du dich bei einer Datenschutz-Aufsichtsbehörde beschweren.</p>
+
+      <h2>8. Rechtsgrundlagen</h2>
+      <p>Verarbeitung zur Bereitstellung des Dienstes (Art. 6 Abs. 1 lit. b DSGVO), zum Schutz vor Missbrauch (Art. 6 Abs. 1 lit. f DSGVO) sowie technisch notwendige Speicherung im Browser (§ 25 Abs. 2 TDDDG).</p>
+    </article>
+
+    <article class="l-en" lang="en">
+      <h1>Privacy policy</h1>
+      <p class="legal-date">Last updated: {{DATE}}</p>
+
+      <h2>1. Controller</h2>
+      <p>{{NAME}}<br>{{ADDRESS_HTML}}Email: <a href="mailto:{{EMAIL}}">{{EMAIL}}</a></p>
+
+      <h2>2. What we store</h2>
+      <ul>
+        <li><b>Account:</b> your email address and your password (only as a secure hash, never in plain text).</li>
+        <li><b>Chats:</b> your messages, attached images and files, the models' answers, votes and ratings – so you can find your history again.</li>
+        <li><b>Technically required:</b> a session ID (cookie) to keep you signed in, and temporarily your IP address to prevent abuse (e.g. too many sign-in attempts). Server logs are kept only briefly.</li>
+      </ul>
+      <p>We use <b>no tracking, no ads and no analytics services</b>.</p>
+
+      <h2>3. Cookies and local storage</h2>
+      <ul>
+        <li><code>vais_session</code> – keeps you signed in (30 days, strictly necessary).</li>
+        <li><code>vais_lang</code> – remembers your language.</li>
+        <li>In your browser's local storage: theme, language, last chosen models and – for offline mode – a copy of your recent chats on your device.</li>
+      </ul>
+
+      <h2>4. Service providers</h2>
+      <p>To run VAIs, data is transferred to the following services. Some are based in the USA, where access by authorities cannot be ruled out.</p>
+      <ul>
+        <li><b>Render</b> (website hosting, USA)</li>
+        <li><b>Turso</b> (database for accounts and chats)</li>
+        <li><b>Brevo</b> (sending verification emails, France)</li>
+        <li><b>AI providers</b> that receive your messages to answer them: OpenRouter and Groq (USA), possibly Google; Pollinations for images. They receive the content of your request but not your email address.</li>
+        <li><b>Website icons</b> for sources are fetched from Google via our server – your browser does not connect to Google itself.</li>
+      </ul>
+      <p><b>Please do not enter sensitive data</b> (e.g. passwords, health or bank details) into chats.</p>
+
+      <h2>5. Shared chats</h2>
+      <p>If you share a chat, anyone with the link can read it. Contents of attached files are not shown. You can stop sharing at any time.</p>
+
+      <h2>6. Retention and deletion</h2>
+      <p>Your data is stored until you delete it. In <b>Settings</b> you can delete single chats, all chats and your whole account. Voted battles then remain only anonymously (without content and without any link to you) in the leaderboard.</p>
+
+      <h2>7. Your rights</h2>
+      <p>You have the right to access, rectification, erasure, restriction of processing, data portability and to object (Art. 15–21 GDPR). Just write to the email address above. You can also lodge a complaint with a data protection authority.</p>
+
+      <h2>8. Legal bases</h2>
+      <p>Processing to provide the service (Art. 6(1)(b) GDPR), to prevent abuse (Art. 6(1)(f) GDPR) and strictly necessary storage in the browser (§ 25(2) TDDDG).</p>
+    </article>
+    <p class="legal-links"><a href="/impressum" class="l-de">Impressum</a><a href="/impressum" class="l-en">Legal notice</a> · <a href="/">VAIs</a></p>
+  </main>
+</body>
+</html>

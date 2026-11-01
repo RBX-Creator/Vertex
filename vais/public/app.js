@@ -1,4 +1,5 @@
 import { t, LANG, LOCALE, translateDom, setLang, getTheme, setTheme } from './i18n.js';
+import { markdown, enhance } from './render.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 translateDom();
@@ -86,18 +87,6 @@ async function post(url, body) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || t('Etwas ist schiefgelaufen.', 'Something went wrong.'));
   return data;
-}
-
-if (window.DOMPurify) {
-  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-    if (node.tagName === 'A') { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
-  });
-}
-function markdown(text) {
-  // Quellen-Marker der Websuche („【1†L79-L83】“) als kleine Nummern anzeigen
-  text = text.replace(/\s*【(\d+)[^】]*】/g, ' <span class="cite">$1</span>').replace(/\s*【[^】]*】/g, '');
-  if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(text, { gfm: true, breaks: true }));
-  return escapeHtml(text).replace(/\n/g, '<br>');
 }
 
 // Hersteller-Logo eines Modells (farbig als Bild, einfarbige Logos per CSS-Maske in Textfarbe)
@@ -582,6 +571,7 @@ function updateCard(turnIndex, side) {
   } else {
     body.innerHTML = markdown(a.text);
   }
+  enhance(body);
 }
 
 // „Denkt nach …“: Gedanken laufen schnell durch, klappen zu, sobald die Antwort beginnt
@@ -641,7 +631,7 @@ function renderSources(card, a) {
     $('.src-title', link).textContent = src.title || host;
     $('small', link).textContent = src.url;
     const img = $('img', link);
-    img.src = `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(host)}`;
+    img.src = `/favicon/${encodeURIComponent(host)}`;
     img.onerror = () => { img.replaceWith(Object.assign(document.createElement('span'), { className: 'src-fallback', textContent: (host.replace(/^www\./, '')[0] || '?').toUpperCase() })); };
   });
 }
@@ -919,6 +909,7 @@ el.thread.addEventListener('click', async (e) => {
     $('#expand-title').textContent = labelFor(state.chat, side);
     $('#expand-body').innerHTML = a.text ? markdown(a.text) : '';
     for (const src of a.images ?? []) $('#expand-body').append(Object.assign(document.createElement('img'), { src, className: 'att-full', alt: '' }));
+    enhance($('#expand-body'));
     $('#expand').hidden = false;
     $('#expand [data-close]').focus();
   } else if (act === 'regen') {

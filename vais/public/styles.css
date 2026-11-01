@@ -16,6 +16,15 @@
   --serif: 'Instrument Serif', Georgia, 'Times New Roman', serif;
   --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --code-bg: #f1efe9;
+  --hl-comment: #8a877f;
+  --hl-keyword: #b3261e;
+  --hl-string: #2f7d4f;
+  --hl-number: #9c5b00;
+  --hl-title: #5b3fb8;
+  --hl-type: #0b6e99;
+  --hl-attr: #8a4a00;
+  --hl-tag: #1d6b3c;
   --vote-bg: var(--surface-2);
   --tab-on: var(--surface-2);
   color-scheme: light;
@@ -37,13 +46,22 @@
     --focus: rgba(242, 240, 234, 0.14);
     --danger: #e8735f;
     --success: #6fbf8a;
+    --code-bg: #1f1f1d;
+    --hl-comment: #8b8a83;
+    --hl-keyword: #ff7b72;
+    --hl-string: #a5d6a7;
+    --hl-number: #f2b866;
+    --hl-title: #c8a6ff;
+    --hl-type: #79c0ff;
+    --hl-attr: #ffa657;
+    --hl-tag: #7ee787;
     --vote-bg: rgba(0, 0, 0, .18);
     --tab-on: var(--bg);
     color-scheme: dark;
   }
 }
 :root[data-theme='dark'] {
-    --bg: #242422;
+  --bg: #242422;
   --surface: #2c2c2a;
   --surface-2: #333331;
   --border: #3d3d3a;
@@ -56,6 +74,15 @@
   --focus: rgba(242, 240, 234, 0.14);
   --danger: #e8735f;
   --success: #6fbf8a;
+  --code-bg: #1f1f1d;
+  --hl-comment: #8b8a83;
+  --hl-keyword: #ff7b72;
+  --hl-string: #a5d6a7;
+  --hl-number: #f2b866;
+  --hl-title: #c8a6ff;
+  --hl-type: #79c0ff;
+  --hl-attr: #ffa657;
+  --hl-tag: #7ee787;
   --vote-bg: rgba(0, 0, 0, .18);
   --tab-on: var(--bg);
   color-scheme: dark;
@@ -325,3 +352,21 @@ form { display: grid; gap: 12px; }
   25% { transform: translateX(-6px); }
   75% { transform: translateX(6px); }
 }
+
+.auth-foot a, .legal-inline a, .share-end small a { color: inherit; text-underline-offset: 3px; }
+
+/* ── Datenschutz & Impressum ───────────────────────────── */
+html[data-lang='en'] .l-de, html:not([data-lang='en']) .l-en { display: none; }
+.legal { min-height: 100%; }
+.legal-top { padding: max(20px, env(safe-area-inset-top)) 16px 0; max-width: 760px; margin: 0 auto; }
+.legal-main { max-width: 760px; margin: 0 auto; padding: 24px 16px 60px; line-height: 1.6; }
+.legal-main h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(38px, 9vw, 52px); line-height: 1.05; color: var(--heading); margin: 12px 0 6px; }
+.legal-main h2 { font-size: 17px; margin: 28px 0 8px; }
+.legal-main p, .legal-main li { color: var(--text); }
+.legal-main ul { padding-left: 1.3em; }
+.legal-main li { margin: 6px 0; }
+.legal-main a { color: inherit; text-underline-offset: 3px; }
+.legal-main code { font-family: var(--mono); font-size: .9em; background: var(--surface-2); padding: .1em .35em; border-radius: 5px; }
+.legal-date { color: var(--muted); margin: 0 0 8px; }
+.legal-links { margin-top: 36px; color: var(--muted); }
+.legal-links a + a { margin-left: 0; }
