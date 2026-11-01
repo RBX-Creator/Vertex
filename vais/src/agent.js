@@ -2,6 +2,7 @@
 // Werkzeuge: Websuche, Webseiten lesen, Rechnen, Datum/Uhrzeit.
 import { lookup } from 'node:dns/promises';
 import net from 'node:net';
+import { t, lang } from './i18n.js';
 import { listModels, complete, demoMode, sourcesFromText, makeSource } from './models.js';
 
 const MAX_STEPS = 8;
@@ -65,7 +66,9 @@ function systemPrompt() {
   const now = new Date().toLocaleString('de-DE', { timeZone: 'Europe/Berlin', dateStyle: 'full', timeStyle: 'short' });
   return [
     'Du bist Agent X, der stärkste Assistent von VAIs. Du arbeitest gründlich und selbstständig in mehreren Schritten.',
-    'Denke auf Deutsch. Beginne deine Überlegungen mit einem kurzen Satz, was der Nutzer genau möchte, und plane dann die Schritte.',
+    lang() === 'en'
+      ? 'Think in English. Start your reasoning with one short sentence about what the user wants, then plan the steps.'
+      : 'Denke auf Deutsch. Beginne deine Überlegungen mit einem kurzen Satz, was der Nutzer genau möchte, und plane dann die Schritte.',
     `Heute ist ${now} (Europe/Berlin).`,
     'Nutze deine Werkzeuge, wann immer sie die Antwort besser machen: web_search für alles Aktuelle oder Unsichere, read_webpage um Quellen oder Links zu lesen, calculate für jede Rechnung, current_datetime für Zeitfragen.',
     'Prüfe wichtige Fakten bei Bedarf mit einer zweiten Suche. Erfinde keine Fakten oder Links.',
@@ -76,7 +79,7 @@ function systemPrompt() {
 // ── Werkzeuge ─────────────────────────────────────────────────────
 async function webSearch(query, signal, addSources) {
   const model = await pickModel(SEARCH_PREFERENCE);
-  if (!model) throw new Error('Websuche ist nicht verfügbar (GROQ_API_KEY fehlt).');
+  if (!model) throw new Error(t('Websuche ist nicht verfügbar (GROQ_API_KEY fehlt).', 'Web search is not available (GROQ_API_KEY missing).'));
   const msg = await complete({
     model: model.id,
     signal,
@@ -103,13 +106,13 @@ function isPrivateIp(ip) {
 
 async function assertPublicUrl(raw) {
   let url;
-  try { url = new URL(raw); } catch { throw new Error('Ungültige Adresse.'); }
-  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Nur http- und https-Adressen sind erlaubt.');
-  if (url.username || url.password) throw new Error('Adressen mit Zugangsdaten sind nicht erlaubt.');
+  try { url = new URL(raw); } catch { throw new Error(t('Ungültige Adresse.', 'Invalid address.')); }
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error(t('Nur http- und https-Adressen sind erlaubt.', 'Only http and https addresses are allowed.'));
+  if (url.username || url.password) throw new Error(t('Adressen mit Zugangsdaten sind nicht erlaubt.', 'Addresses with credentials are not allowed.'));
   const host = url.hostname.replace(/^\[|\]$/g, '');
-  if (/^localhost$|\.local$|\.internal$/i.test(host)) throw new Error('Diese Adresse ist nicht erlaubt.');
+  if (/^localhost$|\.local$|\.internal$/i.test(host)) throw new Error(t('Diese Adresse ist nicht erlaubt.', 'This address is not allowed.'));
   const addrs = net.isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
-  if (!addrs.length || addrs.some((a) => isPrivateIp(a.address))) throw new Error('Diese Adresse ist nicht erlaubt.');
+  if (!addrs.length || addrs.some((a) => isPrivateIp(a.address))) throw new Error(t('Diese Adresse ist nicht erlaubt.', 'This address is not allowed.'));
   return url;
 }
 
@@ -143,9 +146,9 @@ async function readWebpage(raw, signal, addSources) {
     }
     break;
   }
-  if (!res.ok) throw new Error(`Die Seite antwortet mit Fehler ${res.status}.`);
+  if (!res.ok) throw new Error(t(`Die Seite antwortet mit Fehler ${res.status}.`, `The page responded with error ${res.status}.`));
   const type = res.headers.get('content-type') || '';
-  if (!/text\/|json|xml/i.test(type)) throw new Error(`Dieser Dateityp kann nicht gelesen werden (${type.split(';')[0] || 'unbekannt'}).`);
+  if (!/text\/|json|xml/i.test(type)) throw new Error(t(`Dieser Dateityp kann nicht gelesen werden (${type.split(';')[0] || 'unbekannt'}).`, `This file type cannot be read (${type.split(';')[0] || 'unknown'}).`));
 
   // höchstens ~1,5 MB lesen
   const reader = res.body.getReader();
@@ -253,7 +256,7 @@ async function emitText(text, onText, signal, words = 3, delay = 12) {
 export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {} }) {
   if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources });
   const model = await pickModel(AGENT_PREFERENCE);
-  if (!model) throw new Error('Agent X braucht einen Groq-Schlüssel (GROQ_API_KEY), damit er Werkzeuge benutzen kann.');
+  if (!model) throw new Error(t('Agent X braucht einen Groq-Schlüssel (GROQ_API_KEY), damit er Werkzeuge benutzen kann.', 'Agent X needs a Groq key (GROQ_API_KEY) to use tools.'));
 
   const convo = [{ role: 'system', content: systemPrompt() }, ...messages];
   for (let round = 0; round < MAX_STEPS; round++) {
@@ -261,7 +264,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
     const thought = msg.reasoning ?? msg.reasoning_content;
     if (thought) await emitText(`${thought.trim()}\n\n`, onReasoning, signal, 6, 8);
     const calls = msg.tool_calls ?? [];
-    if (!calls.length) return emitText(msg.content || 'Ich konnte leider keine Antwort finden.', onText, signal);
+    if (!calls.length) return emitText(msg.content || t('Ich konnte leider keine Antwort finden.', 'Sorry, I could not find an answer.'), onText, signal);
 
     convo.push({ role: 'assistant', content: msg.content ?? '', tool_calls: calls });
     for (const call of calls) {
@@ -286,7 +289,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
     signal,
     messages: [...convo, { role: 'user', content: 'Beantworte jetzt meine Frage mit den gesammelten Informationen, ohne weitere Werkzeuge.' }],
   });
-  return emitText(final.content || 'Ich konnte leider keine Antwort finden.', onText, signal);
+  return emitText(final.content || t('Ich konnte leider keine Antwort finden.', 'Sorry, I could not find an answer.'), onText, signal);
 }
 
 async function demoAgent({ messages, onStep, onText, onReasoning, onSources, signal }) {

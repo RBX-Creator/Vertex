@@ -7,7 +7,10 @@
 // Optional: OPENROUTER_EXTRA_MODELS="anthropic/claude-sonnet-4.5,openai/gpt-5" schaltet
 // zusätzlich kostenpflichtige OpenRouter-Modelle frei (braucht Guthaben bei OpenRouter).
 
+import { t } from './i18n.js';
+
 const MAX_OUTPUT_TOKENS = 8192;
+const IDLE_TIMEOUT = 90_000; // so lange darf ein Modell schweigen, bevor wir abbrechen
 const SEARCH_SUFFIX = '#search'; // Variante mit eingebauter Websuche (Groq gpt-oss)
 
 const PROVIDERS = {
@@ -303,16 +306,31 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
   if (search) upstream = upstream.slice(0, -SEARCH_SUFFIX.length);
   if (provider === 'demo') return demoStream({ name: `${upstream}-demo`, messages, signal, onText, onReasoning });
   const p = PROVIDERS[provider];
-  if (!p?.key) throw new Error('Dieses Modell ist gerade nicht verfügbar.');
+  if (!p?.key) throw new Error(t('Dieses Modell ist gerade nicht verfügbar.', 'This model is not available right now.'));
 
   const headers = { Authorization: `Bearer ${p.key}`, 'Content-Type': 'application/json' };
   if (provider === 'openrouter') {
     headers['HTTP-Referer'] = process.env.APP_URL || 'https://vais.onrender.com';
     headers['X-Title'] = 'VAIs';
   }
+  // Abbrechen, wenn das Modell zu lange nichts liefert (hängt sonst ewig)
+  const idle = new AbortController();
+  let idleTimer;
+  const arm = () => { clearTimeout(idleTimer); idleTimer = setTimeout(() => idle.abort(), IDLE_TIMEOUT); };
+  arm();
+  try {
+    await streamFrom();
+  } catch (err) {
+    if (idle.signal.aborted && !signal?.aborted) throw fail(model, 504, 'timeout', p);
+    throw err;
+  } finally {
+    clearTimeout(idleTimer);
+  }
+
+  async function streamFrom() {
   const res = await fetch(`${p.base}/chat/completions`, {
     method: 'POST',
-    signal,
+    signal: signal ? AbortSignal.any([signal, idle.signal]) : idle.signal,
     headers,
     body: JSON.stringify({
       model: upstream,
@@ -333,6 +351,7 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
   const decoder = new TextDecoder();
   let buffer = '';
   for await (const chunk of res.body) {
+    arm();
     buffer += decoder.decode(chunk, { stream: true });
     let nl;
     while ((nl = buffer.indexOf('\n')) !== -1) {
@@ -354,6 +373,7 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
       if (delta.content) emit(delta.content);
     }
   }
+  }
 }
 
 // Eine Antwort ohne Streaming, optional mit Werkzeugen (für Agent X)
@@ -363,7 +383,7 @@ export async function complete({ model, messages, tools, signal }) {
   const search = upstream.endsWith(SEARCH_SUFFIX);
   if (search) upstream = upstream.slice(0, -SEARCH_SUFFIX.length);
   const p = PROVIDERS[provider];
-  if (!p?.key) throw new Error('Dieses Modell ist gerade nicht verfügbar.');
+  if (!p?.key) throw new Error(t('Dieses Modell ist gerade nicht verfügbar.', 'This model is not available right now.'));
   const headers = { Authorization: `Bearer ${p.key}`, 'Content-Type': 'application/json' };
   if (provider === 'openrouter') { headers['HTTP-Referer'] = process.env.APP_URL || 'https://vais.onrender.com'; headers['X-Title'] = 'VAIs'; }
   const allTools = [...(tools ?? []), ...(search ? [{ type: 'browser_search' }] : [])];
@@ -390,13 +410,14 @@ export async function complete({ model, messages, tools, signal }) {
 }
 
 function friendlyError(status, message = '', p) {
-  if (status === 429 && isDailyLimit(message)) return `Das kostenlose Tageslimit von ${p.label} ist für heute aufgebraucht. Wähle ein Modell von einem anderen Anbieter.`;
-  if (status === 429) return 'Dieses Modell ist gerade ausgelastet. Versuche es gleich noch einmal oder wähle ein anderes Modell.';
-  if (status === 401 || status === 403 || /api key/i.test(message)) return `Der Schlüssel für ${p.label} wurde abgelehnt. Bitte ${p.env} prüfen.`;
-  if (status === 413 || /too large|tokens_limit_reached|max.*tokens/i.test(message)) return 'Der Chat ist zu lang für dieses Modell. Starte einen neuen Chat oder wähle ein anderes Modell.';
-  if (status === 404) return 'Dieses Modell ist nicht mehr verfügbar. Bitte wähle ein anderes.';
-  if (status === 400 && /context|token/i.test(message)) return 'Der Chat ist zu lang für dieses Modell. Starte einen neuen Chat.';
-  return `Das Modell konnte nicht antworten${message ? `: ${message}` : '.'}`;
+  if (status === 429 && isDailyLimit(message)) return t(`Das kostenlose Tageslimit von ${p.label} ist für heute aufgebraucht. Wähle ein Modell von einem anderen Anbieter.`, `The free daily limit of ${p.label} is used up for today. Choose a model from another provider.`);
+  if (status === 429) return t('Dieses Modell ist gerade ausgelastet. Versuche es gleich noch einmal oder wähle ein anderes Modell.', 'This model is busy right now. Try again in a moment or choose another model.');
+  if (status === 504) return t('Das Modell antwortet nicht mehr (Zeitüberschreitung). Versuche es noch einmal.', 'The model stopped responding (timeout). Please try again.');
+  if (status === 401 || status === 403 || /api key/i.test(message)) return t(`Der Schlüssel für ${p.label} wurde abgelehnt. Bitte ${p.env} prüfen.`, `The key for ${p.label} was rejected. Please check ${p.env}.`);
+  if (status === 413 || /too large|tokens_limit_reached|max.*tokens/i.test(message)) return t('Der Chat ist zu lang für dieses Modell. Starte einen neuen Chat oder wähle ein anderes Modell.', 'The chat is too long for this model. Start a new chat or choose another model.');
+  if (status === 404) return t('Dieses Modell ist nicht mehr verfügbar. Bitte wähle ein anderes.', 'This model is no longer available. Please choose another one.');
+  if (status === 400 && /context|token/i.test(message)) return t('Der Chat ist zu lang für dieses Modell. Starte einen neuen Chat.', 'The chat is too long for this model. Start a new chat.');
+  return t(`Das Modell konnte nicht antworten${message ? `: ${message}` : '.'}`, `The model could not answer${message ? `: ${message}` : '.'}`);
 }
 
 // ── Demo-Modus ────────────────────────────────────────────────────

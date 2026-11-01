@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
-import { get, run, all } from './db.js';
+import { get, run, all, purgeChats } from './db.js';
+import { t } from './i18n.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { runAgent } from './agent.js';
 import { sourcesFromText } from './models.js';
@@ -16,9 +17,9 @@ const IMAGE_URL = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/;
 
 // Nachricht prüfen: Text oder (nur vom Nutzer) eine Liste aus Text- und Bild-Teilen
 function cleanMessage(m) {
-  if (!m || !['user', 'assistant'].includes(m.role)) throw new HttpError(400, 'Ungültige Nachricht.');
+  if (!m || !['user', 'assistant'].includes(m.role)) throw new HttpError(400, t('Ungültige Nachricht.', 'Invalid message.'));
   if (typeof m.content === 'string') return { role: m.role, content: m.content.slice(0, MAX_CHARS) };
-  if (m.role !== 'user' || !Array.isArray(m.content) || m.content.length > 12) throw new HttpError(400, 'Ungültige Nachricht.');
+  if (m.role !== 'user' || !Array.isArray(m.content) || m.content.length > 12) throw new HttpError(400, t('Ungültige Nachricht.', 'Invalid message.'));
   return {
     role: 'user',
     content: m.content.map((p) => {
@@ -27,7 +28,7 @@ function cleanMessage(m) {
       if (p?.type === 'image_url' && typeof url === 'string' && url.length <= MAX_IMAGE_CHARS && IMAGE_URL.test(url)) {
         return { type: 'image_url', image_url: { url } };
       }
-      throw new HttpError(400, 'Dieses Bild kann nicht verarbeitet werden.');
+      throw new HttpError(400, t('Dieses Bild kann nicht verarbeitet werden.', 'This image cannot be processed.'));
     }),
   };
 }
@@ -59,7 +60,7 @@ export const chat = Router();
 // Nur für angemeldete Nutzer
 chat.use(wrap(async (req, res, next) => {
   req.user = await currentUser(req);
-  if (!req.user) throw new HttpError(401, 'Bitte melde dich erneut an.');
+  if (!req.user) throw new HttpError(401, t('Bitte melde dich erneut an.', 'Please sign in again.'));
   next();
 }));
 
@@ -77,19 +78,31 @@ function countPaid(userId) {
   if (paidUse.size > 5000) for (const k of paidUse.keys()) if (!k.endsWith(today())) paidUse.delete(k);
 }
 const premiumError = () => Object.assign(
-  new Error(`Du hast dein Tageslimit für Premium-Modelle erreicht (${PAID_DAILY_LIMIT} pro Tag). Wähle ein kostenloses Modell.`),
+  new Error(t(`Du hast dein Tageslimit für Premium-Modelle erreicht (${PAID_DAILY_LIMIT} pro Tag). Wähle ein kostenloses Modell.`, `You reached your daily limit for premium models (${PAID_DAILY_LIMIT} per day). Choose a free model.`)),
   { status: 429, premium: true },
 );
 
-// Einfaches Limit: 40 Antworten pro 5 Minuten und Nutzer
+// Limits pro Nutzer: 40 Antworten in 5 Minuten und USER_DAILY_LIMIT pro Tag (Standard 500)
+const USER_DAILY_LIMIT = Math.max(1, Number(process.env.USER_DAILY_LIMIT ?? 500));
 const usage = new Map();
+const daily = new Map();
 function limit(userId) {
   const now = Date.now();
-  const list = (usage.get(userId) || []).filter((t) => now - t < 5 * 60 * 1000);
-  if (list.length >= 40) throw new HttpError(429, 'Du sendest gerade sehr viele Nachrichten. Warte kurz.');
+  const list = (usage.get(userId) || []).filter((ts) => now - ts < 5 * 60 * 1000);
+  if (list.length >= 40) throw new HttpError(429, t('Du sendest gerade sehr viele Nachrichten. Warte kurz.', 'You are sending a lot of messages. Please wait a moment.'));
+  const dayKey = `${userId}:${today()}`;
+  if ((daily.get(dayKey) ?? 0) >= USER_DAILY_LIMIT) {
+    throw new HttpError(429, t(`Du hast dein Tageslimit von ${USER_DAILY_LIMIT} Antworten erreicht. Morgen geht es weiter.`, `You reached your daily limit of ${USER_DAILY_LIMIT} answers. See you tomorrow.`));
+  }
   list.push(now);
   usage.set(userId, list);
+  daily.set(dayKey, (daily.get(dayKey) ?? 0) + 1);
 }
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, list] of usage) if (list.every((ts) => now - ts > 5 * 60 * 1000)) usage.delete(k);
+  for (const k of daily.keys()) if (!k.endsWith(today())) daily.delete(k);
+}, 10 * 60 * 1000).unref();
 
 chat.get('/models', wrap(async (req, res) => {
   res.json({ models: await listModels(), demo: demoMode });
@@ -106,22 +119,22 @@ chat.post('/start', wrap(async (req, res) => {
     const cap = req.body?.images ? 'vision' : MODALITY_CAP[modality];
     const first = await pickAvailable(cap);
     const second = first && await pickAvailable(cap, [first.id]);
-    if (!first || !second) throw new HttpError(503, modality === 'web' ? 'Für ein Websuche-Battle sind gerade nicht genug Such-Modelle frei. Versuche es gleich noch einmal.' : 'Gerade sind nicht genug Modelle frei. Versuche es gleich noch einmal.');
+    if (!first || !second) throw new HttpError(503, modality === 'web' ? t('Für ein Websuche-Battle sind gerade nicht genug Such-Modelle frei. Versuche es gleich noch einmal.', 'Not enough search models are free for a web search battle right now. Try again in a moment.') : t('Gerade sind nicht genug Modelle frei. Versuche es gleich noch einmal.', 'Not enough models are free right now. Try again in a moment.'));
     picked = [first.id, second.id];
   } else if (mode === 'sxs' || mode === 'direct') {
     const need = mode === 'sxs' ? 2 : 1;
-    if (!Array.isArray(models) || models.length !== need) throw new HttpError(400, 'Bitte wähle die Modelle aus.');
-    for (const id of models) if (!(await findModel(id))) throw new HttpError(400, 'Dieses Modell ist nicht verfügbar.');
+    if (!Array.isArray(models) || models.length !== need) throw new HttpError(400, t('Bitte wähle die Modelle aus.', 'Please choose the models.'));
+    for (const id of models) if (!(await findModel(id))) throw new HttpError(400, t('Dieses Modell ist nicht verfügbar.', 'This model is not available.'));
     picked = models;
   } else {
-    throw new HttpError(400, 'Unbekannter Modus.');
+    throw new HttpError(400, t('Unbekannter Modus.', 'Unknown mode.'));
   }
 
   const id = randomBytes(12).toString('base64url');
   const now = Date.now();
   await run(
     'INSERT INTO chats (id, user_id, mode, modality, model_a, model_b, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    id, req.user.id, mode, modality, picked[0], picked[1] ?? null, String(title ?? '').trim().slice(0, 80) || 'Neuer Chat', now, now,
+    id, req.user.id, mode, modality, picked[0], picked[1] ?? null, String(title ?? '').trim().slice(0, 80) || t('Neuer Chat', 'New chat'), now, now,
   );
   res.json({ id, models: mode === 'battle' ? null : await Promise.all(picked.map(displayName)) });
 }));
@@ -130,25 +143,25 @@ chat.post('/start', wrap(async (req, res) => {
 chat.post('/stream', wrap(async (req, res) => {
   const { chatId, side = 0, messages, turn, display } = req.body ?? {};
   const row = await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
-  if (!row) throw new HttpError(404, 'Chat nicht gefunden. Starte einen neuen Chat.');
+  if (!row) throw new HttpError(404, t('Chat nicht gefunden. Starte einen neuen Chat.', 'Chat not found. Start a new chat.'));
   let model = side === 1 ? row.model_b : row.model_a;
-  if (!model) throw new HttpError(400, 'Ungültige Seite.');
+  if (!model) throw new HttpError(400, t('Ungültige Seite.', 'Invalid side.'));
 
-  if (!Array.isArray(messages) || !messages.length) throw new HttpError(400, 'Keine Nachricht.');
+  if (!Array.isArray(messages) || !messages.length) throw new HttpError(400, t('Keine Nachricht.', 'No message.'));
   let clean = limitImages(messages.slice(-MAX_MESSAGES).map(cleanMessage));
-  if (clean.at(-1).role !== 'user') throw new HttpError(400, 'Die letzte Nachricht muss von dir sein.');
+  if (clean.at(-1).role !== 'user') throw new HttpError(400, t('Die letzte Nachricht muss von dir sein.', 'The last message must be yours.'));
   const hasImages = imageCount(clean) > 0;
-  if (hasImages && row.mode === 'agent') throw new HttpError(400, 'Agent X kann noch keine Bilder ansehen. Nutze „Direkt“ mit einem Modell mit 👁-Symbol.');
+  if (hasImages && row.mode === 'agent') throw new HttpError(400, t('Agent X kann noch keine Bilder ansehen. Nutze „Direkt“ mit einem Modell mit 👁-Symbol.', 'Agent X cannot look at images yet. Use “Direct” with a model that has the 👁 icon.'));
   if (hasImages && model !== 'agent' && !(await findModel(model))?.caps.includes('vision')) {
     if (row.mode === 'battle') {
       // Im Battle still ein Modell nehmen, das Bilder sehen kann
       const fresh = await get('SELECT model_a, model_b FROM chats WHERE id = ?', row.id);
       const next = await pickAvailable('vision', [side === 1 ? fresh.model_a : fresh.model_b]);
-      if (!next) throw new HttpError(503, 'Gerade ist kein Modell frei, das Bilder ansehen kann.');
+      if (!next) throw new HttpError(503, t('Gerade ist kein Modell frei, das Bilder ansehen kann.', 'No model that can see images is free right now.'));
       model = next.id;
       await run(`UPDATE chats SET ${side === 1 ? 'model_b' : 'model_a'} = ? WHERE id = ?`, model, row.id);
     } else {
-      throw new HttpError(400, 'Dieses Modell kann keine Bilder ansehen. Wähle ein Modell mit 👁-Symbol.');
+      throw new HttpError(400, t('Dieses Modell kann keine Bilder ansehen. Wähle ein Modell mit 👁-Symbol.', 'This model cannot see images. Choose a model with the 👁 icon.'));
     }
   }
   // Ältere Bilder für Modelle ohne Bild-Fähigkeit nicht mitschicken
@@ -255,13 +268,13 @@ chat.post('/stream', wrap(async (req, res) => {
       if (row.modality === 'web' || /#search$|compound/.test(model)) onSources(sourcesFromText(text));
     }
     res.write(`${JSON.stringify({ done: true })}\n`);
-    await save(side === 1 ? 1 : 0, text, text ? 'done' : 'error', text ? null : 'Das Modell hat keine Antwort geliefert.');
+    await save(side === 1 ? 1 : 0, text, text ? 'done' : 'error', text ? null : t('Das Modell hat keine Antwort geliefert.', 'The model returned no answer.'));
   } catch (err) {
     if (controller.signal.aborted) {
       await save(side === 1 ? 1 : 0, text, text ? 'done' : 'stopped');
     } else {
       console.error(`Stream-Fehler (${model}):`, err.message);
-      const message = err.message || 'Das Modell konnte nicht antworten.';
+      const message = err.message || t('Das Modell konnte nicht antworten.', 'The model could not answer.');
       res.write(`${JSON.stringify({ error: message })}\n`);
       await save(side === 1 ? 1 : 0, text, 'error', message);
     }
@@ -277,18 +290,28 @@ chat.get('/list', wrap(async (req, res) => {
      ORDER BY updated DESC LIMIT 200`,
     req.user.id,
   );
-  res.json({ chats: rows.map((r) => ({ id: r.id, title: r.title || 'Chat', mode: r.mode, updated: r.updated })) });
+  res.json({ chats: rows.map((r) => ({ id: r.id, title: r.title || t('Chat', 'Chat'), mode: r.mode, updated: r.updated })) });
 }));
 
 // ── Bestenliste (Elo aus den Battle-Stimmen) ──────────────────────
-let board = { at: 0, data: null };
+// Kategorien: all, text (Auto/Text), code, web
+const BOARD_CATS = {
+  all: '',
+  text: "AND (modality IS NULL OR modality IN ('auto', 'text'))",
+  code: "AND modality = 'code'",
+  web: "AND modality = 'web'",
+};
+const boards = new Map();
 chat.get('/leaderboard', wrap(async (req, res) => {
-  if (board.data && Date.now() - board.at < 60_000) return res.json(board.data);
-  const rows = await all("SELECT model_a, model_b, winner FROM chats WHERE mode = 'battle' AND winner IS NOT NULL AND model_b IS NOT NULL ORDER BY voted_at");
+  const cat = BOARD_CATS[req.query.cat] !== undefined ? req.query.cat : 'all';
+  const cached = boards.get(cat);
+  if (cached && Date.now() - cached.at < 60_000) return res.json(cached.data);
+  const rows = await all(`SELECT model_a, model_b, winner FROM chats
+    WHERE mode = 'battle' AND winner IS NOT NULL AND model_b IS NOT NULL ${BOARD_CATS[cat]} ORDER BY voted_at`);
   const stats = new Map();
   const entry = (id) => {
     const key = modelKey(id);
-    if (!stats.has(key)) stats.set(key, { id, rating: 1000, votes: 0, wins: 0 });
+    if (!stats.has(key)) stats.set(key, { id, rating: 1000, votes: 0, wins: 0, losses: 0, ties: 0 });
     return stats.get(key);
   };
   for (const r of rows) {
@@ -299,21 +322,56 @@ chat.get('/leaderboard', wrap(async (req, res) => {
     a.rating += 32 * (scoreA - expectedA);
     b.rating -= 32 * (scoreA - expectedA);
     a.votes++; b.votes++;
-    if (r.winner === 'a') a.wins++;
-    if (r.winner === 'b') b.wins++;
+    if (r.winner === 'a') { a.wins++; b.losses++; } else if (r.winner === 'b') { b.wins++; a.losses++; } else { a.ties++; b.ties++; }
   }
   const models = await Promise.all([...stats.values()].map(async (m) => ({
-    ...(await describeModel(m.id)), rating: Math.round(m.rating), votes: m.votes, wins: m.wins,
+    ...(await describeModel(m.id)),
+    rating: Math.round(m.rating),
+    votes: m.votes,
+    wins: m.wins,
+    losses: m.losses,
+    ties: m.ties,
+    winRate: m.votes ? Math.round(((m.wins + m.ties / 2) / m.votes) * 100) : 0,
   })));
   models.sort((x, y) => y.rating - x.rating || y.votes - x.votes);
-  board = { at: Date.now(), data: { models, totalVotes: rows.length } };
-  res.json(board.data);
+  const data = { cat, models, totalVotes: rows.length };
+  boards.set(cat, { at: Date.now(), data });
+  res.json(data);
+}));
+
+// ── Verlauf bearbeiten ────────────────────────────────────────────
+// Ab einer Frage alles löschen (zum Bearbeiten einer Nachricht)
+chat.post('/truncate', wrap(async (req, res) => {
+  const { chatId, fromTurn } = req.body ?? {};
+  const row = await get('SELECT id, mode, winner FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
+  if (!row) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
+  if (!Number.isInteger(fromTurn) || fromTurn < 0) throw new HttpError(400, t('Ungültige Nachricht.', 'Invalid message.'));
+  if (row.mode === 'battle' && row.winner) throw new HttpError(400, t('Nach der Abstimmung kann das Battle nicht mehr geändert werden.', 'The battle cannot be changed after voting.'));
+  await run('DELETE FROM messages WHERE chat_id = ? AND turn >= ?', row.id, fromTurn);
+  res.json({ ok: true });
+}));
+
+// Chat umbenennen
+chat.post('/rename', wrap(async (req, res) => {
+  const { chatId } = req.body ?? {};
+  const title = String(req.body?.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  if (!title) throw new HttpError(400, t('Der Name darf nicht leer sein.', 'The name cannot be empty.'));
+  const row = await get('SELECT id FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
+  if (!row) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
+  await run('UPDATE chats SET title = ? WHERE id = ?', title, row.id);
+  res.json({ ok: true, title });
+}));
+
+// Alle eigenen Chats löschen
+chat.post('/clear', wrap(async (req, res) => {
+  await purgeChats(req.user.id);
+  res.json({ ok: true });
 }));
 
 // Einen gespeicherten Chat laden (Battle-Modelle bleiben geheim, bis abgestimmt wurde)
 chat.get('/:id', wrap(async (req, res) => {
   const row = await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
-  if (!row) throw new HttpError(404, 'Chat nicht gefunden.');
+  if (!row) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
   const msgs = await all('SELECT turn, side, content, status, error, meta, feedback, attachments FROM messages WHERE chat_id = ? ORDER BY turn, side', row.id);
   const sides = row.mode === 'direct' || row.mode === 'agent' ? 1 : 2;
   const turns = [];
@@ -351,35 +409,29 @@ chat.get('/:id', wrap(async (req, res) => {
 // 👍 / 👎 zu einer Antwort (1, -1 oder 0 zum Zurücknehmen)
 chat.post('/feedback', wrap(async (req, res) => {
   const { chatId, turn, side, value } = req.body ?? {};
-  if (![1, -1, 0].includes(value) || !Number.isInteger(turn) || ![0, 1].includes(side)) throw new HttpError(400, 'Ungültige Bewertung.');
+  if (![1, -1, 0].includes(value) || !Number.isInteger(turn) || ![0, 1].includes(side)) throw new HttpError(400, t('Ungültige Bewertung.', 'Invalid rating.'));
   const row = await get('SELECT id FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
-  if (!row) throw new HttpError(404, 'Chat nicht gefunden.');
+  if (!row) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
   await run('UPDATE messages SET feedback = ? WHERE chat_id = ? AND turn = ? AND side = ?', value || null, row.id, turn, side);
   res.json({ ok: true });
 }));
 
 chat.delete('/:id', wrap(async (req, res) => {
   const row = await get('SELECT id FROM chats WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
-  if (!row) throw new HttpError(404, 'Chat nicht gefunden.');
-  await run('DELETE FROM messages WHERE chat_id = ?', row.id);
-  // Battle-Stimmen bleiben für die Bestenliste erhalten, nur der Inhalt wird gelöscht
-  if (row && (await get('SELECT winner FROM chats WHERE id = ?', row.id))?.winner) {
-    await run("UPDATE chats SET user_id = 0, title = NULL WHERE id = ?", row.id);
-  } else {
-    await run('DELETE FROM chats WHERE id = ?', row.id);
-  }
+  if (!row) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
+  await purgeChats(req.user.id, row.id); // Battle-Stimmen bleiben für die Bestenliste erhalten
   res.json({ ok: true });
 }));
 
 // Abstimmen (einmal pro Chat). Gibt die Modellnamen zurück → Auflösung im Battle.
 chat.post('/vote', wrap(async (req, res) => {
   const { chatId, winner } = req.body ?? {};
-  if (!WINNERS.has(winner)) throw new HttpError(400, 'Ungültige Stimme.');
+  if (!WINNERS.has(winner)) throw new HttpError(400, t('Ungültige Stimme.', 'Invalid vote.'));
   const row = await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
-  if (!row || !row.model_b) throw new HttpError(404, 'Chat nicht gefunden.');
+  if (!row || !row.model_b) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
   if (!row.winner) {
     await run('UPDATE chats SET winner = ?, voted_at = ? WHERE id = ?', winner, Date.now(), row.id);
-    board.at = 0; // Bestenliste neu berechnen
+    boards.clear(); // Bestenliste neu berechnen
   }
   res.json({ models: [await displayName(row.model_a), await displayName(row.model_b)], winner: row.winner ?? winner });
 }));

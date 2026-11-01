@@ -69,6 +69,15 @@ try { await client.execute('ALTER TABLE messages ADD COLUMN meta TEXT'); } catch
 try { await client.execute('ALTER TABLE messages ADD COLUMN feedback INTEGER'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE messages ADD COLUMN attachments TEXT'); } catch { /* gibt es schon */ }
 
+// Chats eines Nutzers löschen. Abgestimmte Battles bleiben (ohne Inhalt) für die Bestenliste erhalten.
+export async function purgeChats(userId, chatId = null) {
+  const filter = chatId ? 'id = ? AND user_id = ?' : 'user_id = ?';
+  const args = chatId ? [chatId, userId] : [userId];
+  await run(`DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE ${filter})`, ...args);
+  await run(`UPDATE chats SET user_id = 0, title = NULL WHERE ${filter} AND winner IS NOT NULL`, ...args);
+  await run(`DELETE FROM chats WHERE ${filter} AND winner IS NULL`, ...args);
+}
+
 export const all = async (sql, ...args) => (await client.execute({ sql, args })).rows;
 
 // Abgelaufene Einträge regelmäßig aufräumen

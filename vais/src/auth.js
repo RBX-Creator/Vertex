@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { randomBytes, randomInt, scrypt, timingSafeEqual, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
-import { get, run } from './db.js';
+import { get, run, purgeChats } from './db.js';
+import { t } from './i18n.js';
 import { sendCode } from './mailer.js';
 
 const scryptAsync = promisify(scrypt);
@@ -46,7 +47,7 @@ async function issueCode(email, purpose) {
   const now = Date.now();
   if (existing && now - existing.sent_at < RESEND_COOLDOWN) {
     const wait = Math.ceil((RESEND_COOLDOWN - (now - existing.sent_at)) / 1000);
-    throw new HttpError(429, `Bitte warte noch ${wait} Sekunden.`, { retryAfter: wait });
+    throw new HttpError(429, t(`Bitte warte noch ${wait} Sekunden.`, `Please wait ${wait} more seconds.`), { retryAfter: wait });
   }
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
   await run(`
@@ -62,23 +63,23 @@ async function issueCode(email, purpose) {
   } catch (err) {
     console.error('E-Mail-Versand fehlgeschlagen:', err.message);
     await run('DELETE FROM codes WHERE email = ? AND purpose = ?', email, purpose);
-    throw new HttpError(502, 'Die E-Mail konnte nicht gesendet werden. Bitte versuche es später erneut.');
+    throw new HttpError(502, t('Die E-Mail konnte nicht gesendet werden. Bitte versuche es später erneut.', 'The email could not be sent. Please try again later.'));
   }
 }
 
 async function consumeCode(email, purpose, code) {
   const row = await get('SELECT * FROM codes WHERE email = ? AND purpose = ?', email, purpose);
   if (!row || row.expires_at < Date.now()) {
-    throw new HttpError(400, 'Der Code ist abgelaufen. Fordere einen neuen an.');
+    throw new HttpError(400, t('Der Code ist abgelaufen. Fordere einen neuen an.', 'The code has expired. Request a new one.'));
   }
   if (row.attempts >= MAX_ATTEMPTS) {
-    throw new HttpError(429, 'Zu viele Fehlversuche. Fordere einen neuen Code an.');
+    throw new HttpError(429, t('Zu viele Fehlversuche. Fordere einen neuen Code an.', 'Too many failed attempts. Request a new code.'));
   }
   const given = Buffer.from(sha256(`${email}:${String(code ?? '').trim()}`));
   if (!timingSafeEqual(given, Buffer.from(row.code_hash))) {
     await run('UPDATE codes SET attempts = attempts + 1 WHERE email = ? AND purpose = ?', email, purpose);
     const left = MAX_ATTEMPTS - row.attempts - 1;
-    throw new HttpError(400, left > 0 ? `Falscher Code. Noch ${left} Versuch${left === 1 ? '' : 'e'}.` : 'Zu viele Fehlversuche. Fordere einen neuen Code an.');
+    throw new HttpError(400, left > 0 ? t(`Falscher Code. Noch ${left} Versuch${left === 1 ? '' : 'e'}.`, `Wrong code. ${left} attempt${left === 1 ? '' : 's'} left.`) : t('Zu viele Fehlversuche. Fordere einen neuen Code an.', 'Too many failed attempts. Request a new code.'));
   }
   await run('DELETE FROM codes WHERE email = ? AND purpose = ?', email, purpose);
 }
@@ -123,7 +124,7 @@ function rateLimit(req, res, next) {
   const list = (hits.get(req.ip) || []).filter((t) => now - t < windowMs);
   list.push(now);
   hits.set(req.ip, list);
-  if (list.length > 60) return res.status(429).json({ error: 'Zu viele Anfragen. Bitte warte ein paar Minuten.' });
+  if (list.length > 60) return res.status(429).json({ error: t('Zu viele Anfragen. Bitte warte ein paar Minuten.', 'Too many requests. Please wait a few minutes.') });
   next();
 }
 setInterval(() => {
@@ -140,7 +141,7 @@ auth.use(rateLimit);
 // Schritt 1: E-Mail eingeben → anmelden oder registrieren?
 auth.post('/start', wrap(async (req, res) => {
   const email = normEmail(req.body?.email);
-  if (!validEmail(email)) throw new HttpError(400, 'Bitte gib eine gültige E-Mail-Adresse ein.');
+  if (!validEmail(email)) throw new HttpError(400, t('Bitte gib eine gültige E-Mail-Adresse ein.', 'Please enter a valid email address.'));
   const user = await get('SELECT verified FROM users WHERE email = ?', email);
   res.json({ mode: user?.verified ? 'login' : 'register' });
 }));
@@ -149,11 +150,11 @@ auth.post('/start', wrap(async (req, res) => {
 auth.post('/register', wrap(async (req, res) => {
   const email = normEmail(req.body?.email);
   const { password } = req.body ?? {};
-  if (!validEmail(email)) throw new HttpError(400, 'Bitte gib eine gültige E-Mail-Adresse ein.');
-  if (!validPassword(password)) throw new HttpError(400, 'Das Passwort muss mindestens 8 Zeichen lang sein.');
+  if (!validEmail(email)) throw new HttpError(400, t('Bitte gib eine gültige E-Mail-Adresse ein.', 'Please enter a valid email address.'));
+  if (!validPassword(password)) throw new HttpError(400, t('Das Passwort muss mindestens 8 Zeichen lang sein.', 'The password must be at least 8 characters long.'));
 
   const user = await get('SELECT id, verified FROM users WHERE email = ?', email);
-  if (user?.verified) throw new HttpError(409, 'Zu dieser E-Mail gibt es schon ein Konto. Melde dich an.');
+  if (user?.verified) throw new HttpError(409, t('Zu dieser E-Mail gibt es schon ein Konto. Melde dich an.', 'An account with this email already exists. Please sign in.'));
 
   const hash = await hashPassword(password);
   if (user) {
@@ -170,7 +171,7 @@ auth.post('/register', wrap(async (req, res) => {
 auth.post('/verify', wrap(async (req, res) => {
   const email = normEmail(req.body?.email);
   const user = await get('SELECT id, verified FROM users WHERE email = ?', email);
-  if (!user) throw new HttpError(400, 'Kein Konto zu dieser E-Mail gefunden.');
+  if (!user) throw new HttpError(400, t('Kein Konto zu dieser E-Mail gefunden.', 'No account found for this email.'));
   await consumeCode(email, 'verify', req.body?.code);
   await run('UPDATE users SET verified = 1 WHERE id = ?', user.id);
   await startSession(res, user.id);
@@ -187,13 +188,34 @@ auth.post('/resend', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Schutz vor Passwort-Raten: max. 8 Fehlversuche pro E-Mail in 15 Minuten
+const failed = new Map();
+const FAIL_WINDOW = 15 * 60 * 1000;
+function tooManyFails(email) {
+  const now = Date.now();
+  const list = (failed.get(email) || []).filter((ts) => now - ts < FAIL_WINDOW);
+  failed.set(email, list);
+  return list.length >= 8;
+}
+function noteFail(email) { failed.set(email, [...(failed.get(email) || []), Date.now()]); }
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, list] of failed) if (list.every((ts) => now - ts > FAIL_WINDOW)) failed.delete(k);
+}, 5 * 60 * 1000).unref();
+const lockedError = () => new HttpError(429, t('Zu viele falsche Passwörter. Warte 15 Minuten oder setze dein Passwort zurück.', 'Too many wrong passwords. Wait 15 minutes or reset your password.'));
+
 // Anmelden
 auth.post('/login', wrap(async (req, res) => {
   const email = normEmail(req.body?.email);
   const { password } = req.body ?? {};
+  if (tooManyFails(email)) throw lockedError();
   const user = await get('SELECT id, password_hash, verified FROM users WHERE email = ?', email);
   const ok = user && typeof password === 'string' && (await checkPassword(password, user.password_hash));
-  if (!ok) throw new HttpError(401, 'E-Mail oder Passwort ist falsch.');
+  if (!ok) {
+    noteFail(email);
+    throw new HttpError(401, t('E-Mail oder Passwort ist falsch.', 'Email or password is incorrect.'));
+  }
+  failed.delete(email);
   if (!user.verified) {
     await issueCode(email, 'verify').catch((e) => { if (e.status !== 429) throw e; });
     return res.json({ next: 'verify' });
@@ -205,7 +227,7 @@ auth.post('/login', wrap(async (req, res) => {
 // Passwort vergessen → Reset-Code
 auth.post('/forgot', wrap(async (req, res) => {
   const email = normEmail(req.body?.email);
-  if (!validEmail(email)) throw new HttpError(400, 'Bitte gib eine gültige E-Mail-Adresse ein.');
+  if (!validEmail(email)) throw new HttpError(400, t('Bitte gib eine gültige E-Mail-Adresse ein.', 'Please enter a valid email address.'));
   const user = await get('SELECT verified FROM users WHERE email = ?', email);
   if (user?.verified) await issueCode(email, 'reset');
   res.json({ next: 'reset' });
@@ -215,9 +237,9 @@ auth.post('/forgot', wrap(async (req, res) => {
 auth.post('/reset', wrap(async (req, res) => {
   const email = normEmail(req.body?.email);
   const { password, code } = req.body ?? {};
-  if (!validPassword(password)) throw new HttpError(400, 'Das Passwort muss mindestens 8 Zeichen lang sein.');
+  if (!validPassword(password)) throw new HttpError(400, t('Das Passwort muss mindestens 8 Zeichen lang sein.', 'The password must be at least 8 characters long.'));
   const user = await get('SELECT id FROM users WHERE email = ? AND verified = 1', email);
-  if (!user) throw new HttpError(400, 'Der Code ist abgelaufen. Fordere einen neuen an.');
+  if (!user) throw new HttpError(400, t('Der Code ist abgelaufen. Fordere einen neuen an.', 'The code has expired. Request a new one.'));
   await consumeCode(email, 'reset', code);
   await run('UPDATE users SET password_hash = ? WHERE id = ?', await hashPassword(password), user.id);
   await run('DELETE FROM sessions WHERE user_id = ?', user.id); // überall abmelden
@@ -232,9 +254,44 @@ auth.post('/logout', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Passwort ändern (andere Geräte werden abgemeldet)
+auth.post('/password', wrap(async (req, res) => {
+  const me = await currentUser(req);
+  if (!me) throw new HttpError(401, t('Nicht angemeldet.', 'Not signed in.'));
+  const { current, password } = req.body ?? {};
+  if (tooManyFails(me.email)) throw lockedError();
+  const row = await get('SELECT password_hash FROM users WHERE id = ?', me.id);
+  if (typeof current !== 'string' || !(await checkPassword(current, row.password_hash))) {
+    noteFail(me.email);
+    throw new HttpError(400, t('Das aktuelle Passwort ist falsch.', 'The current password is incorrect.'));
+  }
+  if (!validPassword(password)) throw new HttpError(400, t('Das neue Passwort muss mindestens 8 Zeichen lang sein.', 'The new password must be at least 8 characters long.'));
+  await run('UPDATE users SET password_hash = ? WHERE id = ?', await hashPassword(password), me.id);
+  await run('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?', me.id, sha256(readCookie(req)));
+  res.json({ ok: true });
+}));
+
+// Konto endgültig löschen
+auth.post('/delete', wrap(async (req, res) => {
+  const me = await currentUser(req);
+  if (!me) throw new HttpError(401, t('Nicht angemeldet.', 'Not signed in.'));
+  if (tooManyFails(me.email)) throw lockedError();
+  const row = await get('SELECT password_hash FROM users WHERE id = ?', me.id);
+  if (typeof req.body?.password !== 'string' || !(await checkPassword(req.body.password, row.password_hash))) {
+    noteFail(me.email);
+    throw new HttpError(400, t('Das Passwort ist falsch.', 'The password is incorrect.'));
+  }
+  await purgeChats(me.id);
+  await run('DELETE FROM sessions WHERE user_id = ?', me.id);
+  await run('DELETE FROM codes WHERE email = ?', me.email);
+  await run('DELETE FROM users WHERE id = ?', me.id);
+  res.clearCookie(COOKIE, { path: '/' });
+  res.json({ ok: true });
+}));
+
 auth.get('/me', wrap(async (req, res) => {
   const user = await currentUser(req);
-  if (!user) return res.status(401).json({ error: 'Nicht angemeldet.' });
+  if (!user) return res.status(401).json({ error: t('Nicht angemeldet.', 'Not signed in.') });
   res.json({ user: { email: user.email } });
 }));
 
@@ -242,6 +299,6 @@ auth.get('/me', wrap(async (req, res) => {
 export function errorHandler(err, req, res, _next) {
   if (err instanceof HttpError) return res.status(err.status).json({ error: err.message, ...err.extra });
   console.error(err);
-  res.status(500).json({ error: 'Etwas ist schiefgelaufen. Bitte versuche es erneut.' });
+  res.status(500).json({ error: t('Etwas ist schiefgelaufen. Bitte versuche es erneut.', 'Something went wrong. Please try again.') });
 }
 auth.use(errorHandler);
