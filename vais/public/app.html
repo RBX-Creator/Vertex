@@ -337,6 +337,16 @@
           <button type="button" class="btn ghost-btn" id="set-memory-clear" hidden data-en="Forget everything">Alles vergessen</button>
         </section>
 
+        <section class="set-group" id="set-voice-group">
+          <h3 data-en="Read aloud">Vorlesen</h3>
+          <label class="set-row"><span data-en="German voice">Deutsche Stimme</span><select class="input set-select" id="set-voice-de"></select></label>
+          <label class="set-row"><span data-en="English voice">Englische Stimme</span><select class="input set-select" id="set-voice-en"></select></label>
+          <label class="set-row"><span data-en="Speed">Tempo</span><span class="set-range"><input type="range" id="set-voice-rate" min="0.6" max="1.8" step="0.1" value="1"><output id="set-voice-rate-val">1.0×</output></span></label>
+          <label class="set-row"><span data-en="Pitch">Tonhöhe</span><span class="set-range"><input type="range" id="set-voice-pitch" min="0.6" max="1.6" step="0.1" value="1"><output id="set-voice-pitch-val">1.0</output></span></label>
+          <button type="button" class="btn ghost-btn" id="set-voice-test" data-en="▶ Test voice">▶ Stimme testen</button>
+          <p class="set-hint" data-en="Voices come from your device. ☁ = online voice (often sounds more natural).">Die Stimmen kommen von deinem Gerät. ☁ = Online-Stimme (klingt oft natürlicher).</p>
+        </section>
+
         <section class="set-group" id="set-install-group" hidden>
           <h3 data-en="App">App</h3>
           <p class="set-hint" id="set-install-text"></p>

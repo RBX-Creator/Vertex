@@ -108,6 +108,14 @@ const TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'youtube_video',
+      description: 'Holt zu einem YouTube-Link den Titel und Kanal (offizielle Schnittstelle) und sucht im Web nach dem Inhalt des Videos, damit du es zusammenfassen kannst. Nutze es immer, wenn der Nutzer einen YouTube-Link schickt.',
+      parameters: { type: 'object', properties: { url: { type: 'string', description: 'YouTube-Link, z. B. https://youtu.be/… oder https://www.youtube.com/watch?v=…' } }, required: ['url'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'read_webpage',
       description: 'Öffnet eine Webseite (http/https) und gibt ihren Text zurück. Nutze es für Links des Nutzers oder um Quellen genauer zu lesen.',
       parameters: { type: 'object', properties: { url: { type: 'string', description: 'Vollständige Adresse, z. B. https://example.com' } }, required: ['url'] },
@@ -187,6 +195,49 @@ async function webSearch(queries, signal, addSources) {
   if (signal?.aborted) throw new Error('aborted');
   if (results.every((r) => r.status === 'rejected')) throw results[0].reason;
   return results.map((r, i) => `### Suche: ${queries[i]}\n${r.status === 'fulfilled' ? r.value : `Fehler: ${r.reason?.message}`}`).join('\n\n');
+}
+
+// YouTube: Titel/Kanal über die offizielle oEmbed-Schnittstelle, Inhalt über die Websuche
+export function youtubeId(raw) {
+  let u;
+  try { u = new URL(String(raw ?? '').trim()); } catch { return null; }
+  const host = u.hostname.replace(/^(www\.|m\.|music\.)/, '');
+  let id = null;
+  if (host === 'youtu.be') id = u.pathname.slice(1).split('/')[0];
+  else if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+    id = u.searchParams.get('v') || u.pathname.match(/^\/(?:shorts|embed|live|v)\/([\w-]{11})/)?.[1] || null;
+  }
+  return id && /^[\w-]{11}$/.test(id) ? id : null;
+}
+async function youtubeVideo(raw, signal, addSources) {
+  const id = youtubeId(raw);
+  if (!id) throw new Error(t('Das ist kein gültiger YouTube-Link.', 'That is not a valid YouTube link.'));
+  const watch = `https://www.youtube.com/watch?v=${id}`;
+  const res = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(watch)}`, {
+    signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(10_000)]),
+    headers: { 'User-Agent': WIKI_UA },
+  });
+  if (res.status === 401 || res.status === 403) throw new Error(t('Dieses Video ist privat oder nicht einbettbar.', 'This video is private or cannot be embedded.'));
+  if (!res.ok) throw new Error(t('Das Video wurde nicht gefunden.', 'The video was not found.'));
+  const info = await res.json();
+  const title = String(info.title ?? '').slice(0, 200);
+  const channel = String(info.author_name ?? '').slice(0, 100);
+  addSources([makeSource(watch, `${title} – YouTube`)].filter(Boolean));
+  let found = '';
+  try {
+    found = await webSearch([`"${title}" ${channel} Video Inhalt Zusammenfassung`], signal, addSources);
+  } catch (err) {
+    found = `Websuche nicht möglich: ${err.message}`;
+  }
+  return [
+    `Video: ${title}`,
+    `Kanal: ${channel}`,
+    `Link: ${watch}`,
+    '',
+    'Hinweis: Das Transkript selbst ist nicht verfügbar. Fasse den Inhalt anhand der Suchergebnisse zusammen und sag ehrlich, wenn Informationen fehlen.',
+    '',
+    found,
+  ].join('\n');
 }
 
 // Wikipedia: beste Treffer suchen und ihre Zusammenfassungen holen
@@ -419,6 +470,7 @@ function runTool(name, args, signal, addSources, ctx) {
       if (!list.length) list.push(ctx.question.slice(0, 120));
       return { steps: list.map((q) => ({ kind: 'search', text: q })), run: () => webSearch(list, signal, addSources) };
     }
+    case 'youtube_video': return { steps: [{ kind: 'video', text: String(args.url ?? '').replace(/^https?:\/\/(www\.)?/, '').slice(0, 60) }], run: () => youtubeVideo(args.url, signal, addSources) };
     case 'wikipedia': return { steps: [{ kind: 'wiki', text: String(args.query ?? '').slice(0, 80) }], run: () => wikipedia(args.query, args.language, signal, addSources) };
     case 'read_webpage': {
       let label = String(args.url ?? '');

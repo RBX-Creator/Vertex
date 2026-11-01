@@ -47,6 +47,7 @@ Object.assign(ICON, {
   's-time': svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   's-error': svg('<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>'),
   's-other': svg('<circle cx="12" cy="12" r="3"/>'),
+  's-video': svg('<rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="m10 9.5 5 2.5-5 2.5z"/>'),
   's-memory': svg('<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/>'),
   's-wiki': svg('<path d="M3 6.5 7.5 18 12 8l4.5 10L21 6.5"/>'),
   's-check': svg('<path d="m9 12 2 2 4-4"/><path d="M4 5h16v12H4zM9 21h6"/>'),
@@ -737,8 +738,8 @@ function renderSources(card, a) {
 
 // Arbeitsschritte von Agent X über der Antwort anzeigen
 const STEP_LABEL = LANG === 'en'
-  ? { memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' }
-  : { memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
+  ? { video: 'Watching', memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' }
+  : { video: 'Schaut Video', memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
 function renderSteps(card, a) {
   let box = $('.agent-steps', card);
   if (!a.steps?.length) { box?.remove(); return; }
@@ -1179,6 +1180,54 @@ function stopSpeaking() {
   speakingBtn = null;
 }
 
+// Stimme fürs Vorlesen: in den Einstellungen gewählt (pro Sprache), sonst die beste vorhandene
+const voicePrefs = () => ({ rate: 1, pitch: 1, de: '', en: '', ...store.get('vais.voice', {}) });
+const voicesFor = (lang) => (canSpeak ? speechSynthesis.getVoices() : []).filter((v) => v.lang?.toLowerCase().replace('_', '-').startsWith(lang));
+function pickVoice(lang) {
+  const list = voicesFor(lang);
+  const wanted = voicePrefs()[lang];
+  // Ohne Auswahl: natürliche/online Stimmen bevorzugen (klingen meist besser)
+  return list.find((v) => v.voiceURI === wanted) ?? list.find((v) => /natural|neural|online|premium|enhanced/i.test(v.name)) ?? list.find((v) => v.default) ?? list[0] ?? null;
+}
+function paintVoices() {
+  const box = $('#set-voice-group');
+  if (!canSpeak) { box.hidden = true; return; }
+  const prefs = voicePrefs();
+  for (const lang of ['de', 'en']) {
+    const sel = $(`#set-voice-${lang}`);
+    const list = voicesFor(lang);
+    sel.innerHTML = `<option value="">${t('Automatisch', 'Automatic')}</option>${list.map((v) => `<option value="${escapeHtml(v.voiceURI)}">${escapeHtml(v.name.replace(/^(Microsoft|Google)\s+/, ''))}${v.localService ? '' : ' ☁'}</option>`).join('')}`;
+    sel.value = list.some((v) => v.voiceURI === prefs[lang]) ? prefs[lang] : '';
+    sel.closest('label').hidden = !list.length;
+  }
+  $('#set-voice-rate').value = prefs.rate;
+  $('#set-voice-pitch').value = prefs.pitch;
+  $('#set-voice-rate-val').textContent = `${Number(prefs.rate).toFixed(1)}×`;
+  $('#set-voice-pitch-val').textContent = Number(prefs.pitch).toFixed(1);
+}
+if (canSpeak) speechSynthesis.addEventListener?.('voiceschanged', () => { if (!$('#settings').hidden) paintVoices(); });
+function saveVoice() {
+  store.set('vais.voice', {
+    de: $('#set-voice-de').value, en: $('#set-voice-en').value,
+    rate: Number($('#set-voice-rate').value) || 1, pitch: Number($('#set-voice-pitch').value) || 1,
+  });
+  $('#set-voice-rate-val').textContent = `${Number($('#set-voice-rate').value).toFixed(1)}×`;
+  $('#set-voice-pitch-val').textContent = Number($('#set-voice-pitch').value).toFixed(1);
+}
+['#set-voice-de', '#set-voice-en', '#set-voice-rate', '#set-voice-pitch'].forEach((sel) => $(sel)?.addEventListener('input', saveVoice));
+$('#set-voice-test')?.addEventListener('click', () => {
+  if (!canSpeak) return;
+  stopSpeaking();
+  const prefs = voicePrefs();
+  const u = new SpeechSynthesisUtterance(t('Hallo! So klinge ich, wenn ich dir Antworten vorlese.', 'Hi! This is how I sound when I read answers to you.'));
+  u.lang = LANG === 'en' ? 'en-US' : 'de-DE';
+  const v = pickVoice(LANG === 'en' ? 'en' : 'de');
+  if (v) u.voice = v;
+  u.rate = prefs.rate;
+  u.pitch = prefs.pitch;
+  speechSynthesis.speak(u);
+});
+
 function speak(btn, card) {
   if (!canSpeak) return;
   if (speakingBtn === btn) return stopSpeaking();
@@ -1187,7 +1236,8 @@ function speak(btn, card) {
   const parts = speechChunks(text);
   if (!parts.length) return;
   const lang = guessLang(text);
-  const voice = speechSynthesis.getVoices().find((v) => v.lang?.toLowerCase().startsWith(lang));
+  const voice = pickVoice(lang);
+  const prefs = voicePrefs();
   speakingBtn = btn;
   btn.setAttribute('aria-pressed', 'true');
   btn.innerHTML = ICON.speakStop;
@@ -1195,6 +1245,8 @@ function speak(btn, card) {
     const u = new SpeechSynthesisUtterance(part);
     u.lang = lang === 'en' ? 'en-US' : 'de-DE';
     if (voice) u.voice = voice;
+    u.rate = prefs.rate;
+    u.pitch = prefs.pitch;
     if (i === parts.length - 1) u.onend = () => { if (speakingBtn === btn) stopSpeaking(); };
     u.onerror = (e) => { if (e.error !== 'interrupted' && e.error !== 'canceled' && speakingBtn === btn) stopSpeaking(); };
     speechSynthesis.speak(u);
@@ -2045,6 +2097,7 @@ function openSettings() {
   toggleAccount(false);
   closeDrawer();
   paintSettings();
+  paintVoices();
   loadProfile();
   settingsEl.querySelectorAll('.msg').forEach((m) => { m.textContent = ''; m.className = m.className.replace(/ (ok|error)$/, ''); });
   settingsEl.hidden = false;

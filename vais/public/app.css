@@ -1604,3 +1604,12 @@ a.set-admin { display: flex; justify-content: center; text-decoration: none; mar
 .chart-table th, .chart-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; }
 .chart-table th:first-child, .chart-table td:first-child { text-align: left; }
 .chart-wait { color: var(--muted); font-size: 14px; }
+
+/* ── Vorlesen: Stimmen ────────────────────────────────────────────── */
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 10px; font-size: 14px; }
+.set-row[hidden] { display: none; }
+.set-row > span:first-child { flex: none; }
+.set-select { width: auto; min-width: 0; max-width: 62%; padding: 8px 10px; font-size: 14px; }
+.set-range { display: flex; align-items: center; gap: 10px; flex: 1; max-width: 62%; }
+.set-range input { flex: 1; accent-color: var(--primary); }
+.set-range output { min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
