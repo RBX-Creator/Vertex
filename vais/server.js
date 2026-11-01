@@ -6,8 +6,9 @@ const { langMiddleware, t } = await import('./src/i18n.js');
 const { auth, currentUser } = await import('./src/auth.js');
 const { mailConfigured } = await import('./src/mailer.js');
 const { chat, share } = await import('./src/chat.js');
+const { admin } = await import('./src/admin.js');
 const { demoMode } = await import('./src/models.js');
-const { OWNER } = await import('./src/config.js');
+const { OWNER, isAdmin } = await import('./src/config.js');
 const { readFile } = await import('node:fs/promises');
 
 // Abstürze vermeiden: unerwartete Fehler nur protokollieren
@@ -76,6 +77,7 @@ app.use((req, res, next) => (req.path === '/api/chat/stream' ? bigJson : smallJs
 app.use('/api/auth', auth);
 app.use('/api/share', share);
 app.use('/api/chat', chat);
+app.use('/api/admin', admin);
 
 // Seiten: nicht eingeloggte Besucher landen beim Login
 const page = (name) => new URL(`./public/${name}`, import.meta.url).pathname;
@@ -85,6 +87,14 @@ app.get('/', async (req, res) => {
   noCache(res);
   res.sendFile(page('app.html'));
 });
+app.get('/admin', async (req, res) => {
+  const user = await currentUser(req);
+  if (!user) return res.redirect('/login');
+  if (!isAdmin(user)) return res.redirect('/');
+  noCache(res);
+  res.sendFile(page('admin.html'));
+});
+app.get('/admin.html', (req, res) => res.redirect('/admin'));
 app.get('/login', async (req, res) => {
   if (await currentUser(req)) return res.redirect('/');
   noCache(res);

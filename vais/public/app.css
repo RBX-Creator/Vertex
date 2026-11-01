@@ -1192,6 +1192,8 @@ body { overflow: hidden; }
   text-align: left;
 }
 .menu-item:hover { background: var(--surface-2); }
+a.menu-item { color: inherit; text-decoration: none; box-sizing: border-box; }
+.menu-item[hidden] { display: none; }
 
 /* ── Eigene Nachricht: kopieren / bearbeiten ───────────── */
 .user-actions { display: flex; gap: 2px; margin-top: -4px; opacity: .75; }

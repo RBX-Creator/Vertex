@@ -3,6 +3,7 @@ import { randomBytes, randomInt, scrypt, timingSafeEqual, createHash } from 'nod
 import { promisify } from 'node:util';
 import { get, run, purgeChats } from './db.js';
 import { t } from './i18n.js';
+import { isAdmin } from './config.js';
 import { sendCode } from './mailer.js';
 
 const scryptAsync = promisify(scrypt);
@@ -86,6 +87,9 @@ async function consumeCode(email, purpose, code) {
 
 // ── Sessions ──────────────────────────────────────────────────────
 async function startSession(res, userId) {
+  if ((await get('SELECT blocked FROM users WHERE id = ?', userId))?.blocked) {
+    throw new HttpError(403, t('Dieses Konto wurde gesperrt. Schreib uns, wenn du denkst, dass das ein Fehler ist.', 'This account has been blocked. Contact us if you think this is a mistake.'));
+  }
   const token = randomBytes(32).toString('base64url');
   await run('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)', sha256(token), userId, Date.now() + SESSION_TTL);
   res.cookie(COOKIE, token, {
@@ -112,7 +116,7 @@ export async function currentUser(req) {
   return (await get(`
     SELECT u.id, u.email, u.created_at FROM sessions s
     JOIN users u ON u.id = s.user_id
-    WHERE s.token_hash = ? AND s.expires_at > ?
+    WHERE s.token_hash = ? AND s.expires_at > ? AND (u.blocked IS NULL OR u.blocked = 0)
   `, sha256(token), Date.now())) ?? null;
 }
 
@@ -292,7 +296,7 @@ auth.post('/delete', wrap(async (req, res) => {
 auth.get('/me', wrap(async (req, res) => {
   const user = await currentUser(req);
   if (!user) return res.status(401).json({ error: t('Nicht angemeldet.', 'Not signed in.') });
-  res.json({ user: { email: user.email } });
+  res.json({ user: { email: user.email, admin: isAdmin(user) || undefined } });
 }));
 
 // Fehler einheitlich als JSON zurückgeben

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
-import { get, run, all, purgeChats } from './db.js';
+import { get, run, all, purgeChats, getSetting, logEvent } from './db.js';
 import { t } from './i18n.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { runAgent } from './agent.js';
@@ -273,6 +273,7 @@ chat.post('/stream', wrap(async (req, res) => {
           const next = await pickAvailable(needCap, [...tried, other, ...premiumIds]);
           if (!next) throw err;
           console.log(`Battle-Ersatz: ${model} → ${next.id} (${err.message})`);
+          logEvent('fallback', model, err.message);
           model = next.id;
           tried.push(model);
           thinking = '';
@@ -290,6 +291,7 @@ chat.post('/stream', wrap(async (req, res) => {
       await save(side === 1 ? 1 : 0, text, text || images.length ? 'done' : 'stopped');
     } else {
       console.error(`Stream-Fehler (${model}):`, err.message);
+      logEvent('error', model, err.message);
       const message = err.message || t('Das Modell konnte nicht antworten.', 'The model could not answer.');
       res.write(`${JSON.stringify({ error: message })}\n`);
       await save(side === 1 ? 1 : 0, text, 'error', message);
@@ -319,12 +321,14 @@ const BOARD_CATS = {
   image: "AND modality = 'image'",
 };
 const boards = new Map();
+export const clearBoards = () => boards.clear();
 chat.get('/leaderboard', wrap(async (req, res) => {
   const cat = BOARD_CATS[req.query.cat] !== undefined ? req.query.cat : 'all';
   const cached = boards.get(cat);
   if (cached && Date.now() - cached.at < 60_000) return res.json(cached.data);
+  const since = Number(await getSetting('board_reset_at', 0)) || 0;
   const rows = await all(`SELECT model_a, model_b, winner FROM chats
-    WHERE mode = 'battle' AND winner IS NOT NULL AND model_b IS NOT NULL ${BOARD_CATS[cat]} ORDER BY voted_at`);
+    WHERE mode = 'battle' AND winner IS NOT NULL AND model_b IS NOT NULL AND COALESCE(voted_at, 0) >= ? ${BOARD_CATS[cat]} ORDER BY voted_at`, since);
   const stats = new Map();
   const entry = (id) => {
     const key = modelKey(id);

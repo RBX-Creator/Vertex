@@ -80,6 +80,22 @@ await client.execute(`CREATE TABLE IF NOT EXISTS events (
   created_at INTEGER NOT NULL
 )`);
 await client.execute('CREATE INDEX IF NOT EXISTS events_time ON events (created_at)');
+await client.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)');
+
+export async function getSetting(key, fallback = null) {
+  const row = await get('SELECT value FROM settings WHERE key = ?', key);
+  return row ? row.value : fallback;
+}
+export const setSetting = (key, value) => run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', key, String(value));
+
+// Ereignis merken (Fehler, Ausfälle …). Alte Einträge räumen wir gelegentlich auf.
+let logged = 0;
+export async function logEvent(kind, model = null, detail = null) {
+  try {
+    await run('INSERT INTO events (kind, model, detail, created_at) VALUES (?, ?, ?, ?)', kind, model, detail ? String(detail).slice(0, 500) : null, Date.now());
+    if (++logged % 200 === 0) await run('DELETE FROM events WHERE created_at < ?', Date.now() - 30 * 24 * 3600 * 1000);
+  } catch { /* Protokoll darf nie stören */ }
+}
 
 // Chats eines Nutzers löschen. Abgestimmte Battles bleiben (ohne Inhalt) für die Bestenliste erhalten.
 export async function purgeChats(userId, chatId = null) {

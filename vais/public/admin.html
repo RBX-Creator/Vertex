@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Admin – VAIs</title>
+  <meta name="title-en" content="Admin – VAIs">
+  <meta name="robots" content="noindex">
+  <script src="/boot.js"></script>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/fonts.css">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/admin.css">
+  <script type="module" src="/admin.js"></script>
+</head>
+<body class="admin">
+  <header class="legal-top">
+    <a class="brand" href="/" aria-label="VAIs"><svg viewBox="0 0 26 26" fill="none" aria-hidden="true"><path d="M4.5 6 13 21 21.5 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4.5" cy="6" r="2.4" fill="currentColor"/><circle cx="21.5" cy="6" r="2.4" fill="currentColor"/></svg><span>VAIs</span></a>
+    <span class="adm-badge">Admin</span>
+    <button class="adm-refresh" id="refresh" type="button" aria-label="Aktualisieren" data-en-aria-label="Refresh">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></svg>
+    </button>
+  </header>
+  <main class="adm-main">
+    <p class="adm-demo" id="demo" hidden data-en="Demo mode: no AI keys set.">Demo-Modus: Keine KI-Schlüssel eingetragen.</p>
+
+    <section class="adm-tiles" id="tiles" aria-label="Kennzahlen" data-en-aria-label="Key figures"></section>
+
+    <section class="adm-card">
+      <h2 data-en="Questions per day">Fragen pro Tag</h2>
+      <p class="adm-sub" data-en="Last 14 days">Letzte 14 Tage</p>
+      <div class="adm-cols" id="per-day"></div>
+    </section>
+
+    <section class="adm-card">
+      <h2 data-en="Popular models">Beliebte Modelle</h2>
+      <p class="adm-sub" data-en="Answers in the last 30 days">Antworten der letzten 30 Tage</p>
+      <ol class="adm-bars" id="models"></ol>
+      <p class="adm-sub adm-modes" id="modes"></p>
+    </section>
+
+    <section class="adm-card">
+      <h2 data-en="Problems">Probleme</h2>
+      <p class="adm-sub" id="busy"></p>
+      <ol class="adm-events" id="events"></ol>
+    </section>
+
+    <section class="adm-card">
+      <h2 data-en="Users">Nutzer</h2>
+      <input class="adm-search" id="user-q" type="search" placeholder="E-Mail suchen …" data-en-placeholder="Search email …" autocomplete="off">
+      <ul class="adm-users" id="users"></ul>
+    </section>
+
+    <section class="adm-card">
+      <h2 data-en="Leaderboard">Bestenliste</h2>
+      <p class="adm-sub" id="board-state"></p>
+      <div class="adm-row">
+        <button class="adm-btn danger" id="reset-board" type="button" data-en="Reset leaderboard">Bestenliste zurücksetzen</button>
+        <button class="adm-btn" id="undo-board" type="button" hidden data-en="Restore old votes">Alte Stimmen wiederherstellen</button>
+      </div>
+      <p class="adm-sub" data-en="Nothing is deleted: only votes from now on are counted. You can undo this at any time.">Es wird nichts gelöscht: Gezählt werden nur noch Stimmen ab jetzt. Du kannst das jederzeit rückgängig machen.</p>
+    </section>
+  </main>
+  <div class="adm-toast" id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
