@@ -61,7 +61,7 @@ await client.batch([
 ], 'write');
 
 // Spalten, die später dazugekommen sind (bestehende Datenbanken nachrüsten)
-for (const [column, type] of [['title', 'TEXT'], ['updated_at', 'INTEGER'], ['modality', 'TEXT'], ['share_id', 'TEXT']]) {
+for (const [column, type] of [['title', 'TEXT'], ['updated_at', 'INTEGER'], ['modality', 'TEXT'], ['share_id', 'TEXT'], ['renamed', 'INTEGER']]) {
   try { await client.execute(`ALTER TABLE chats ADD COLUMN ${column} ${type}`); } catch { /* gibt es schon */ }
 }
 
@@ -69,6 +69,17 @@ await client.execute('CREATE UNIQUE INDEX IF NOT EXISTS chats_share ON chats (sh
 try { await client.execute('ALTER TABLE messages ADD COLUMN meta TEXT'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE messages ADD COLUMN feedback INTEGER'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE messages ADD COLUMN attachments TEXT'); } catch { /* gibt es schon */ }
+try { await client.execute('ALTER TABLE users ADD COLUMN blocked INTEGER'); } catch { /* gibt es schon */ }
+
+// Ereignisse für die Admin-Seite (Fehler, Modell-Nutzung) – wird klein gehalten
+await client.execute(`CREATE TABLE IF NOT EXISTS events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL,
+  model TEXT,
+  detail TEXT,
+  created_at INTEGER NOT NULL
+)`);
+await client.execute('CREATE INDEX IF NOT EXISTS events_time ON events (created_at)');
 
 // Chats eines Nutzers löschen. Abgestimmte Battles bleiben (ohne Inhalt) für die Bestenliste erhalten.
 export async function purgeChats(userId, chatId = null) {

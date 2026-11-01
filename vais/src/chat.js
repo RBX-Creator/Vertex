@@ -6,7 +6,7 @@ import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { runAgent } from './agent.js';
 import { sourcesFromText } from './models.js';
 import { pickAvailable } from './models.js';
-import { generateImage } from './models.js';
+import { generateImage, helperModel, complete } from './models.js';
 import { listModels, findModel, streamChat, displayName, describeModel, modelKey, demoMode } from './models.js';
 
 const MAX_MESSAGES = 40;          // so viele Nachrichten gehen max. ans Modell
@@ -357,6 +357,56 @@ chat.get('/leaderboard', wrap(async (req, res) => {
   res.json(data);
 }));
 
+// ── Extras nach einer Antwort: Titel (beim ersten Mal) und 3 Folgefragen ──
+chat.post('/extras', wrap(async (req, res) => {
+  const { chatId, turn } = req.body ?? {};
+  const row = await get('SELECT id, mode, modality, title, renamed FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
+  if (!row || !Number.isInteger(turn)) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
+  const msgs = await all('SELECT side, content FROM messages WHERE chat_id = ? AND turn = ? ORDER BY side', row.id, turn);
+  const question = msgs.find((m) => m.side === -1)?.content ?? '';
+  const answer = msgs.find((m) => m.side === 0)?.content ?? '';
+  if (!question) return res.json({ suggestions: [] });
+  const wantTitle = turn === 0 && !row.renamed;
+
+  if (demoMode) {
+    const s = t(['Erklär das genauer', 'Gib mir ein Beispiel', 'Fasse es kurz zusammen'], ['Explain that in more detail', 'Give me an example', 'Summarize it briefly']);
+    const title = wantTitle ? question.split(/\s+/).slice(0, 4).join(' ').slice(0, 60) : undefined;
+    if (title) await run('UPDATE chats SET title = ? WHERE id = ? AND renamed IS NULL', title, row.id);
+    return res.json({ title, suggestions: s });
+  }
+  const model = await helperModel();
+  if (!model) return res.json({ suggestions: [] });
+
+  const imageMode = row.modality === 'image';
+  const prompt = [
+    'Antworte NUR mit JSON, ohne Erklärung, im Format {"title": "...", "suggestions": ["...", "...", "..."]}.',
+    wantTitle ? '"title": ein kurzer, treffender Titel für diesen Chat (2–5 Wörter, keine Anführungszeichen, kein Punkt).' : '"title": leer lassen.',
+    imageMode
+      ? '"suggestions": 3 kurze Ideen, wie man das Bild abwandeln könnte (je max. 8 Wörter), als Bildbeschreibung formuliert.'
+      : '"suggestions": 3 kurze, unterschiedliche Folgefragen, die der Nutzer als Nächstes stellen könnte (je max. 10 Wörter), aus Sicht des Nutzers.',
+    'Schreibe in derselben Sprache wie die Frage des Nutzers.',
+    '',
+    `Frage des Nutzers: ${question.slice(0, 1500)}`,
+    answer ? `Antwort (Auszug): ${answer.slice(0, 2000)}` : '',
+  ].join('\n');
+  try {
+    const msg = await complete({ model: model.id, messages: [{ role: 'user', content: prompt }] });
+    const raw = String(msg.content ?? '').replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*$/, '$1');
+    const data = JSON.parse(raw);
+    const suggestions = (Array.isArray(data.suggestions) ? data.suggestions : [])
+      .map((x) => String(x).replace(/\s+/g, ' ').trim().slice(0, 120)).filter(Boolean).slice(0, 3);
+    let title;
+    if (wantTitle && typeof data.title === 'string') {
+      title = data.title.replace(/["„“”]/g, '').replace(/[.\s]+$/, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+      if (title) await run('UPDATE chats SET title = ? WHERE id = ? AND renamed IS NULL', title, row.id);
+    }
+    res.json({ title: title || undefined, suggestions });
+  } catch (err) {
+    console.error('Extras fehlgeschlagen:', err.message);
+    res.json({ suggestions: [] });
+  }
+}));
+
 // ── Teilen ────────────────────────────────────────────────────────
 chat.post('/share', wrap(async (req, res) => {
   const row = await get('SELECT id, share_id FROM chats WHERE id = ? AND user_id = ?', String(req.body?.chatId ?? ''), req.user.id);
@@ -429,7 +479,7 @@ chat.post('/rename', wrap(async (req, res) => {
   if (!title) throw new HttpError(400, t('Der Name darf nicht leer sein.', 'The name cannot be empty.'));
   const row = await get('SELECT id FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
   if (!row) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
-  await run('UPDATE chats SET title = ? WHERE id = ?', title, row.id);
+  await run('UPDATE chats SET title = ?, renamed = 1 WHERE id = ?', title, row.id);
   res.json({ ok: true, title });
 }));
 

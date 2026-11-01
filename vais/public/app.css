@@ -1433,3 +1433,19 @@ body { overflow: hidden; }
 /* ── Formeln ───────────────────────────────────────────── */
 .md .katex { font-size: 1.08em; }
 .md .katex-display { margin: .8em 0; overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+
+/* ── Vorschläge für die nächste Frage ─────────────────────────────── */
+.followups { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 14px 0 4px; animation: fadeUp .35s ease both; }
+.followup {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 100%;
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+  transition: background .15s, border-color .15s, transform .1s;
+}
+.followup svg { width: 15px; height: 15px; flex: none; color: var(--muted); }
+.followup:hover { background: var(--surface-2); border-color: var(--border-strong); }
+.followup:active { transform: scale(.98); }
+.followups .followup:nth-child(2) { animation: fadeUp .35s .06s ease both; }
+.followups .followup:nth-child(3) { animation: fadeUp .35s .12s ease both; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .followups, .followup { animation: none !important; transition: none; } }

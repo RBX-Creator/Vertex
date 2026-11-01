@@ -799,6 +799,7 @@ async function send() {
   autosize();
   el.vote.hidden = true;
   el.voteResult.hidden = true;
+  clearFollowups();
 
   await runTurn(chat, text, attachments);
 }
@@ -814,7 +815,47 @@ async function runTurn(chat, text, attachments) {
 
   await Promise.all(chat.turns[index].answers.map((_, side) => runSide(index, side)));
   if (state.chat === chat) afterTurn();
+  loadExtras(chat, index);
 }
+
+// Nach einer Antwort: automatischer Titel (beim ersten Mal) + 3 Vorschläge für die nächste Frage
+async function loadExtras(chat, index) {
+  const turn = chat.turns[index];
+  if (!turn?.answers.some((a) => a.status === 'done')) return;
+  let data;
+  try {
+    data = await post('/api/chat/extras', { chatId: chat.id, turn: index });
+  } catch { return; }
+  if (data.title) {
+    const item = historyItems.find((c) => c.id === chat.id);
+    if (item) { item.title = data.title; renderHistory(); } else historyDirty = true;
+    if (state.chat === chat) el.title.textContent = data.title.length > 40 ? `${data.title.slice(0, 40)}…` : data.title;
+  }
+  if (state.chat !== chat || index !== chat.turns.length - 1 || !data.suggestions?.length) return;
+  const node = el.thread.querySelector(`.turn[data-index="${index}"]`);
+  if (!node || node.querySelector('.followups')) return;
+  const box = document.createElement('div');
+  box.className = 'followups';
+  box.setAttribute('role', 'group');
+  box.setAttribute('aria-label', t('Vorschläge für die nächste Frage', 'Suggested follow-ups'));
+  for (const text of data.suggestions) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'followup';
+    b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg><span></span>`;
+    b.querySelector('span').textContent = text;
+    b.addEventListener('click', () => {
+      if (busy()) return;
+      el.prompt.value = text;
+      send();
+    });
+    box.append(b);
+  }
+  node.append(box);
+  if (el.stage.scrollHeight - el.stage.scrollTop - el.stage.clientHeight < 220) box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+const clearFollowups = () => el.thread.querySelectorAll('.followups').forEach((n) => n.remove());
 
 // ── Abstimmen ─────────────────────────────────────────────────────
 el.vote.addEventListener('click', async (e) => {

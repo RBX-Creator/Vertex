@@ -414,6 +414,20 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
   }
 }
 
+// ── Kleine Helfer-Aufgaben (Titel, Vorschläge) mit einem schnellen Modell ──
+const HELPER_PREFERENCE = [
+  /^groq:llama-3\.1-8b-instant$/, /^groq:openai\/gpt-oss-20b$/, /^groq:.*llama-3\.3-70b/, /^groq:openai\/gpt-oss-120b$/,
+  /^gemini:gemini-2\.5-flash-lite/, /^gemini:gemini-2\.5-flash$/, /^openrouter:.*:free$/,
+];
+export async function helperModel() {
+  const all = (await listModels()).filter((m) => m.caps.includes('text') && !m.paid);
+  for (const re of HELPER_PREFERENCE) {
+    const hit = all.find((m) => re.test(m.id) && !m.busy);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 // ── Bilder erstellen ──────────────────────────────────────────────
 // Ohne Schlüssel erlaubt Pollinations nur wenige gleichzeitige Anfragen → nacheinander abarbeiten
 let imageQueue = Promise.resolve();
