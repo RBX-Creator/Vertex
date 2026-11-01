@@ -13,14 +13,26 @@ export class Listener {
     if (this.stream) return;
     this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     const AC = window.AudioContext || window.webkitAudioContext;
-    if (AC) {
+    if (AC && !this.ctx) {
       this.ctx = new AC();
-      await this.ctx.resume().catch(() => {});
-      const src = this.ctx.createMediaStreamSource(this.stream);
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 1024;
-      src.connect(this.analyser);
     }
+    if (this.ctx) {
+      await this.ctx.resume().catch(() => {});
+      this.source?.disconnect();
+      this.source = this.ctx.createMediaStreamSource(this.stream);
+      this.source.connect(this.analyser);
+    }
+  }
+
+  // Mikrofon kurz freigeben (iPhone: sonst ist die Sprachausgabe stumm oder sehr leise)
+  release() {
+    this.cancel();
+    this.source?.disconnect();
+    this.source = null;
+    this.stream?.getTracks().forEach((tr) => tr.stop());
+    this.stream = null;
   }
 
   level() {
@@ -34,7 +46,7 @@ export class Listener {
 
   // Nimmt auf, bis nach dem Sprechen eine Pause kommt (oder stopNow() / cancel()).
   // Ergebnis: Blob, oder null wenn nichts gesagt wurde / abgebrochen.
-  record({ silenceMs = 1300, maxMs = 45_000, noSpeechMs = 9000, onLevel = () => {}, onSpeech = () => {} } = {}) {
+  record({ silenceMs = 850, maxMs = 45_000, noSpeechMs = 9000, onLevel = () => {}, onSpeech = () => {} } = {}) {
     if (!this.stream) return Promise.resolve(null);
     return new Promise((resolve) => {
       const chunks = [];
@@ -62,8 +74,8 @@ export class Listener {
         const now = performance.now();
         const lvl = this.level();
         // Grundrauschen in der ersten halben Sekunde messen
-        if (now - started < 500) { floor = (floor * samples + lvl) / (samples + 1); samples++; }
-        const loud = lvl > Math.max(0.018, floor * 2.8);
+        if (now - started < 350) { floor = (floor * samples + lvl) / (samples + 1); samples++; }
+        const loud = lvl > Math.max(0.015, floor * 2.5);
         onLevel(Math.min(1, lvl * 8));
         if (loud) { if (!spoke) onSpeech(); spoke = true; lastLoud = now; }
         if (!this.analyser) spoke = true; // ohne Pegel: nur per Tipp beenden
@@ -79,10 +91,9 @@ export class Listener {
   get recording() { return !!this.current; }
 
   close() {
-    this.cancel();
-    this.stream?.getTracks().forEach((tr) => tr.stop());
+    this.release();
     this.ctx?.close().catch(() => {});
-    this.stream = null; this.ctx = null; this.analyser = null;
+    this.ctx = null; this.analyser = null;
   }
 }
 

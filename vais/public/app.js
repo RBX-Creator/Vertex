@@ -1619,15 +1619,17 @@ async function voiceListen() {
   voicePhase('listen', '');
   let blob = null;
   try {
+    await voice.listener.open(); // nach dem Vorlesen wieder einschalten
     blob = await voice.listener.record({ onLevel: orbLevel });
   } catch { blob = null; }
   if (!voice.on || voice.paused) return;
   if (!blob) {
     // Nichts gehört: ein paar Mal weiter zuhören, dann pausieren statt endlos zu laufen
-    if (++voice.misses >= 3) { voice.paused = true; voice.misses = 0; return voicePhase('tap', t('Ich habe nichts gehört.', 'I didn’t hear anything.')); }
+    if (++voice.misses >= 3) { voice.paused = true; voice.misses = 0; voice.listener.release(); return voicePhase('tap', t('Ich habe nichts gehört.', 'I didn’t hear anything.')); }
     return voiceListen();
   }
   voice.misses = 0;
+  voice.listener.release(); // Mikrofon aus, damit die Antwort laut zu hören ist
   voicePhase('think', '…');
   let text = '';
   try {
@@ -1669,45 +1671,109 @@ function voiceListenBrowser() {
   };
   try { rec.start(); voice.rec = rec; voicePhase('listen', ''); } catch { voice.paused = true; voicePhase('tap', ''); }
 }
+// Text fürs Vorlesen aufbereiten (Markdown, Code und Links weg)
+function speechText(md) {
+  return String(md ?? '')
+    .replace(/```[\s\S]*?(```|$)/g, ` ${t('(Code)', '(code)')} `)
+    .replace(/\[\[react:[^\]]*\]\]/g, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/[*_`#>|~]+/g, ' ')
+    .replace(/^\s*[-•]\s+/gm, '')
+    .replace(/【[^】]*】/g, '')
+    .replace(/[ \t]+/g, ' ');
+}
+// Antwort satzweise vorlesen, schon während sie noch geschrieben wird
+function voiceSpeaker() {
+  const lang = EXTRA_LANGS.includes(LANG) ? LANG : null;
+  const prefs = voicePrefs();
+  let queued = 0; // so viele Zeichen des aufbereiteten Texts sind schon vorgelesen
+  let pending = 0;
+  let finished = false;
+  let onAllDone = () => {};
+  const say = (part) => {
+    const l = lang ?? guessLang(part);
+    const u = new SpeechSynthesisUtterance(part);
+    u.lang = { de: 'de-DE', en: 'en-US' }[l] ?? LOCALE;
+    const v = pickVoice(l);
+    if (v) u.voice = v;
+    u.rate = prefs.rate;
+    u.pitch = prefs.pitch;
+    pending++;
+    let over = false;
+    const end = () => { if (over) return; over = true; pending--; if (finished && pending <= 0) onAllDone(); };
+    u.onend = end;
+    u.onerror = end;
+    // Sicherheitsnetz, falls das Handy das Ende nicht meldet
+    setTimeout(() => { if (!speechSynthesis.speaking && !speechSynthesis.pending) end(); }, Math.max(3500, part.length * 110));
+    speechSynthesis.speak(u);
+  };
+  return {
+    feed(md, done) {
+      const text = speechText(md);
+      let rest = text.slice(queued);
+      // nur ganze Sätze (oder alles, wenn die Antwort fertig ist)
+      const m = done ? [rest] : rest.match(/^[\s\S]*[.!?…:;](?=\s)|^[\s\S]*\n/);
+      const chunk = m ? m[0] : '';
+      if (chunk.trim()) {
+        for (const part of speechChunks(chunk.trim())) say(part);
+        queued += chunk.length;
+      }
+      if (done) { finished = true; if (pending <= 0) onAllDone(); }
+    },
+    whenDone(fn) { onAllDone = fn; if (finished && pending <= 0) fn(); },
+  };
+}
 async function voiceAsk(text) {
   voicePhase('think', text);
   if (busy() || offline) { voicePhase('paused'); voice.paused = true; return; }
   el.prompt.value = text;
-  try { await send(); } catch { /* Fehler zeigt die Karte */ }
-  const chat = state.chat;
-  const turn = chat?.turns.at(-1);
-  if (!voice.on || !turn) return;
-  const answer = turn.answers.find((a) => a.status === 'done' && a.text) ?? turn.answers[0];
-  const card = cardEl(chat.turns.length - 1, turn.answers.indexOf(answer));
-  const spoken = answer?.text && card ? speakableText(card) : answer?.reaction ? '' : t('Das hat leider nicht geklappt.', 'Sorry, that did not work.');
-  if (!spoken) return voiceListen(); // nur ein Emoji als Antwort
-  voicePhase('speak', spoken.length > 220 ? `${spoken.slice(0, 220)} …` : spoken);
-  const lang = EXTRA_LANGS.includes(LANG) ? LANG : guessLang(spoken);
-  const v = pickVoice(lang);
-  const prefs = voicePrefs();
-  const parts = speechChunks(spoken);
   speechSynthesis.cancel();
-  let ended = false;
-  const done = () => { if (ended) return; ended = true; if (voice.on && !voice.paused && voice.phase === 'speak') voiceListen(); };
-  parts.forEach((part, i) => {
-    const u = new SpeechSynthesisUtterance(part);
-    u.lang = { de: 'de-DE', en: 'en-US' }[lang] ?? LOCALE;
-    if (v) u.voice = v;
-    u.rate = prefs.rate;
-    u.pitch = prefs.pitch;
-    if (i === parts.length - 1) { u.onend = done; u.onerror = done; }
-    speechSynthesis.speak(u);
+  const speaker = voiceSpeaker();
+  const before = state.chat?.turns.length ?? 0;
+  let started = false;
+  let finished = false;
+  const finish = (answer) => {
+    if (finished) return;
+    finished = true;
+    clearInterval(watch);
+    if (!voice.on) return;
+    if (!answer?.text) {
+      if (answer?.reaction) return voiceListen(); // nur ein Emoji als Antwort
+      speaker.feed(t('Das hat leider nicht geklappt.', 'Sorry, that did not work.'), true);
+    } else {
+      $('#voice-said').textContent = speechText(answer.text).slice(0, 220);
+      speaker.feed(answer.text, true);
+    }
+    voicePhase('speak');
+    speaker.whenDone(() => { if (voice.on && !voice.paused && voice.phase === 'speak') voiceListen(); });
+  };
+  // Während die Antwort hereinkommt: fertige Sätze schon vorlesen; sobald sie fertig ist, sofort weiter
+  const watch = setInterval(() => {
+    const chat = state.chat;
+    if (!chat || chat.turns.length <= before) return;
+    const turn = chat.turns.at(-1);
+    const a = turn.answers.find((x) => x.text) ?? turn.answers[0];
+    if (!voice.on) return clearInterval(watch);
+    if (turn.answers.every((x) => x.status !== 'streaming')) return finish(turn.answers.find((x) => x.status === 'done' && (x.text || x.reaction)) ?? a);
+    if (!a?.text) return;
+    if (!started) { started = true; voicePhase('speak'); }
+    speaker.feed(a.text, false);
+    $('#voice-said').textContent = speechText(a.text).slice(-220);
+  }, 200);
+  send().catch(() => {}).finally(() => {
+    const turn = state.chat?.turns.at(-1);
+    if (!finished) finish(turn?.answers.find((x) => x.status === 'done' && (x.text || x.reaction)) ?? turn?.answers[0]);
   });
-  // Sicherheitsnetz: manche Handys melden das Ende des Vorlesens nicht
-  setTimeout(() => { if (!speechSynthesis.speaking) done(); }, Math.max(4000, spoken.length * 90));
 }
 async function startVoice() {
   if (!canSpeak || !(canRecord || SpeechRec)) return toast(t('Dein Browser kann leider keine Sprache erkennen.', 'Your browser cannot recognize speech.'));
   if (offline) return toast(t('Du bist offline.', 'You are offline.'));
   stopSpeaking();
   recognition?.stop();
-  // iPhone: Vorlesen einmal durch den Tipp freischalten
-  try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch { /* egal */ }
+  // iPhone: Vorlesen einmal durch den Tipp freischalten (leise, kurzes Wort)
+  try { const u = new SpeechSynthesisUtterance('.'); u.volume = 0; speechSynthesis.speak(u); } catch { /* egal */ }
   voice.on = true;
   voice.paused = false;
   voice.misses = 0;
@@ -1848,7 +1914,8 @@ async function trListen(btn, fromCode, toCode, side) {
   if (canRecord && !tr.browserOnly) {
     const small = btn.querySelector('small');
     try {
-      if (!tr.listener) { tr.listener = new Listener(); await tr.listener.open(); }
+      if (!tr.listener) tr.listener = new Listener();
+      await tr.listener.open();
     } catch {
       tr.listener = null;
       if (!SpeechRec) return toast(t('Bitte erlaube den Zugriff aufs Mikrofon.', 'Please allow access to the microphone.'));
@@ -1858,7 +1925,8 @@ async function trListen(btn, fromCode, toCode, side) {
     btn.classList.add('live');
     small.textContent = t('hört zu … (nochmal tippen = fertig)', 'listening … (tap again = done)');
     haptic('tap');
-    const blob = await tr.listener.record({ silenceMs: 1500, onLevel: (l) => btn.style.setProperty('--lvl', String(l)) });
+    const blob = await tr.listener.record({ silenceMs: 1100, onLevel: (l) => btn.style.setProperty('--lvl', String(l)) });
+    tr.listener.release(); // Mikrofon aus, damit die Übersetzung laut zu hören ist (iPhone)
     btn.classList.remove('live');
     btn.style.removeProperty('--lvl');
     if (!blob) { small.textContent = t('tippen & sprechen', 'tap and speak'); return; }

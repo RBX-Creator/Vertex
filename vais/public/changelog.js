@@ -3,9 +3,10 @@ import { t } from './i18n.js';
 
 export const CHANGES = () => [
   {
-    id: 8, date: '2026-11-01',
+    id: 9, date: '2026-11-01',
     items: [
       ['🎙️', t('Sprach-Modus repariert', 'Voice mode fixed'), t('Funktioniert jetzt auch auf dem iPhone: Der Kreis zeigt, dass du gehört wirst – antippen, wenn du fertig bist.', 'Now works on iPhone too: the circle shows you are being heard – tap it when you are done.')],
+      ['🔊', t('Antworten mit Ton und schneller', 'Answers with sound, and faster'), t('Im Sprach-Modus liest VAIs schon den ersten Satz vor, während der Rest noch geschrieben wird.', 'In voice mode, VAIs starts reading the first sentence while the rest is still being written.')],
       ['🗣️', t('Bessere Spracherkennung', 'Better speech recognition'), t('Mikrofon, Sprach-Modus und Übersetzer erkennen Sprache jetzt genauer.', 'Microphone, voice mode and translator now recognise speech more accurately.')],
     ],
   },
