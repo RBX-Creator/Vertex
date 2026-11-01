@@ -45,7 +45,7 @@ const CSP = [
 const SANDBOX_CSP = "default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'";
 
 app.use((req, res, next) => {
-  const sandbox = req.path === '/sandbox.html' || req.path === '/sandbox.js';
+  const sandbox = ['/sandbox.html', '/sandbox.js', '/pyrunner.html', '/pyrunner.js'].includes(req.path);
   res.set({
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'same-origin',

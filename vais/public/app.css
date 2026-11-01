@@ -1570,3 +1570,37 @@ a.set-admin { display: flex; justify-content: center; text-decoration: none; mar
 .mem-list .mem-empty { background: none; padding: 4px 0; color: var(--muted); font-size: 13px; }
 .mem-del { flex: none; width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; }
 .mem-del:hover { background: var(--border); color: var(--text); }
+
+/* ── Python ausführen ─────────────────────────────────────────────── */
+.py-runner { position: absolute; width: 0; height: 0; border: 0; visibility: hidden; }
+.code-run { margin-left: auto; margin-right: 8px; border: 0; background: var(--primary); color: var(--primary-text); font-family: var(--sans); font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+.code-run:disabled { opacity: .55; cursor: default; }
+.code-head:has(.code-run) .code-copy { margin-left: 0; }
+.code-out { margin: -6px 0 14px; padding: 10px 12px; border: 1px solid var(--border); border-top: 0; border-radius: 0 0 12px 12px; background: var(--surface); font-size: 13px; animation: fadeUp .25s ease both; }
+.code-out-head { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.code-out.error .code-out-head { color: var(--danger); }
+.code-out pre { margin: 0; padding: 0; background: none; border: 0; font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
+.code-out img { display: block; max-width: 100%; margin-top: 8px; border-radius: 8px; background: #fff; }
+.code-out-status { margin: 0; color: var(--muted); }
+.code-out.busy .code-out-status::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; border: 2px solid var(--border-strong); border-top-color: var(--text); animation: adm-spin .8s linear infinite; vertical-align: -1px; }
+@keyframes adm-spin { to { transform: rotate(360deg); } }
+.code-out-empty { margin: 0; color: var(--muted); }
+
+/* ── Diagramme ────────────────────────────────────────────────────── */
+.chart { margin: 12px 0 16px; padding: 14px 14px 10px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.chart figcaption { font-weight: 600; font-size: 15px; margin-bottom: 8px; color: var(--heading); }
+.chart-plot { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
+.chart-grid { stroke: var(--border); stroke-width: 1; }
+.chart-guide { stroke: var(--border-strong); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart-axis { fill: var(--muted); font-size: 20px; font-family: var(--sans); font-variant-numeric: tabular-nums; }
+.chart-legend { fill: var(--text); font-size: 21px; font-family: var(--sans); }
+.chart-mark { transition: opacity .15s; }
+.chart-tip { position: absolute; transform: translate(-50%, -100%); pointer-events: none; z-index: 2; display: grid; gap: 2px; padding: 6px 9px; border-radius: 8px; background: var(--heading); color: var(--bg); font-size: 12px; white-space: nowrap; box-shadow: 0 4px 14px rgba(0, 0, 0, .2); }
+.chart-tip span { display: flex; align-items: center; gap: 6px; }
+.chart-tip i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.chart-toggle { margin-top: 6px; border: 0; background: none; padding: 4px 0; color: var(--muted); font: inherit; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.chart-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.chart-table th, .chart-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+.chart-table th:first-child, .chart-table td:first-child { text-align: left; }
+.chart-wait { color: var(--muted); font-size: 14px; }
