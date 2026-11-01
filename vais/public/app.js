@@ -131,6 +131,7 @@ const el = {
   home: $('#home'),
   thread: $('#thread'),
   board: $('#board'),
+  stats: $('#stats'),
   dock: $('.dock'),
   drawer: $('#drawer'),
   dList: $('#d-list'),
@@ -315,10 +316,12 @@ function showView(view) {
   el.home.hidden = view !== 'home';
   el.thread.hidden = view !== 'thread';
   el.board.hidden = view !== 'board';
-  el.dock.hidden = view === 'board';
+  el.stats.hidden = view !== 'stats';
+  el.dock.hidden = view === 'board' || view === 'stats';
   el.newChat.hidden = view === 'home';
+  $('#share-chat').hidden = view !== 'thread';
   $('#suggest').hidden = view !== 'home';
-  if (view === 'board') el.title.textContent = '';
+  if (view === 'board' || view === 'stats') el.title.textContent = '';
 }
 
 // ── Vorschläge auf der Startseite ─────────────────────────────────
@@ -1260,6 +1263,23 @@ async function shrinkImage(file) {
   return canvas.toDataURL('image/jpeg', 0.82);
 }
 
+// Text aus PDFs lesen (pdf.js wird erst bei Bedarf geladen)
+const MAX_PDF_CHARS = 60_000;
+async function pdfText(file) {
+  const pdfjs = await import('/vendor/pdf.mjs');
+  pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.mjs';
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  let text = '';
+  let cut = 0;
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    text += `${content.items.map((it) => `${it.str}${it.hasEOL ? '\n' : ' '}`).join('')}\n\n`;
+    if (text.length > MAX_PDF_CHARS) { cut = i; break; }
+  }
+  return { text: text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, MAX_PDF_CHARS), pages: doc.numPages, cut: cut && cut < doc.numPages ? cut : 0 };
+}
+
 async function addFiles(fileList) {
   for (const file of [...fileList]) {
     if (state.pending.length + pendingReads >= MAX_ATTACHMENTS) { toast(t(`Höchstens ${MAX_ATTACHMENTS} Anhänge pro Nachricht.`, `At most ${MAX_ATTACHMENTS} attachments per message.`)); break; }
@@ -1267,7 +1287,16 @@ async function addFiles(fileList) {
     try {
       if (file.type.startsWith('image/')) {
         state.pending.push({ kind: 'image', name: file.name || t('Bild', 'Image'), url: await shrinkImage(file) });
-      } else if (/pdf|zip|octet-stream|word|excel|powerpoint|audio|video/.test(file.type)) {
+      } else if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+        if (file.size > 15_000_000) { toast(t(`„${file.name}“ ist zu groß (max. 15 MB).`, `“${file.name}” is too large (max. 15 MB).`)); continue; }
+        toast(t(`PDF wird gelesen …`, `Reading PDF …`));
+        const { text, pages, cut } = await pdfText(file);
+        if (!text.trim()) toast(t(`„${file.name}“ enthält keinen lesbaren Text (z. B. eingescannt).`, `“${file.name}” contains no readable text (e.g. scanned).`));
+        else {
+          state.pending.push({ kind: 'file', name: file.name, text });
+          if (cut) toast(t(`Nur die ersten ${cut} von ${pages} Seiten passen in die Nachricht.`, `Only the first ${cut} of ${pages} pages fit into the message.`));
+        }
+      } else if (/zip|octet-stream|word|excel|powerpoint|audio|video/.test(file.type)) {
         toast(t(`„${file.name}“: Nur Bilder und Textdateien werden unterstützt.`, `“${file.name}”: only images and text files are supported.`));
       } else if (file.size > MAX_FILE_BYTES) {
         toast(t(`„${file.name}“ ist zu groß (max. 200 KB).`, `“${file.name}” is too large (max. 200 KB).`));
@@ -1357,7 +1386,8 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (!$('#settings').hidden) closeSettings();
+  if (!$('#share-sheet').hidden) closeShare();
+  else if (!$('#settings').hidden) closeSettings();
   else if (!$('#preview').hidden) closePreview();
   else if (!el.modalityMenu.hidden) { toggleModalityMenu(false); el.modalityBtn.focus(); }
   else if (!el.drawer.hidden) closeDrawer();
@@ -1395,6 +1425,7 @@ function go(hash) {
 async function route() {
   const h = location.hash;
   if (h === '#bestenliste') return showBoard();
+  if (h === '#statistik') return showStats();
   if (h.startsWith('#c/')) {
     const id = decodeURIComponent(h.slice(3));
     if (state.chat?.id === id) return showView('thread');
@@ -1424,6 +1455,7 @@ async function loadChat(id) {
     names: data.mode === 'battle' && data.winner ? data.labels : null,
     winner: data.winner,
     modality: data.modality,
+    shared: data.shared,
     turns: data.turns,
   };
   state.mode = data.mode;
@@ -1507,6 +1539,7 @@ $('#open-drawer').addEventListener('click', openDrawer);
 el.dSearch.addEventListener('input', renderHistory);
 $('#d-new').addEventListener('click', () => { closeDrawer(); go(''); el.prompt.focus(); });
 $('#d-board').addEventListener('click', () => { closeDrawer(); go('#bestenliste'); });
+$('#d-stats').addEventListener('click', () => { closeDrawer(); go('#statistik'); });
 el.drawer.addEventListener('click', async (e) => {
   if (e.target.closest('[data-close-drawer]')) return closeDrawer();
   const open = e.target.closest('[data-open]');
@@ -1609,6 +1642,114 @@ async function showBoard() {
     });
   } catch {
     sub.textContent = t('Die Bestenliste konnte nicht geladen werden.', 'The leaderboard could not be loaded.');
+  }
+}
+
+// ── Chat teilen ───────────────────────────────────────────────────
+const shareSheet = $('#share-sheet');
+let shareUrl = '';
+
+function paintShare() {
+  const shared = !!state.chat?.shared;
+  $('#share-text').textContent = shared
+    ? t('Jeder mit diesem Link kann den Chat lesen (ohne Konto). Neue Nachrichten erscheinen dort automatisch.', 'Anyone with this link can read the chat (no account needed). New messages appear there automatically.')
+    : t('Erstelle einen Link, mit dem andere diesen Chat lesen können – ohne Konto. Bilder werden mitgeteilt, Dateiinhalte nicht.', 'Create a link so others can read this chat – no account needed. Images are shared, file contents are not.');
+  $('#share-link-box').hidden = !shared;
+  $('#share-create').hidden = shared;
+  $('#share-stop').hidden = !shared;
+  $('#share-native').hidden = !shared || !navigator.share;
+  $('#share-link').value = shareUrl;
+}
+
+async function openShare() {
+  if (!state.chat) return;
+  shareUrl = '';
+  if (state.chat.shared) {
+    try {
+      const data = await post('/api/chat/share', { chatId: state.chat.id });
+      shareUrl = location.origin + data.url;
+    } catch (err) { return toast(err.message); }
+  }
+  paintShare();
+  shareSheet.hidden = false;
+}
+const closeShare = () => { shareSheet.hidden = true; };
+
+$('#share-chat').addEventListener('click', openShare);
+shareSheet.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) closeShare(); });
+$('#share-create').addEventListener('click', async () => {
+  try {
+    const data = await post('/api/chat/share', { chatId: state.chat.id });
+    state.chat.shared = true;
+    shareUrl = location.origin + data.url;
+    paintShare();
+    $('#share-link').select();
+  } catch (err) { toast(err.message); }
+});
+$('#share-copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(shareUrl); toast(t('Link kopiert', 'Link copied')); } catch { $('#share-link').select(); }
+});
+$('#share-native').addEventListener('click', () => {
+  navigator.share?.({ title: el.title.textContent || 'VAIs', url: shareUrl }).catch(() => {});
+});
+$('#share-stop').addEventListener('click', async () => {
+  try {
+    await post('/api/chat/unshare', { chatId: state.chat.id });
+    state.chat.shared = false;
+    shareUrl = '';
+    paintShare();
+    toast(t('Der Link funktioniert nicht mehr.', 'The link no longer works.'));
+  } catch (err) { toast(err.message); }
+});
+$('#share-link').addEventListener('focus', (e) => e.target.select());
+
+// ── Meine Statistik ───────────────────────────────────────────────
+async function showStats() {
+  if (state.chat) resetChat();
+  showView('stats');
+  const sub = $('#stats-sub');
+  sub.textContent = t('Lädt …', 'Loading …');
+  ['#stat-grid', '#stat-modes', '#stat-fav', '#stat-used'].forEach((sel) => { $(sel).innerHTML = ''; });
+  try {
+    const res = await fetch('/api/chat/stats');
+    if (res.status === 401) return location.replace('/login');
+    const d = await res.json();
+    const since = d.since ? new Date(d.since).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+    sub.textContent = since ? t(`Dabei seit ${since}.`, `Member since ${since}.`) : '';
+    const tiles = [
+      [d.chats, t('Chats', 'Chats')],
+      [d.questions, t('Fragen gestellt', 'Questions asked')],
+      [d.votes, t('Battle-Stimmen', 'Battle votes')],
+      [d.likes, t('Antworten mit 👍', 'Answers with 👍')],
+    ];
+    $('#stat-grid').innerHTML = tiles.map(([n, label]) => `<div class="stat-tile"><b>${Number(n) || 0}</b><span>${label}</span></div>`).join('');
+
+    const total = Object.values(d.modes).reduce((a, b) => a + b, 0);
+    $('#stat-modes').innerHTML = total
+      ? Object.keys(MODES).filter((k) => d.modes[k]).map((k) => {
+          const pct = Math.round((d.modes[k] / total) * 100);
+          return `<div class="stat-mode">${ICON[k]}<span class="sm-name">${MODES[k].label}</span><span class="sm-bar"><i style="width:${pct}%"></i></span><span class="sm-n">${d.modes[k]}</span></div>`;
+        }).join('')
+      : `<p class="set-hint">${t('Noch keine Chats.', 'No chats yet.')}</p>`;
+
+    const fill = (sel, list, unit, empty) => {
+      const ol = $(sel);
+      if (!list.length) { ol.innerHTML = `<li class="board-empty"><p class="set-hint">${empty}</p></li>`; return; }
+      ol.innerHTML = list.map((m, i) => `
+        <li class="board-row">
+          <span class="b-rank">${i + 1}</span>${modelLogo(m)}
+          <span class="b-name"><b></b><small></small></span>
+          <span class="b-score"><b>${m.n}</b><small>${unit(m.n)}</small></span>
+        </li>`).join('');
+      ol.querySelectorAll('.b-name').forEach((n, i) => {
+        n.querySelector('b').textContent = list[i].name;
+        n.querySelector('small').textContent = list[i].maker;
+      });
+    };
+    fill('#stat-fav', d.favorites, (n) => (n === 1 ? t('Sieg', 'win') : t('Siege', 'wins')), t('Stimme in Battles ab, dann siehst du hier deine Lieblinge.', 'Vote in battles and your favorites will show up here.'));
+    fill('#stat-used', d.mostUsed, (n) => (n === 1 ? 'Chat' : 'Chats'), t('Nutze „Direkt“ oder „Side by Side“, dann erscheinen hier deine Modelle.', 'Use “Direct” or “Side by Side” and your models will show up here.'));
+  } catch {
+    sub.textContent = t('Die Statistik konnte nicht geladen werden.', 'Stats could not be loaded.');
   }
 }
 

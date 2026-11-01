@@ -5,7 +5,7 @@ const express = (await import('express')).default;
 const { langMiddleware, t } = await import('./src/i18n.js');
 const { auth, currentUser } = await import('./src/auth.js');
 const { mailConfigured } = await import('./src/mailer.js');
-const { chat } = await import('./src/chat.js');
+const { chat, share } = await import('./src/chat.js');
 const { demoMode } = await import('./src/models.js');
 
 // Abstürze vermeiden: unerwartete Fehler nur protokollieren
@@ -72,6 +72,7 @@ const bigJson = express.json({ limit: '10mb' });
 app.use((req, res, next) => (req.path === '/api/chat/stream' ? bigJson : smallJson)(req, res, next));
 
 app.use('/api/auth', auth);
+app.use('/api/share', share);
 app.use('/api/chat', chat);
 
 // Seiten: nicht eingeloggte Besucher landen beim Login
@@ -86,6 +87,13 @@ app.get('/login', async (req, res) => {
   if (await currentUser(req)) return res.redirect('/');
   noCache(res);
   res.sendFile(page('login.html'));
+});
+
+// Geteilte Chats: für alle lesbar (die Seite lädt die Daten selbst)
+app.get('/s/:id', (req, res) => {
+  noCache(res);
+  res.set('Referrer-Policy', 'no-referrer');
+  res.sendFile(page('share.html'));
 });
 
 // Service Worker und Manifest immer frisch laden
@@ -105,6 +113,9 @@ app.use(express.static(new URL('./public', import.meta.url).pathname, { index: f
 const vendor = (file) => new URL(`./node_modules/${file}`, import.meta.url).pathname;
 app.get('/vendor/marked.js', (req, res) => res.sendFile(vendor('marked/lib/marked.umd.js')));
 app.get('/vendor/purify.js', (req, res) => res.sendFile(vendor('dompurify/dist/purify.min.js')));
+// PDF-Text im Browser auslesen (wird nur geladen, wenn jemand ein PDF anhängt)
+app.get('/vendor/pdf.mjs', (req, res) => res.type('text/javascript').sendFile(vendor('pdfjs-dist/build/pdf.min.mjs')));
+app.get('/vendor/pdf.worker.mjs', (req, res) => res.type('text/javascript').sendFile(vendor('pdfjs-dist/build/pdf.worker.min.mjs')));
 
 // Fehler (z. B. zu große oder kaputte Anfragen) immer als JSON beantworten
 app.use((err, req, res, _next) => {

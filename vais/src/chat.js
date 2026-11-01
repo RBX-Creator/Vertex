@@ -18,7 +18,7 @@ const IMAGE_URL = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/;
 // Nachricht prüfen: Text oder (nur vom Nutzer) eine Liste aus Text- und Bild-Teilen
 function cleanMessage(m) {
   if (!m || !['user', 'assistant'].includes(m.role)) throw new HttpError(400, t('Ungültige Nachricht.', 'Invalid message.'));
-  if (typeof m.content === 'string') return { role: m.role, content: m.content.slice(0, MAX_CHARS) };
+  if (typeof m.content === 'string') return { role: m.role, content: m.content.slice(0, MAX_CHARS * 3) }; // Platz für Dateien/PDFs
   if (m.role !== 'user' || !Array.isArray(m.content) || m.content.length > 12) throw new HttpError(400, t('Ungültige Nachricht.', 'Invalid message.'));
   return {
     role: 'user',
@@ -339,6 +339,59 @@ chat.get('/leaderboard', wrap(async (req, res) => {
   res.json(data);
 }));
 
+// ── Teilen ────────────────────────────────────────────────────────
+chat.post('/share', wrap(async (req, res) => {
+  const row = await get('SELECT id, share_id FROM chats WHERE id = ? AND user_id = ?', String(req.body?.chatId ?? ''), req.user.id);
+  if (!row) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
+  let shareId = row.share_id;
+  if (!shareId) {
+    shareId = randomBytes(9).toString('base64url');
+    await run('UPDATE chats SET share_id = ? WHERE id = ?', shareId, row.id);
+  }
+  res.json({ shareId, url: `/s/${shareId}` });
+}));
+
+chat.post('/unshare', wrap(async (req, res) => {
+  const row = await get('SELECT id FROM chats WHERE id = ? AND user_id = ?', String(req.body?.chatId ?? ''), req.user.id);
+  if (!row) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
+  await run('UPDATE chats SET share_id = NULL WHERE id = ?', row.id);
+  res.json({ ok: true });
+}));
+
+// ── Meine Statistik ───────────────────────────────────────────────
+chat.get('/stats', wrap(async (req, res) => {
+  const uid = req.user.id;
+  const one = async (sql, ...args) => Number(Object.values((await get(sql, ...args)) ?? { n: 0 })[0] ?? 0);
+  const chats = await one('SELECT COUNT(*) AS n FROM chats WHERE user_id = ? AND EXISTS (SELECT 1 FROM messages WHERE messages.chat_id = chats.id)', uid);
+  const questions = await one('SELECT COUNT(*) AS n FROM messages m JOIN chats c ON c.id = m.chat_id WHERE c.user_id = ? AND m.side = -1', uid);
+  const votes = await one("SELECT COUNT(*) AS n FROM chats WHERE user_id = ? AND mode = 'battle' AND winner IS NOT NULL", uid);
+  const likes = await one('SELECT COUNT(*) AS n FROM messages m JOIN chats c ON c.id = m.chat_id WHERE c.user_id = ? AND m.feedback = 1', uid);
+  const byMode = await all('SELECT mode, COUNT(*) AS n FROM chats WHERE user_id = ? GROUP BY mode', uid);
+
+  // Lieblinge: welche Modelle haben bei deinen Battles gewonnen?
+  const battles = await all("SELECT model_a, model_b, winner FROM chats WHERE user_id = ? AND mode = 'battle' AND winner IN ('a', 'b')", uid);
+  const wins = new Map();
+  for (const b of battles) {
+    const id = modelKey(b.winner === 'a' ? b.model_a : b.model_b);
+    wins.set(id, (wins.get(id) ?? 0) + 1);
+  }
+  // Meistgenutzt: Direkt und Side by Side
+  const used = new Map();
+  for (const r of await all("SELECT model_a, model_b FROM chats WHERE user_id = ? AND mode IN ('direct', 'sxs')", uid)) {
+    for (const id of [r.model_a, r.model_b].filter(Boolean)) used.set(modelKey(id), (used.get(modelKey(id)) ?? 0) + 1);
+  }
+  const top = async (map) => Promise.all([...map.entries()].sort((x, y) => y[1] - x[1]).slice(0, 5)
+    .map(async ([id, n]) => ({ ...(await describeModel(id)), n })));
+
+  res.json({
+    chats, questions, votes, likes,
+    modes: Object.fromEntries(byMode.map((r) => [r.mode, Number(r.n)])),
+    favorites: await top(wins),
+    mostUsed: await top(used),
+    since: req.user.created_at,
+  });
+}));
+
 // ── Verlauf bearbeiten ────────────────────────────────────────────
 // Ab einer Frage alles löschen (zum Bearbeiten einer Nachricht)
 chat.post('/truncate', wrap(async (req, res) => {
@@ -368,10 +421,8 @@ chat.post('/clear', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// Einen gespeicherten Chat laden (Battle-Modelle bleiben geheim, bis abgestimmt wurde)
-chat.get('/:id', wrap(async (req, res) => {
-  const row = await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
-  if (!row) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
+// Gespeicherten Chat für die Anzeige zusammenbauen (eigene Chats und geteilte Links)
+async function loadChatData(row, { forShare = false } = {}) {
   const msgs = await all('SELECT turn, side, content, status, error, meta, feedback, attachments FROM messages WHERE chat_id = ? ORDER BY turn, side', row.id);
   const sides = row.mode === 'direct' || row.mode === 'agent' ? 1 : 2;
   const turns = [];
@@ -379,31 +430,41 @@ chat.get('/:id', wrap(async (req, res) => {
     turns[m.turn] ??= { user: '', answers: Array.from({ length: sides }, () => ({ text: '', status: 'stopped', error: null })) };
     if (m.side < 0) {
       turns[m.turn].user = m.content;
-      try { turns[m.turn].attachments = JSON.parse(m.attachments || '[]'); } catch { turns[m.turn].attachments = []; }
-    }
-    else if (m.side < sides) {
+      let att = [];
+      try { att = JSON.parse(m.attachments || '[]'); } catch { /* egal */ }
+      // Beim Teilen keine Dateiinhalte mitschicken, nur Namen (Bilder bleiben sichtbar)
+      turns[m.turn].attachments = forShare ? att.map((a) => (a.kind === 'file' ? { kind: 'file', name: a.name } : a)) : att;
+    } else if (m.side < sides) {
       let meta = {};
       try { meta = JSON.parse(m.meta || '{}'); } catch { /* egal */ }
       turns[m.turn].answers[m.side] = {
         text: m.content, status: m.status, error: m.error,
-        steps: meta.steps ?? [], thinking: meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0, feedback: m.feedback ?? 0,
-        sources: meta.sources ?? [],
+        steps: meta.steps ?? [], thinking: forShare ? '' : meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0,
+        feedback: forShare ? 0 : m.feedback ?? 0, sources: meta.sources ?? [],
       };
     }
   }
   const ids = [row.model_a, row.model_b].filter(Boolean);
   const names = await Promise.all(ids.map(displayName));
   const reveal = row.mode !== 'battle' || row.winner;
-  res.json({
-    id: row.id,
+  return {
+    id: forShare ? undefined : row.id,
     mode: row.mode,
     modality: row.modality || 'auto',
-    title: row.title || 'Chat',
+    title: row.title || t('Chat', 'Chat'),
     winner: row.winner,
-    models: row.mode === 'battle' || row.mode === 'agent' ? null : ids,
+    models: forShare || row.mode === 'battle' || row.mode === 'agent' ? null : ids,
     labels: reveal ? names : null,
-    turns: turns.filter((t) => t && (t.user || t.attachments?.length)),
-  });
+    shared: forShare ? undefined : Boolean(row.share_id),
+    turns: turns.filter((x) => x && (x.user || x.attachments?.length)),
+  };
+}
+
+// Einen gespeicherten Chat laden (Battle-Modelle bleiben geheim, bis abgestimmt wurde)
+chat.get('/:id', wrap(async (req, res) => {
+  const row = await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
+  if (!row) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
+  res.json(await loadChatData(row));
 }));
 
 // 👍 / 👎 zu einer Antwort (1, -1 oder 0 zum Zurücknehmen)
@@ -437,3 +498,13 @@ chat.post('/vote', wrap(async (req, res) => {
 }));
 
 chat.use(errorHandler);
+
+// ── Öffentlich: geteilte Chats (ohne Anmeldung lesbar) ────────────
+export const share = Router();
+share.get('/:id', wrap(async (req, res) => {
+  const row = await get('SELECT * FROM chats WHERE share_id = ?', String(req.params.id));
+  if (!row || !row.user_id) throw new HttpError(404, t('Dieser Link ist nicht (mehr) gültig.', 'This link is not valid (anymore).'));
+  res.set('Cache-Control', 'no-store');
+  res.json(await loadChatData(row, { forShare: true }));
+}));
+share.use(errorHandler);

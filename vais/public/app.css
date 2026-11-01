@@ -1321,3 +1321,55 @@ body { overflow: hidden; }
 @media (min-width: 700px) {
   .settings .sheet-panel { width: 520px; max-height: 84dvh; }
 }
+
+/* ── Teilen ────────────────────────────────────────────── */
+.small-sheet .sheet-panel { gap: 12px; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+.share-link { display: grid; gap: 10px; }
+.share-link .input { font-family: var(--mono); font-size: 14px; }
+.danger-link { color: var(--danger); justify-self: center; padding: 8px 12px; }
+.danger-link:hover { color: var(--danger); text-decoration: underline; }
+@media (min-width: 700px) { .small-sheet .sheet-panel { width: 440px; } }
+
+/* ── Meine Statistik ───────────────────────────────────── */
+.stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 8px 0 28px; }
+@media (min-width: 700px) { .stat-grid { grid-template-columns: repeat(4, 1fr); } }
+.stat-tile { display: flex; flex-direction: column; gap: 4px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.stat-tile b { font-family: var(--serif); font-weight: 400; font-size: 40px; line-height: 1; color: var(--heading); }
+.stat-tile span { font-size: 13px; color: var(--muted); }
+.stat-h { margin: 28px 0 12px; font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.stat-modes { display: grid; gap: 12px; }
+.stat-mode { display: grid; grid-template-columns: 22px 110px 1fr 36px; align-items: center; gap: 10px; font-size: 15px; }
+.stat-mode svg { width: 20px; height: 20px; color: var(--muted); }
+.sm-bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.sm-bar i { display: block; height: 100%; border-radius: 4px; background: var(--text); }
+.sm-n { text-align: right; font-family: var(--mono); font-size: 14px; color: var(--muted); }
+
+/* ── Öffentliche Seite für geteilte Chats ──────────────── */
+.share-page { overflow: auto; }
+.share-page .topbar { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--border); }
+.try-btn {
+  justify-self: end;
+  height: 38px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 10px;
+  background: var(--primary);
+  color: var(--primary-text);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.share-main { max-width: 1080px; margin: 0 auto; padding: 24px 16px 60px; }
+.share-kicker { margin: 0 0 6px; font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.share-title { margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(34px, 8vw, 54px); line-height: 1.05; color: var(--heading); overflow-wrap: anywhere; }
+.share-meta { margin: 8px 0 24px; color: var(--muted); }
+.share-main .thread { padding: 0; }
+.answers.shared .track { display: grid; gap: 12px; overflow: visible; margin: 0; padding: 0; }
+@media (min-width: 900px) { .answers.shared .track { grid-template-columns: 1fr 1fr; } }
+.answers.shared .card { flex: none; }
+.share-sources { margin: 0; padding: 0 18px 16px 36px; font-size: 14px; color: var(--muted); }
+.share-sources a { color: inherit; }
+.share-end { display: grid; justify-items: center; gap: 14px; margin: 48px 0 0; padding: 28px 16px; border-top: 1px solid var(--border); text-align: center; color: var(--muted); }
+.share-end .btn { max-width: 260px; text-decoration: none; }

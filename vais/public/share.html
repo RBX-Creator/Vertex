@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Geteilter Chat – VAIs</title>
+  <meta name="title-en" content="Shared chat – VAIs">
+  <meta name="robots" content="noindex">
+  <script src="/boot.js"></script>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/app.css">
+  <script src="/vendor/marked.js" defer></script>
+  <script src="/vendor/purify.js" defer></script>
+</head>
+<body class="share-page">
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="VAIs">
+      <svg viewBox="0 0 26 26" fill="none" aria-hidden="true">
+        <path d="M4.5 6 13 21 21.5 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="4.5" cy="6" r="2.4" fill="currentColor"/>
+        <circle cx="21.5" cy="6" r="2.4" fill="currentColor"/>
+      </svg>
+      <span>VAIs</span>
+    </a>
+    <span></span>
+    <a class="try-btn" href="/login" data-en="Try VAIs">VAIs ausprobieren</a>
+  </header>
+  <main class="share-main">
+    <p class="share-kicker" id="share-kicker" data-en="Shared chat">Geteilter Chat</p>
+    <h1 class="share-title" id="share-title"></h1>
+    <p class="share-meta" id="share-meta"></p>
+    <section class="thread" id="thread"></section>
+    <p class="share-end" id="share-end" hidden>
+      <span data-en="Compare the best AI models yourself – for free.">Vergleiche die besten KI-Modelle selbst – kostenlos.</span>
+      <a class="btn" href="/login" data-en="Try VAIs">VAIs ausprobieren</a>
+    </p>
+  </main>
+  <script src="/share.js" type="module"></script>
+</body>
+</html>

@@ -61,10 +61,11 @@ await client.batch([
 ], 'write');
 
 // Spalten, die später dazugekommen sind (bestehende Datenbanken nachrüsten)
-for (const [column, type] of [['title', 'TEXT'], ['updated_at', 'INTEGER'], ['modality', 'TEXT']]) {
+for (const [column, type] of [['title', 'TEXT'], ['updated_at', 'INTEGER'], ['modality', 'TEXT'], ['share_id', 'TEXT']]) {
   try { await client.execute(`ALTER TABLE chats ADD COLUMN ${column} ${type}`); } catch { /* gibt es schon */ }
 }
 
+await client.execute('CREATE UNIQUE INDEX IF NOT EXISTS chats_share ON chats (share_id) WHERE share_id IS NOT NULL');
 try { await client.execute('ALTER TABLE messages ADD COLUMN meta TEXT'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE messages ADD COLUMN feedback INTEGER'); } catch { /* gibt es schon */ }
 try { await client.execute('ALTER TABLE messages ADD COLUMN attachments TEXT'); } catch { /* gibt es schon */ }
@@ -74,7 +75,7 @@ export async function purgeChats(userId, chatId = null) {
   const filter = chatId ? 'id = ? AND user_id = ?' : 'user_id = ?';
   const args = chatId ? [chatId, userId] : [userId];
   await run(`DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE ${filter})`, ...args);
-  await run(`UPDATE chats SET user_id = 0, title = NULL WHERE ${filter} AND winner IS NOT NULL`, ...args);
+  await run(`UPDATE chats SET user_id = 0, title = NULL, share_id = NULL WHERE ${filter} AND winner IS NOT NULL`, ...args);
   await run(`DELETE FROM chats WHERE ${filter} AND winner IS NULL`, ...args);
 }
 

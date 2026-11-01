@@ -39,6 +39,9 @@
       </div>
       <p class="chat-title" id="chat-title"></p>
       <div class="top-actions">
+        <button class="round-btn" id="share-chat" aria-label="Chat teilen" data-en-aria-label="Share chat" title="Teilen" data-en-title="Share" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>
+        </button>
         <button class="round-btn" id="new-chat" aria-label="Neuer Chat" data-en-aria-label="New chat" title="Neuer Chat" data-en-title="New chat" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v8M8 12h8"/><path d="M21 12a9 9 0 0 1-13.5 7.8L3 21l1.2-4.5A9 9 0 1 1 21 12Z"/></svg>
         </button>
@@ -65,6 +68,19 @@
         <p class="demo-note" id="demo-note" hidden data-en="Demo mode: placeholder models answer until an API key is configured.">Demo-Modus: Es antworten Platzhalter-Modelle, bis ein API-Schlüssel eingetragen ist.</p>
       </section>
       <section class="thread" id="thread" aria-live="polite" hidden></section>
+      <section class="board stats" id="stats" hidden>
+        <div class="board-inner">
+          <h1 class="board-title" data-en="My stats">Meine Statistik</h1>
+          <p class="board-sub" id="stats-sub"></p>
+          <div class="stat-grid" id="stat-grid"></div>
+          <h2 class="stat-h" data-en="How you use VAIs">So nutzt du VAIs</h2>
+          <div class="stat-modes" id="stat-modes"></div>
+          <h2 class="stat-h" data-en="Your battle winners">Deine Battle-Sieger</h2>
+          <ol class="board-list" id="stat-fav"></ol>
+          <h2 class="stat-h" data-en="Most used models">Meistgenutzte Modelle</h2>
+          <ol class="board-list" id="stat-used"></ol>
+        </div>
+      </section>
       <section class="board" id="board" hidden>
         <div class="board-inner">
           <h1 class="board-title" data-en="Leaderboard">Bestenliste</h1>
@@ -109,7 +125,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
               </button>
               <input type="file" id="attach-input" multiple hidden
-                accept="image/*,.txt,.md,.csv,.json,.js,.mjs,.ts,.tsx,.jsx,.py,.html,.htm,.css,.xml,.yml,.yaml,.java,.c,.h,.cpp,.cs,.go,.rs,.php,.rb,.sql,.lua,.sh,.log,.ini,.toml">
+                accept="image/*,.pdf,application/pdf,.txt,.md,.csv,.json,.js,.mjs,.ts,.tsx,.jsx,.py,.html,.htm,.css,.xml,.yml,.yaml,.java,.c,.h,.cpp,.cs,.go,.rs,.php,.rb,.sql,.lua,.sh,.log,.ini,.toml">
               <button type="button" class="ctrl" id="mode-btn" aria-haspopup="true" aria-expanded="false" aria-controls="mode-menu"></button>
               <button type="button" class="ctrl" id="modality-btn" aria-haspopup="true" aria-expanded="false" aria-controls="modality-menu"></button>
               <button type="button" class="ctrl model-chip" data-slot="0" hidden></button>
@@ -140,6 +156,10 @@
       <button class="drawer-item" id="d-new">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v8M8 12h8"/><path d="M21 12a9 9 0 0 1-13.5 7.8L3 21l1.2-4.5A9 9 0 1 1 21 12Z"/></svg>
         <span data-en="New chat">Neuer Chat</span>
+      </button>
+      <button class="drawer-item" id="d-stats">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 6-6"/></svg>
+        <span data-en="My stats">Meine Statistik</span>
       </button>
       <button class="drawer-item" id="d-board">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="14" width="4" height="6" rx="1"/><rect x="10" y="9" width="4" height="11" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>
@@ -235,6 +255,28 @@
           <pre><code></code></pre>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Chat teilen -->
+  <div class="sheet small-sheet" id="share-sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="share-title">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <div class="settings-head">
+        <h2 id="share-title" data-en="Share chat">Chat teilen</h2>
+        <button class="card-btn" data-close aria-label="Schließen" data-en-aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <p class="set-hint" id="share-text"></p>
+      <div class="share-link" id="share-link-box" hidden>
+        <input class="input" id="share-link" readonly aria-label="Link">
+        <button type="button" class="btn" id="share-copy" data-en="Copy link">Link kopieren</button>
+      </div>
+      <button type="button" class="btn" id="share-create" data-en="Create link">Link erstellen</button>
+      <button type="button" class="btn ghost-btn" id="share-native" hidden data-en="Share …">Teilen …</button>
+      <button type="button" class="link danger-link" id="share-stop" hidden data-en="Stop sharing">Teilen beenden</button>
     </div>
   </div>
 

@@ -17,6 +17,7 @@
     "dompurify": "^3.2.4",
     "express": "^5.1.0",
     "marked": "^15.0.12",
-    "nodemailer": "^7.0.0"
+    "nodemailer": "^7.0.0",
+    "pdfjs-dist": "^4.10.38"
   }
 }
