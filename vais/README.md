@@ -37,7 +37,7 @@ Weitere kostenlose Modelle (optional, je ein Schlüssel in Render unter **Enviro
 - **Groq** (gpt-oss von OpenAI, Llama, Qwen, Kimi und Websuche über `compound`): console.groq.com/keys → `GROQ_API_KEY`
 - **Cerebras** (gpt-oss, Llama, Qwen, GLM; verlangt inzwischen eine Zahlungsmethode): cloud.cerebras.ai → `CEREBRAS_API_KEY`
 - **Mistral** (API nur mit bezahltem Plan): console.mistral.ai → `MISTRAL_API_KEY`
-- Kostenpflichtige Modelle wie Claude oder GPT: Guthaben bei OpenRouter aufladen und die IDs in `OPENROUTER_EXTRA_MODELS` eintragen (durch Komma getrennt).
+- Kostenpflichtige Modelle wie **Grok**, Claude oder GPT: Guthaben bei OpenRouter aufladen und die IDs in `OPENROUTER_EXTRA_MODELS` eintragen (durch Komma getrennt, z. B. `x-ai/grok-4.7,x-ai/grok-4.3`). Sie erscheinen als **Premium**; jeder Nutzer darf sie höchstens `PAID_DAILY_LIMIT` Mal pro Tag nutzen (Standard 20).
 
 Fällt ein Modell aus (z. B. Tageslimit), merkt sich VAIs das und überspringt es; im Battle springt automatisch ein anderes Modell ein.
 

@@ -23,6 +23,24 @@ chat.use(wrap(async (req, res, next) => {
   next();
 }));
 
+// Premium-Modelle (kosten Guthaben): höchstens PAID_DAILY_LIMIT Antworten pro Nutzer und Tag
+const PAID_DAILY_LIMIT = Math.max(0, Number(process.env.PAID_DAILY_LIMIT ?? 20));
+const paidUse = new Map();
+const today = () => new Date().toISOString().slice(0, 10);
+function paidAllowed(userId) {
+  const key = `${userId}:${today()}`;
+  return (paidUse.get(key) ?? 0) < PAID_DAILY_LIMIT;
+}
+function countPaid(userId) {
+  const key = `${userId}:${today()}`;
+  paidUse.set(key, (paidUse.get(key) ?? 0) + 1);
+  if (paidUse.size > 5000) for (const k of paidUse.keys()) if (!k.endsWith(today())) paidUse.delete(k);
+}
+const premiumError = () => Object.assign(
+  new Error(`Du hast dein Tageslimit für Premium-Modelle erreicht (${PAID_DAILY_LIMIT} pro Tag). Wähle ein kostenloses Modell.`),
+  { status: 429, premium: true },
+);
+
 // Einfaches Limit: 40 Antworten pro 5 Minuten und Nutzer
 const usage = new Map();
 function limit(userId) {
@@ -146,6 +164,10 @@ chat.post('/stream', wrap(async (req, res) => {
       const tried = [model];
       for (let attempt = 0; ; attempt++) {
         try {
+          if ((await findModel(model))?.paid) {
+            if (!paidAllowed(req.user.id)) throw premiumError();
+            countPaid(req.user.id);
+          }
           await streamChat({
             model,
             messages: row.modality === 'code' ? [{ role: 'system', content: CODE_PROMPT }, ...clean] : clean,
@@ -159,7 +181,8 @@ chat.post('/stream', wrap(async (req, res) => {
           if (controller.signal.aborted || text || row.mode !== 'battle' || attempt >= 3) throw err;
           const fresh = await get('SELECT model_a, model_b FROM chats WHERE id = ?', row.id);
           const other = side === 1 ? fresh.model_a : fresh.model_b;
-          const next = await pickAvailable(MODALITY_CAP[row.modality] ?? 'text', [...tried, other]);
+          const premiumIds = paidAllowed(req.user.id) ? [] : (await listModels()).filter((m) => m.paid).map((m) => m.id);
+          const next = await pickAvailable(MODALITY_CAP[row.modality] ?? 'text', [...tried, other, ...premiumIds]);
           if (!next) throw err;
           console.log(`Battle-Ersatz: ${model} → ${next.id} (${err.message})`);
           model = next.id;

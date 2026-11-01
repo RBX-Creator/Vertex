@@ -107,7 +107,10 @@ const LISTERS = {
       .filter((m) => (m.id.endsWith(':free') || EXTRA.includes(m.id)) && !m.id.startsWith('openrouter/'))
       .filter((m) => !/(safety|guard|moderation)/i.test(m.id))
       .filter((m) => (m.architecture?.output_modalities ?? ['text']).includes('text'))
-      .map((m) => makeModel('openrouter', m.id, m.id.split('/').pop().replace(/:free$/, ''), (m.name.split(':')[0] || '').trim()));
+      .map((m) => ({
+        ...makeModel('openrouter', m.id, m.id.split('/').pop().replace(/:free$/, ''), (m.name.split(':')[0] || '').trim()),
+        paid: !m.id.endsWith(':free'), // kostet Guthaben (über OPENROUTER_EXTRA_MODELS freigeschaltet)
+      }));
   },
 
   async gemini(p) {

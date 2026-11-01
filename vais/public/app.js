@@ -255,7 +255,7 @@ function renderModelList() {
         return `<li><button type="button" class="model-opt${selected ? ' selected' : ''}${m.id === other ? ' taken' : ''}${m.busy ? ' busy' : ''}" data-id="${escapeHtml(m.id)}">
           ${modelLogo(m)}<span class="name">${escapeHtml(m.name)}</span>
           ${selected ? ICON.check.replace('<svg ', '<svg width="18" height="18" ') : ''}
-          <span class="prov">${m.busy ? 'ausgelastet' : escapeHtml(m.maker)}</span></button></li>`;
+          <span class="prov">${m.busy ? 'ausgelastet' : `${m.paid ? '<span class="premium">Premium</span> ' : ''}${escapeHtml(m.maker)}`}</span></button></li>`;
       }).join('')
     : `<li class="model-empty">${q ? 'Kein Modell gefunden.' : CAP_EMPTY[sheetCap] ?? 'Keine Modelle in dieser Kategorie.'}</li>`;
 }
