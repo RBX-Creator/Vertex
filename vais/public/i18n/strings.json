@@ -540,6 +540,7 @@
  "That does not look like a key.",
  "That is an older plan.",
  "That is not a valid YouTube link.",
+ "The Pollinations key was rejected or its credit is used up.",
  "The battle cannot be changed after voting.",
  "The best AI models in one place. For free.",
  "The chat is too long for this model. Start a new chat.",
@@ -562,6 +563,7 @@
  "The name cannot be empty.",
  "The new password must be at least 8 characters long.",
  "The online voice is busy right now.",
+ "The online voice needs a Pollinations key (POLLINATIONS_API_KEY).",
  "The password is incorrect.",
  "The password must be at least 8 characters long.",
  "The preview appears as soon as the website is ready.",
@@ -676,6 +678,7 @@
  "Your battle winners",
  "Your browser cannot recognize speech.",
  "Your message …",
+ "Your phone blocked playback. Tap “🔈 Test sound” once.",
  "Your website is online 🎉",
  "Youth protection",
  "Youth protection is off.",
@@ -746,6 +749,8 @@
  "✓ Notifications are on. Tell Agent X e.g. “Remind me tomorrow at 8 about maths”.",
  "👍 and 👎 per model in the last 30 days – and why answers were bad",
  "📞 At your ear",
+ "📞 Call mode: hold the phone to your ear. The volume no longer jumps.",
  "🔈 Test sound",
- "🔊 Speaker"
+ "🔊 Speaker",
+ "🔊 Speaker: your iPhone switches between call and media volume while listening and speaking."
 ]

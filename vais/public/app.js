@@ -1462,6 +1462,14 @@ function pickVoice(lang) {
 const onlineVoice = new OnlineVoice();
 const useOnline = () => !onlineVoice.broken && (voicePrefs().engine ?? (appleDevice ? 'online' : 'device')) === 'online';
 let voiceErrShown = '';
+// Anruf-Modus (Hörer): eine einzige Ton-Einstellung für das ganze Gespräch, Mikrofon bleibt an.
+// Lautsprecher: Mikrofon zum Sprechen kurz aus – das iPhone wechselt dabei zwischen Anruf- und Medien-Lautstärke.
+const voiceSession = () => (voice.on && voice.earpiece ? 'play-and-record' : 'playback');
+onlineVoice.session = voiceSession;
+function releaseMic() {
+  if (voice.earpiece) voice.listener?.cancel(); // im Anruf-Modus bleibt das Mikrofon offen → kein Lautstärke-Wechsel
+  else voice.listener?.release();
+}
 onlineVoice.onError = (msg) => {
   const text = msg === 'play'
     ? t('Das Handy hat das Abspielen blockiert. Tippe einmal auf „🔈 Ton testen“.', 'Your phone blocked playback. Tap “🔈 Test sound” once.')
@@ -1474,7 +1482,7 @@ onlineVoice.onError = (msg) => {
 function deviceSay(text, langCode) {
   return new Promise((resolve) => {
     if (!canSpeak) return resolve();
-    setAudioSession(voice.on && voice.earpiece ? 'play-and-record' : 'playback');
+    setAudioSession(voiceSession());
     try { speechSynthesis.resume(); } catch { /* egal */ }
     const l = langCode ?? (EXTRA_LANGS.includes(LANG) ? LANG : guessLang(text));
     const u = new SpeechSynthesisUtterance(text);
@@ -1700,7 +1708,7 @@ async function voiceListen() {
     return voiceListen();
   }
   voice.misses = 0;
-  voice.listener.release(); // Mikrofon aus, damit die Antwort laut zu hören ist
+  releaseMic(); // Lautsprecher: Mikrofon aus, damit die Antwort laut zu hören ist
   voicePhase('think', '…');
   let text = '';
   try {
@@ -1768,7 +1776,7 @@ function voiceSpeaker() {
   const online = useOnline();
   const say = (part) => {
     // Ausgabe festlegen: Lautsprecher (Standard) oder Hörer wie bei einem Anruf
-    setAudioSession(voice.earpiece ? 'play-and-record' : 'playback');
+    setAudioSession(voiceSession());
     if (online) { onlineSay(part); return; }
     try { speechSynthesis.resume(); } catch { /* egal */ }
     const l = lang ?? guessLang(part);
@@ -1878,7 +1886,7 @@ async function startVoice() {
   voice.mode = canRecord ? 'record' : 'browser';
   voiceEl.hidden = false;
   paintEarpiece();
-  setAudioSession(voice.earpiece ? 'play-and-record' : 'playback');
+  setAudioSession(voiceSession());
   haptic('tap');
   if (voice.mode === 'record') {
     try {
@@ -1937,8 +1945,8 @@ function paintEarpiece() {
 }
 // Ton testen (aus einem Tipp heraus – so darf das iPhone sicher sprechen)
 onTap('#voice-test', () => {
-  try { voice.listener?.cancel(); voice.listener?.release(); } catch { /* egal */ }
-  setAudioSession(voice.earpiece ? 'play-and-record' : 'playback');
+  try { voice.listener?.cancel(); releaseMic(); } catch { /* egal */ }
+  setAudioSession(voiceSession());
   try { speechSynthesis.cancel(); speechSynthesis.resume(); } catch { /* egal */ }
   const phrase = t('Hallo! Kannst du mich hören?', 'Hello! Can you hear me?');
   voice.paused = false;
@@ -1954,7 +1962,10 @@ onTap('#voice-route', () => {
   voice.earpiece = !voice.earpiece;
   store.set('vais.earpiece', voice.earpiece);
   paintEarpiece();
-  if (voice.phase === 'speak') setAudioSession(voice.earpiece ? 'play-and-record' : 'playback');
+  if (voice.phase === 'speak') setAudioSession(voiceSession());
+  toast(voice.earpiece
+    ? t('📞 Anruf-Modus: Halte das Handy ans Ohr. Die Lautstärke springt nicht mehr hin und her.', '📞 Call mode: hold the phone to your ear. The volume no longer jumps.')
+    : t('🔊 Lautsprecher: Das iPhone wechselt beim Zuhören und Sprechen zwischen Anruf- und Medien-Lautstärke.', '🔊 Speaker: your iPhone switches between call and media volume while listening and speaking.'));
   haptic('tap');
 });
 onTap('#voice-pause', () => {

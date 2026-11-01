@@ -11,7 +11,7 @@ function wav(freq = 0, secs = 0.1) {
   w(36, 'data'); v.setUint32(40, n * 2, true);
   for (let i = 0; i < n; i++) {
     const fade = Math.min(1, i / 400, (n - i) / 400);
-    v.setInt16(44 + i * 2, freq ? Math.sin((2 * Math.PI * freq * i) / rate) * 12000 * fade : 0, true);
+    v.setInt16(44 + i * 2, freq ? Math.sin((2 * Math.PI * freq * i) / rate) * 6000 * fade : 0, true);
   }
   let bin = ''; new Uint8Array(buf).forEach((b) => { bin += String.fromCharCode(b); });
   return `data:audio/wav;base64,${btoa(bin)}`;
@@ -24,6 +24,7 @@ export class OnlineVoice {
     this.audio = null; this.queue = []; this.busy = false; this.gen = 0; this.idle = []; this.failed = 0;
     this.broken = false; // Server hat keine Online-Stimme (z. B. Schlüssel fehlt)
     this.onError = () => {};
+    this.session = () => 'playback'; // Ton-Ausgabe (die App legt fest: Lautsprecher oder Anruf)
   }
 
   // Muss aus einem Tipp heraus aufgerufen werden
@@ -34,7 +35,7 @@ export class OnlineVoice {
 
   // Ton-Test: kurzer Klang direkt aus dem Tipp → zeigt, ob der Lautsprecher überhaupt geht
   chime() {
-    setAudioSession('playback');
+    setAudioSession(this.session());
     return new Promise((resolve) => {
       const p = this.unlock(CHIME);
       this.audio.onended = () => resolve(true);
@@ -86,7 +87,7 @@ export class OnlineVoice {
     try {
       const src = await item.url;
       if (gen !== this.gen) return;
-      setAudioSession('playback');
+      setAudioSession(this.session());
       if (!this.audio) { this.audio = new Audio(); this.audio.setAttribute('playsinline', ''); }
       this.audio.src = src;
       await new Promise((resolve, reject) => {
