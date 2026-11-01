@@ -656,6 +656,42 @@ chat.post('/announcements/read', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ── Text → Sprache: natürliche Stimme als Audiodatei (Pollinations, kostenlos) ──
+// Zuverlässiger als die Vorlese-Stimme des iPhones. Ohne Schlüssel nacheinander abarbeiten (Limit des Dienstes).
+const TTS_VOICES = ['nova', 'shimmer', 'alloy', 'echo', 'fable', 'onyx'];
+let ttsQueue = Promise.resolve();
+const ttsCache = new Map();
+chat.post('/tts', wrap(async (req, res) => {
+  const text = String(req.body?.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 600);
+  const voice = TTS_VOICES.includes(req.body?.voice) ? req.body.voice : 'nova';
+  if (!text) throw new HttpError(400, t('Kein Text.', 'No text.'));
+  const L = await limitSettings();
+  limit(req.user.id, L.burst * 4);
+  const key = `${voice}:${text}`;
+  let buf = ttsCache.get(key);
+  if (!buf) {
+    const fetchIt = async () => {
+      const apiKey = process.env.POLLINATIONS_API_KEY?.trim();
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const r = await fetch(`https://gen.pollinations.ai/audio/${encodeURIComponent(text)}?voice=${voice}`, {
+          headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+          signal: AbortSignal.timeout(30_000),
+        });
+        if (r.ok && /audio/.test(r.headers.get('content-type') ?? '')) return Buffer.from(await r.arrayBuffer());
+        if (r.status !== 429) throw new Error(`Sprachausgabe fehlgeschlagen (${r.status}).`);
+        await new Promise((ok) => setTimeout(ok, 1500 * (attempt + 1)));
+      }
+      throw new Error(t('Die Online-Stimme ist gerade ausgelastet.', 'The online voice is busy right now.'));
+    };
+    const job = ttsQueue.then(fetchIt, fetchIt);
+    ttsQueue = job.catch(() => {});
+    try { buf = await job; } catch (err) { throw new HttpError(503, err.message); }
+    ttsCache.set(key, buf);
+    if (ttsCache.size > 60) ttsCache.delete(ttsCache.keys().next().value);
+  }
+  res.set('Cache-Control', 'private, max-age=3600').type('audio/mpeg').send(buf);
+}));
+
 // ── Sprache → Text (Sprach-Modus, Übersetzer, Mikrofon) ──────────
 chat.post('/transcribe', express.raw({ type: ['audio/*', 'video/webm', 'video/mp4', 'application/octet-stream'], limit: '15mb' }), wrap(async (req, res) => {
   const buf = req.body;

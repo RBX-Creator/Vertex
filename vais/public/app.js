@@ -4,6 +4,7 @@ import { startTour, tourDone } from './tour.js';
 import { CHANGES, LATEST } from './changelog.js';
 import { openTeam, refreshTeamBadge } from './team.js';
 import { Listener, canRecord, toText, setAudioSession, hasAudioSession } from './listen.js';
+import { OnlineVoice } from './voice-out.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 translateDom();
@@ -1433,6 +1434,7 @@ function speechChunks(text) {
 }
 
 function stopSpeaking() {
+  onlineVoice.cancel();
   if (!canSpeak) return;
   speechSynthesis.cancel();
   if (speakingBtn) {
@@ -1445,11 +1447,53 @@ function stopSpeaking() {
 // Stimme fürs Vorlesen: in den Einstellungen gewählt (pro Sprache), sonst die beste vorhandene
 const voicePrefs = () => ({ rate: 1, pitch: 1, de: '', en: '', ...store.get('vais.voice', {}) });
 const voicesFor = (lang) => (canSpeak ? speechSynthesis.getVoices() : []).filter((v) => v.lang?.toLowerCase().replace('_', '-').startsWith(lang));
+const appleDevice = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
 function pickVoice(lang) {
   const list = voicesFor(lang);
   const wanted = voicePrefs()[lang];
-  // Ohne Auswahl: natürliche/online Stimmen bevorzugen (klingen meist besser)
-  return list.find((v) => v.voiceURI === wanted) ?? list.find((v) => /natural|neural|online|premium|enhanced/i.test(v.name)) ?? list.find((v) => v.default) ?? list[0] ?? null;
+  const chosen = list.find((v) => v.voiceURI === wanted);
+  if (chosen) return chosen;
+  // iPhone/Mac: keine Stimme vorgeben – „Premium“/„Erweitert“-Stimmen sind oft nicht geladen und bleiben dann stumm
+  if (appleDevice) return null;
+  // Sonst: natürliche/online Stimmen bevorzugen (klingen meist besser)
+  return list.find((v) => /natural|neural|online/i.test(v.name)) ?? list.find((v) => v.default) ?? list[0] ?? null;
+}
+// Vorlesen: „online“ (natürliche Stimme als Audiodatei, Standard auf iPhone/Mac) oder „device“ (Stimme des Geräts)
+const onlineVoice = new OnlineVoice();
+const useOnline = () => (voicePrefs().engine ?? (appleDevice ? 'online' : 'device')) === 'online';
+// Geräte-Stimme als Promise (endet, wenn fertig gesprochen)
+function deviceSay(text, langCode) {
+  return new Promise((resolve) => {
+    if (!canSpeak) return resolve();
+    setAudioSession(voice.on && voice.earpiece ? 'play-and-record' : 'playback');
+    try { speechSynthesis.resume(); } catch { /* egal */ }
+    const l = langCode ?? (EXTRA_LANGS.includes(LANG) ? LANG : guessLang(text));
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = { de: 'de-DE', en: 'en-US' }[l] ?? (langCode || LOCALE);
+    const v = pickVoice(l.slice(0, 2));
+    if (v) u.voice = v;
+    const prefs = voicePrefs();
+    u.rate = prefs.rate;
+    u.pitch = prefs.pitch;
+    let done = false;
+    const end = () => { if (!done) { done = true; resolve(); } };
+    u.onend = end;
+    u.onerror = end;
+    setTimeout(() => { if (!speechSynthesis.speaking && !speechSynthesis.pending) end(); }, Math.max(3500, text.length * 110));
+    speechSynthesis.speak(keepAlive(u));
+  });
+}
+const onlineSay = (text) => onlineVoice.say(text, { voice: voicePrefs().online ?? 'nova', fallback: (txt) => deviceSay(txt) });
+
+// Äußerungen festhalten, bis sie fertig sind (manche Browser vergessen sie sonst mittendrin)
+const liveUtterances = new Set();
+function keepAlive(u) {
+  liveUtterances.add(u);
+  const drop = () => liveUtterances.delete(u);
+  u.addEventListener?.('end', drop);
+  u.addEventListener?.('error', drop);
+  setTimeout(drop, 120_000);
+  return u;
 }
 function paintVoices() {
   const box = $('#set-voice-group');
@@ -1458,10 +1502,13 @@ function paintVoices() {
   for (const lang of ['de', 'en']) {
     const sel = $(`#set-voice-${lang}`);
     const list = voicesFor(lang);
-    sel.innerHTML = `<option value="">${t('Automatisch', 'Automatic')}</option>${list.map((v) => `<option value="${escapeHtml(v.voiceURI)}">${escapeHtml(v.name.replace(/^(Microsoft|Google)\s+/, ''))}${v.localService ? '' : ' ☁'}</option>`).join('')}`;
+    sel.innerHTML = `<option value="">${appleDevice ? t('Standard (empfohlen)', 'Default (recommended)') : t('Automatisch', 'Automatic')}</option>${list.map((v) => `<option value="${escapeHtml(v.voiceURI)}">${escapeHtml(v.name.replace(/^(Microsoft|Google)\s+/, ''))}${v.localService ? '' : ' ☁'}</option>`).join('')}`;
     sel.value = list.some((v) => v.voiceURI === prefs[lang]) ? prefs[lang] : '';
     sel.closest('label').hidden = !list.length;
   }
+  $('#set-voice-engine').value = prefs.engine ?? (appleDevice ? 'online' : 'device');
+  $('#set-voice-online').value = prefs.online ?? 'nova';
+  $('#set-voice-online').closest('label').hidden = $('#set-voice-engine').value !== 'online';
   $('#set-voice-rate').value = prefs.rate;
   $('#set-voice-pitch').value = prefs.pitch;
   $('#set-voice-rate-val').textContent = `${Number(prefs.rate).toFixed(1)}×`;
@@ -1470,17 +1517,20 @@ function paintVoices() {
 if (canSpeak) { try { speechSynthesis.getVoices(); } catch { /* egal */ } }
 if (canSpeak) speechSynthesis.addEventListener?.('voiceschanged', () => { if (!$('#settings').hidden) paintVoices(); });
 function saveVoice() {
+  $('#set-voice-online').closest('label').hidden = $('#set-voice-engine').value !== 'online';
   store.set('vais.voice', {
+    engine: $('#set-voice-engine').value, online: $('#set-voice-online').value,
     de: $('#set-voice-de').value, en: $('#set-voice-en').value,
     rate: Number($('#set-voice-rate').value) || 1, pitch: Number($('#set-voice-pitch').value) || 1,
   });
   $('#set-voice-rate-val').textContent = `${Number($('#set-voice-rate').value).toFixed(1)}×`;
   $('#set-voice-pitch-val').textContent = Number($('#set-voice-pitch').value).toFixed(1);
 }
-['#set-voice-de', '#set-voice-en', '#set-voice-rate', '#set-voice-pitch'].forEach((sel) => $(sel)?.addEventListener('input', saveVoice));
+['#set-voice-engine', '#set-voice-online', '#set-voice-de', '#set-voice-en', '#set-voice-rate', '#set-voice-pitch'].forEach((sel) => $(sel)?.addEventListener('input', saveVoice));
 $('#set-voice-test')?.addEventListener('click', () => {
-  if (!canSpeak) return;
   stopSpeaking();
+  if (useOnline()) { onlineVoice.unlock(); onlineSay(t('Hallo! So klinge ich, wenn ich dir Antworten vorlese.', 'Hi! This is how I sound when I read answers to you.')); return; }
+  if (!canSpeak) return;
   const prefs = voicePrefs();
   const u = new SpeechSynthesisUtterance(t('Hallo! So klinge ich, wenn ich dir Antworten vorlese.', 'Hi! This is how I sound when I read answers to you.'));
   u.lang = LOCALE;
@@ -1488,14 +1538,24 @@ $('#set-voice-test')?.addEventListener('click', () => {
   if (v) u.voice = v;
   u.rate = prefs.rate;
   u.pitch = prefs.pitch;
-  speechSynthesis.speak(u);
+  speechSynthesis.speak(keepAlive(u));
 });
 
 function speak(btn, card) {
-  if (!canSpeak) return;
+  if (!canSpeak && !useOnline()) return;
   if (speakingBtn === btn) return stopSpeaking();
   stopSpeaking();
   const text = speakableText(card);
+  if (useOnline() && text) {
+    onlineVoice.unlock();
+    setAudioSession('playback');
+    speakingBtn = btn;
+    btn.setAttribute('aria-pressed', 'true');
+    btn.innerHTML = ICON.speakStop;
+    for (const part of onlineChunks(text)) onlineSay(part);
+    onlineVoice.whenIdle(() => { if (speakingBtn === btn) stopSpeaking(); });
+    return;
+  }
   const parts = speechChunks(text);
   if (!parts.length) return;
   const lang = EXTRA_LANGS.includes(LANG) ? LANG : guessLang(text);
@@ -1512,7 +1572,7 @@ function speak(btn, card) {
     u.pitch = prefs.pitch;
     if (i === parts.length - 1) u.onend = () => { if (speakingBtn === btn) stopSpeaking(); };
     u.onerror = (e) => { if (e.error !== 'interrupted' && e.error !== 'canceled' && speakingBtn === btn) stopSpeaking(); };
-    speechSynthesis.speak(u);
+    speechSynthesis.speak(keepAlive(u));
   });
 }
 
@@ -1692,10 +1752,14 @@ function voiceSpeaker() {
   let queued = 0; // so viele Zeichen des aufbereiteten Texts sind schon vorgelesen
   let pending = 0;
   let finished = false;
-  let onAllDone = () => {};
+  let onAllDone = null;
+  let fired = false;
+  const fire = () => { if (!onAllDone || fired) return; fired = true; onAllDone(); };
+  const online = useOnline();
   const say = (part) => {
     // Ausgabe festlegen: Lautsprecher (Standard) oder Hörer wie bei einem Anruf
     setAudioSession(voice.earpiece ? 'play-and-record' : 'playback');
+    if (online) { onlineSay(part); return; }
     try { speechSynthesis.resume(); } catch { /* egal */ }
     const l = lang ?? guessLang(part);
     const u = new SpeechSynthesisUtterance(part);
@@ -1706,12 +1770,12 @@ function voiceSpeaker() {
     u.pitch = prefs.pitch;
     pending++;
     let over = false;
-    const end = () => { if (over) return; over = true; pending--; if (finished && pending <= 0) onAllDone(); };
+    const end = () => { if (over) return; over = true; pending--; if (finished && pending <= 0) fire(); };
     u.onend = end;
     u.onerror = end;
     // Sicherheitsnetz, falls das Handy das Ende nicht meldet
     setTimeout(() => { if (!speechSynthesis.speaking && !speechSynthesis.pending) end(); }, Math.max(3500, part.length * 110));
-    speechSynthesis.speak(u);
+    speechSynthesis.speak(keepAlive(u));
   };
   return {
     feed(md, done) {
@@ -1720,20 +1784,39 @@ function voiceSpeaker() {
       // nur ganze Sätze (oder alles, wenn die Antwort fertig ist)
       const m = done ? [rest] : rest.match(/^[\s\S]*[.!?…:;](?=\s)|^[\s\S]*\n/);
       const chunk = m ? m[0] : '';
-      if (chunk.trim()) {
-        for (const part of speechChunks(chunk.trim())) say(part);
+      // Online-Stimme: größere Stücke (weniger Anfragen), Geräte-Stimme: Satz für Satz
+      if (chunk.trim() && (!online || done || chunk.length >= 140 || queued === 0)) {
+        for (const part of (online ? onlineChunks(chunk.trim()) : speechChunks(chunk.trim()))) say(part);
         queued += chunk.length;
       }
-      if (done) { finished = true; if (pending <= 0) onAllDone(); }
+      if (done) { finished = true; this.check(); }
     },
-    whenDone(fn) { onAllDone = fn; if (finished && pending <= 0) fn(); },
+    check() {
+      if (!finished) return;
+      if (online) onlineVoice.whenIdle(fire);
+      else if (pending <= 0) fire();
+    },
+    whenDone(fn) { onAllDone = fn; this.check(); },
   };
+}
+// Für die Online-Stimme: Stücke bis ca. 400 Zeichen an Satzgrenzen
+function onlineChunks(text) {
+  const out = [];
+  let cur = '';
+  for (const sentence of text.split(/(?<=[.!?…:;])\s+/)) {
+    if ((cur + ' ' + sentence).length > 400 && cur) { out.push(cur); cur = ''; }
+    cur = cur ? `${cur} ${sentence}` : sentence;
+    while (cur.length > 500) { out.push(cur.slice(0, 500)); cur = cur.slice(500); }
+  }
+  if (cur.trim()) out.push(cur);
+  return out;
 }
 async function voiceAsk(text) {
   voicePhase('think', text);
   if (busy() || offline) { voicePhase('paused'); voice.paused = true; return; }
   el.prompt.value = text;
   speechSynthesis.cancel();
+  onlineVoice.cancel();
   const speaker = voiceSpeaker();
   const before = state.chat?.turns.length ?? 0;
   let started = false;
@@ -1778,6 +1861,7 @@ async function startVoice() {
   recognition?.stop();
   // iPhone: Vorlesen einmal durch den Tipp freischalten (leise, kurzes Wort)
   try { const u = new SpeechSynthesisUtterance('.'); u.volume = 0; speechSynthesis.speak(u); } catch { /* egal */ }
+  onlineVoice.unlock();
   voice.on = true;
   voice.paused = false;
   voice.misses = 0;
@@ -1808,6 +1892,7 @@ function stopVoice() {
   try { voice.listener?.close(); } catch { /* egal */ }
   voice.listener = null;
   try { speechSynthesis.cancel(); } catch { /* egal */ }
+  onlineVoice.cancel();
   setAudioSession('auto');
   orbLevel(0);
 }
@@ -1817,7 +1902,7 @@ function voiceTap() {
     if (voice.mode === 'record') voice.listener?.stopNow(); else { try { voice.rec?.stop(); } catch { /* egal */ } }
     return;
   }
-  if (voice.phase === 'speak') { speechSynthesis.cancel(); voice.paused = false; return voiceListen(); }
+  if (voice.phase === 'speak') { speechSynthesis.cancel(); onlineVoice.cancel(); voice.paused = false; return voiceListen(); }
   if (voice.phase === 'paused' || voice.phase === 'tap') { voice.paused = false; return voiceListen(); }
 }
 // pointerup statt click: reagiert auch, wenn das iPhone gerade mit dem Mikrofon beschäftigt ist
@@ -1840,6 +1925,17 @@ function paintEarpiece() {
   const old = /iPhone|iPad|iPod/.test(navigator.userAgent) && !hasAudioSession;
   $('#voice-ios').hidden = !old;
 }
+// Ton testen (aus einem Tipp heraus – so darf das iPhone sicher sprechen)
+onTap('#voice-test', () => {
+  try { voice.listener?.cancel(); voice.listener?.release(); } catch { /* egal */ }
+  setAudioSession(voice.earpiece ? 'play-and-record' : 'playback');
+  try { speechSynthesis.cancel(); speechSynthesis.resume(); } catch { /* egal */ }
+  const phrase = t('Hallo! Kannst du mich hören?', 'Hello! Can you hear me?');
+  voice.paused = false;
+  voicePhase('speak', phrase);
+  const back = () => { if (voice.on && !voice.paused && voice.phase === 'speak') voiceListen(); };
+  if (useOnline()) { onlineVoice.unlock(); onlineSay(phrase); onlineVoice.whenIdle(back); } else deviceSay(phrase).then(back);
+});
 onTap('#voice-route', () => {
   voice.earpiece = !voice.earpiece;
   store.set('vais.earpiece', voice.earpiece);
@@ -1848,7 +1944,7 @@ onTap('#voice-route', () => {
   haptic('tap');
 });
 onTap('#voice-pause', () => {
-  if (voice.phase === 'speak') { speechSynthesis.cancel(); return voiceListen(); } // unterbrechen und gleich zuhören
+  if (voice.phase === 'speak') { speechSynthesis.cancel(); onlineVoice.cancel(); return voiceListen(); } // unterbrechen und gleich zuhören
   if (voice.paused) { voice.paused = false; return voiceListen(); }
   voice.paused = true;
   try { voice.listener?.cancel(); voice.rec?.abort(); } catch { /* egal */ }
@@ -1916,7 +2012,12 @@ async function trTranslate(text, fromCode, toCode, side) {
     out.textContent = `${trLang(toCode)[2]} ${data.text}`;
     out.dir = /^(ar|fa)/.test(toCode) ? 'rtl' : 'auto';
     item.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    if (canSpeak) {
+    if (useOnline()) {
+      tr.listener?.release();
+      if (canSpeak) speechSynthesis.cancel();
+      onlineVoice.cancel();
+      onlineVoice.say(data.text, { voice: voicePrefs().online ?? 'nova', fallback: (txt) => deviceSay(txt, toCode) });
+    } else if (canSpeak) {
       speechSynthesis.cancel();
       tr.listener?.release();
       setAudioSession('playback'); // iPhone: über den Lautsprecher, nicht den Hörer
@@ -1927,7 +2028,7 @@ async function trTranslate(text, fromCode, toCode, side) {
         ?? speechSynthesis.getVoices().find((x) => x.lang?.toLowerCase().startsWith(toCode.slice(0, 2)));
       if (v) u.voice = v;
       u.rate = voicePrefs().rate;
-      speechSynthesis.speak(u);
+      speechSynthesis.speak(keepAlive(u));
     }
     haptic('tap');
   } catch (err) {
@@ -1998,6 +2099,7 @@ $('#tr-close').addEventListener('click', closeTranslator);
 $('#tr-a').addEventListener('change', trPaint);
 $('#tr-b').addEventListener('change', trPaint);
 $('#tr-swap').addEventListener('click', () => { const a = $('#tr-a').value; $('#tr-a').value = $('#tr-b').value; $('#tr-b').value = a; trPaint(); });
+$('#tr').addEventListener('pointerdown', () => onlineVoice.unlock(), { once: false, passive: true });
 $('#tr-mic-a').addEventListener('click', (e) => trListen(e.currentTarget, $('#tr-a').value, $('#tr-b').value, 'a'));
 $('#tr-mic-b').addEventListener('click', (e) => trListen(e.currentTarget, $('#tr-b').value, $('#tr-a').value, 'b'));
 $('#tr-type').addEventListener('submit', (e) => {

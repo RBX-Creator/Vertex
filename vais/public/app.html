@@ -438,6 +438,14 @@
 
         <section class="set-group" id="set-voice-group">
           <h3 data-en="Read aloud">Vorlesen</h3>
+          <label class="set-row"><span data-en="Voice">Stimme</span><select class="input set-select" id="set-voice-engine">
+            <option value="online" data-en="Natural (online)">Natürlich (online)</option>
+            <option value="device" data-en="Device voice">Stimme des Geräts</option>
+          </select></label>
+          <label class="set-row"><span data-en="Online voice">Online-Stimme</span><select class="input set-select" id="set-voice-online">
+            <option value="nova">Nova</option><option value="shimmer">Shimmer</option><option value="alloy">Alloy</option>
+            <option value="echo">Echo</option><option value="fable">Fable</option><option value="onyx">Onyx</option>
+          </select></label>
           <label class="set-row"><span data-en="German voice">Deutsche Stimme</span><select class="input set-select" id="set-voice-de"></select></label>
           <label class="set-row"><span data-en="English voice">Englische Stimme</span><select class="input set-select" id="set-voice-en"></select></label>
           <label class="set-row"><span data-en="Speed">Tempo</span><span class="set-range"><input type="range" id="set-voice-rate" min="0.6" max="1.8" step="0.1" value="1"><output id="set-voice-rate-val">1.0×</output></span></label>
@@ -559,7 +567,10 @@
     <p class="voice-state" id="voice-state"></p>
     <p class="voice-said" id="voice-said"></p>
     <p class="voice-hint" id="voice-hint"></p>
-    <button type="button" class="voice-route" id="voice-route" aria-pressed="false" hidden></button>
+    <div class="voice-tools">
+      <button type="button" class="voice-route" id="voice-route" aria-pressed="false" hidden></button>
+      <button type="button" class="voice-route" id="voice-test" data-en="🔈 Test sound">🔈 Ton testen</button>
+    </div>
     <p class="voice-ios" id="voice-ios" hidden data-en="Tip: For sound in voice mode, update your iPhone to iOS 17 or newer – or switch to speaker in Control Center.">Tipp: Für Ton im Sprach-Modus brauchst du iOS 17 oder neuer.</p>
     <div class="voice-actions">
       <button class="voice-act" id="voice-pause" type="button"></button>

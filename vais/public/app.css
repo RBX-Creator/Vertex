@@ -1856,3 +1856,4 @@ body.incognito .composer { border-style: dashed; border-color: var(--border-stro
 .drawer-count.full { color: var(--danger); font-weight: 500; }
 .limit-list li .lim-icon { flex: none; display: grid; place-items: center; width: 22px; }
 .limit-list li .lim-text { flex: 1; }
+.voice-tools { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
