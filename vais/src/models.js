@@ -341,6 +341,7 @@ function markFailed(id, status, message) {
   const now = Date.now();
   // Tageslimit und ungültige Schlüssel merkt sich die Schlüssel-Verwaltung (withKeys) pro Schlüssel
   if ((status === 429 && isDailyLimit(message)) || status === 401 || status === 403) return;
+  if (status === 413) return; // nur diese eine Anfrage war zu groß – das Modell ist nicht kaputt
   if (status === 429) cooldown.set(id, now + 90 * 1000);
   else if (status === 404) cooldown.set(id, now + 60 * 60 * 1000);
   else cooldown.set(id, now + 60 * 1000);
@@ -606,7 +607,7 @@ function friendlyError(status, message = '', p) {
   if (status === 429) return t('Dieses Modell ist gerade ausgelastet. Versuche es gleich noch einmal oder wähle ein anderes Modell.', 'This model is busy right now. Try again in a moment or choose another model.');
   if (status === 504) return t('Das Modell antwortet nicht mehr (Zeitüberschreitung). Versuche es noch einmal.', 'The model stopped responding (timeout). Please try again.');
   if (status === 401 || status === 403 || /api key/i.test(message)) return t(`Der Schlüssel für ${p.label} wurde abgelehnt. Bitte ${p.env} prüfen.`, `The key for ${p.label} was rejected. Please check ${p.env}.`);
-  if (status === 413 || /too large|tokens_limit_reached|max.*tokens/i.test(message)) return t('Der Chat ist zu lang für dieses Modell. Starte einen neuen Chat oder wähle ein anderes Modell.', 'The chat is too long for this model. Start a new chat or choose another model.');
+  if (status === 413 || /too large|tokens_limit_reached|max.*tokens/i.test(message)) return t('Die Anfrage war zu groß für das kostenlose Limit dieses Modells. Tippe auf „Erneut versuchen“ oder wähle ein anderes Modell.', 'The request was too large for this model’s free limit. Tap “Try again” or choose another model.');
   if (status === 404) return t('Dieses Modell ist nicht mehr verfügbar. Bitte wähle ein anderes.', 'This model is no longer available. Please choose another one.');
   if (status === 400 && /context|token/i.test(message)) return t('Der Chat ist zu lang für dieses Modell. Starte einen neuen Chat.', 'The chat is too long for this model. Start a new chat.');
   return t(`Das Modell konnte nicht antworten${message ? `: ${message}` : '.'}`, `The model could not answer${message ? `: ${message}` : '.'}`);

@@ -175,7 +175,7 @@ function systemPrompt(personal = {}) {
     'Nutze deine Werkzeuge, wann immer sie die Antwort besser machen: web_search für alles Aktuelle oder Unsichere (gerne 2–3 verschiedene Suchanfragen auf einmal), wikipedia für Grundwissen, read_webpage um Quellen oder Links zu lesen, calculate für jede Rechnung, current_datetime für Zeitfragen.',
     'Du kannst mehrere Werkzeuge in einem Schritt gleichzeitig aufrufen – mach das, wenn die Aufrufe unabhängig sind.',
     'Prüfe wichtige Fakten bei Bedarf mit einer zweiten Suche. Bevorzuge seriöse Quellen (offizielle Seiten, Wikipedia, bekannte Medien). Erfinde keine Fakten oder Links.',
-    'Wenn der Nutzer eine Webseite, App oder ein Spiel möchte: Schreibe EINE komplette HTML-Datei (<!doctype html>, <meta name="viewport">, CSS in <style>, JS in <script>, ohne externe Dateien außer bei Bedarf von cdnjs/jsdelivr), schön gestaltet und fürs Handy geeignet. Prüfe sie mit validate_html, behebe alle gemeldeten Probleme und prüfe erneut. Gib sie am Ende vollständig in einem ```html-Block aus, mit 1–2 Sätzen davor.',
+    'Wenn der Nutzer eine Webseite, App oder ein Spiel möchte: Schreibe EINE komplette HTML-Datei (<!doctype html>, <meta name="viewport">, CSS in <style>, JS in <script>, ohne externe Dateien außer bei Bedarf von cdnjs/jsdelivr), schön gestaltet und fürs Handy geeignet. Prüfe sie mit validate_html, behebe alle gemeldeten Probleme und prüfe erneut (schicke dabei immer die ganze, verbesserte Seite). Die zuletzt geprüfte Fassung wird automatisch an deine Antwort angehängt – schreibe sie am Ende NICHT noch einmal aus, sondern nur 1–3 Sätze, was du gebaut hast.',
     'Diagramme: Wenn Zahlen als Diagramm helfen (Vergleiche, Entwicklungen, Anteile), füge einen Block ```chart mit JSON ein, z. B. {"type":"bar","title":"Einwohner (Mio.)","unit":"Mio.","labels":["Berlin","Hamburg"],"series":[{"name":"2024","data":[3.8,1.9]}]}. type ist bar, line (für Verläufe) oder pie (Anteile, nur eine Reihe). Höchstens 8 Reihen und 40 Werte. Die App zeichnet das Diagramm selbst.',
     'Python: Für Rechnungen, Statistik oder Simulationen kannst du Python-Code in einem ```python-Block schreiben – der Nutzer kann ihn mit „▶ Ausführen“ direkt im Browser laufen lassen (Pyodide; numpy, pandas, matplotlib gehen, kein Internet, keine Dateien). Gib Ergebnisse mit print() aus.',
     'Wenn der Nutzer Bilder angehängt hat, bekommst du eine Beschreibung davon als [Bild …]. Nutze sie, als hättest du das Bild selbst gesehen.',
@@ -591,6 +591,61 @@ async function describeImages(messages, signal, onStep) {
   return messages.map((m) => (out.has(m) ? { role: 'user', content: out.get(m) } : m));
 }
 
+// ── Platz sparen: Webseiten-Code nicht mehrfach mitschicken (sonst platzt das kostenlose Limit) ──
+const HTML_FENCE = /```html?\b[\s\S]*?(?:```|$)/gi;
+const lines = (code) => code.split('\n').length;
+// Im Verlauf nur die neueste Webseite behalten, ältere durch einen kurzen Hinweis ersetzen
+export function compactHistory(messages) {
+  let keep = true;
+  const out = [...messages];
+  for (let i = out.length - 1; i >= 0; i--) {
+    const m = out[i];
+    if (m.role !== 'assistant' || typeof m.content !== 'string' || !/```html?\b/i.test(m.content)) continue;
+    if (keep) { keep = false; continue; }
+    out[i] = { ...m, content: m.content.replace(HTML_FENCE, (code) => `[Webseite aus einer früheren Antwort, ${lines(code)} Zeilen – nicht mehr aktuell]`) };
+  }
+  return out;
+}
+// Bei validate_html nur den neuesten Code im Gespräch lassen
+function stripOldHtml(convo) {
+  let seen = false;
+  for (let i = convo.length - 1; i >= 0; i--) {
+    const m = convo[i];
+    if (m.role !== 'assistant' || !m.tool_calls?.length) continue;
+    m.tool_calls = m.tool_calls.map((c) => {
+      if (c.function?.name !== 'validate_html') return c;
+      if (!seen) { seen = true; return c; }
+      return { ...c, function: { ...c.function, arguments: JSON.stringify({ html: '[ältere Fassung entfernt]' }) } };
+    });
+  }
+  // Gibt es schon eine neue Fassung, braucht es die Webseiten aus früheren Antworten nicht mehr
+  if (!seen) return;
+  for (const m of convo) {
+    if (m.role === 'assistant' && typeof m.content === 'string' && /```html?\b/i.test(m.content)) {
+      m.content = m.content.replace(HTML_FENCE, (code) => `[Webseite aus einer früheren Antwort, ${lines(code)} Zeilen – inzwischen überarbeitet]`);
+    }
+  }
+}
+// Notbremse: alles kürzen, was nicht unbedingt nötig ist
+function squeeze(convo, hard = false) {
+  stripOldHtml(convo);
+  for (const m of convo) {
+    if (m.role === 'tool' && typeof m.content === 'string' && m.content.length > (hard ? 1200 : 3000)) m.content = `${m.content.slice(0, hard ? 1200 : 3000)}\n[… gekürzt]`;
+  }
+  if (hard) {
+    // ältere Nachrichten des Gesprächs weglassen (System + die letzten Schritte bleiben)
+    const firstUser = convo.findIndex((m) => m.role === 'user');
+    const lastUser = convo.map((m) => m.role).lastIndexOf('user');
+    if (firstUser > 0 && lastUser > firstUser) convo.splice(firstUser, lastUser - firstUser);
+    for (const m of convo) {
+      if (m.role === 'assistant' && typeof m.content === 'string') m.content = m.content.replace(HTML_FENCE, (code) => `[Webseite, ${lines(code)} Zeilen]`);
+    }
+  }
+}
+const tooBig = (err) => err?.status === 413 || (err?.status === 400 && /zu lang|zu groß|too long|too large|context/i.test(err.message)) || /zu groß für das kostenlose Limit|too large for this model/i.test(err?.message ?? '');
+// Ersatz, wenn das Hauptmodell voll ist oder die Anfrage zu groß war (größere Limits)
+const AGENT_BACKUP = [/^groq:meta-llama\/llama-4-scout/, /^groq:moonshotai\/kimi-k2/, /^groq:.*llama-3\.3-70b/, /^groq:meta-llama\/llama-4-maverick/, /^groq:qwen\/qwen3/, /^groq:openai\/gpt-oss-20b$/, /^gemini:gemini-2\.5-flash$/];
+
 const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 
 export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, personal = {}, onRemember = null, onReminder = null }) {
@@ -600,7 +655,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   if (!model) throw new Error(t('Agent X braucht einen Groq-Schlüssel (GROQ_API_KEY), damit er Werkzeuge benutzen kann.', 'Agent X needs a Groq key (GROQ_API_KEY) to use tools.'));
 
   const addSources = sourceCleaner(onSources);
-  const seeing = await describeImages(messages, signal, onStep);
+  const seeing = compactHistory(await describeImages(messages, signal, onStep));
   const last = seeing.at(-1)?.content;
   const ctx = { question: typeof last === 'string' ? last : '', lastHtml: '', remember: personal.memoryOn ? onRemember : null, reminder: onReminder };
   const convo = [{ role: 'system', content: systemPrompt(personal) }, ...seeing];
@@ -616,8 +671,31 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
     return emitText(text, onText, signal);
   };
 
+  // Modell fragen; ist die Anfrage zu groß oder das Modell voll: kürzen, dann auf ein anderes Modell ausweichen
+  let current = model;
+  const tried = new Set([model.id]);
+  async function ask(extra = {}) {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        return await complete({ model: current.id, messages: convo, signal, ...extra });
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        const big = tooBig(err);
+        if (!big && ![429, 500, 502, 503, 504].includes(err.status)) throw err;
+        if (big && attempt < 2) { squeeze(convo, attempt === 1); continue; } // erst kürzen, dann stärker kürzen
+        const all = await listModels();
+        const next = AGENT_BACKUP.map((re) => all.find((m) => re.test(m.id) && !m.busy && !tried.has(m.id))).find(Boolean);
+        if (!next) throw err;
+        console.log(`Agent X: ${current.id} → ${next.id} (${err.message})`);
+        tried.add(next.id);
+        current = next;
+      }
+    }
+    throw new Error(t('Agent X konnte gerade nicht antworten. Versuch es gleich noch einmal.', 'Agent X could not answer right now. Please try again shortly.'));
+  }
+
   for (let round = 0; round < MAX_STEPS; round++) {
-    const msg = await complete({ model: model.id, messages: convo, tools: agentTools, signal });
+    const msg = await ask({ tools: agentTools });
     const thought = msg.reasoning ?? msg.reasoning_content;
     if (thought) await emitText(`${thought.trim()}\n\n`, onReasoning, signal, 6, 8);
     const calls = msg.tool_calls ?? [];
@@ -642,13 +720,11 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
       }
     }));
     calls.forEach((call, i) => convo.push({ role: 'tool', tool_call_id: call.id, content: String(results[i]).slice(0, 14_000) }));
+    if (calls.some((c) => c.function?.name === 'validate_html')) stripOldHtml(convo);
   }
   // Zu viele Schritte: mit dem bisher Gesammelten antworten
-  const final = await complete({
-    model: model.id,
-    signal,
-    messages: [...convo, { role: 'user', content: 'Beantworte jetzt meine Frage mit den gesammelten Informationen, ohne weitere Werkzeuge.' }],
-  });
+  convo.push({ role: 'user', content: 'Beantworte jetzt meine Frage mit den gesammelten Informationen, ohne weitere Werkzeuge.' });
+  const final = await ask();
   return finish(final.content);
 }
 
