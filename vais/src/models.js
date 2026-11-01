@@ -91,6 +91,36 @@ function makeModel(provider, upstream, name, fallbackMaker, extraCaps = []) {
 }
 
 // ── Modell-Listen der Anbieter ────────────────────────────────────
+const GITHUB_FALLBACK = [
+  'openai/gpt-4.1', 'openai/gpt-4.1-mini', 'openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/o4-mini', 'openai/o3-mini',
+  'deepseek/DeepSeek-R1', 'deepseek/DeepSeek-V3-0324',
+  'meta/Llama-4-Maverick-17B-128E-Instruct-FP8', 'meta/Llama-4-Scout-17B-16E-Instruct', 'meta/Llama-3.3-70B-Instruct',
+  'xai/grok-3', 'xai/grok-3-mini', 'microsoft/Phi-4', 'microsoft/MAI-DS-R1',
+  'mistral-ai/Codestral-2501', 'mistral-ai/Mistral-Medium-2505', 'cohere/cohere-command-a',
+];
+
+// Einmal pro Serverstart prüfen, ob GitHub Models wirklich antwortet (sonst Anbieter ausblenden)
+let githubCheck = null;
+function githubProbe(p) {
+  githubCheck ??= (async () => {
+    const res = await fetch(`${p.base}/chat/completions`, {
+      method: 'POST',
+      headers: { ...githubHeaders(p.key), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'openai/gpt-4.1-mini', messages: [{ role: 'user', content: 'Hi' }], max_tokens: 1 }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const body = await res.text();
+    let json = null;
+    try { json = JSON.parse(body); } catch { /* kein JSON */ }
+    if (res.status === 401 || res.status === 403) throw new Error(`Token abgelehnt (${res.status}). Hat der Token die Berechtigung „Models: Read-only“? ${body.slice(0, 160)}`);
+    if (res.status === 429) return; // Limit erreicht, Schnittstelle funktioniert aber
+    if (!json) throw new Error(`Antwort ist kein JSON (HTTP ${res.status}): ${body.slice(0, 160)}`);
+    if (!res.ok && !json.choices) throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
+    console.log('GitHub Models: Verbindung ok');
+  })().catch((err) => { githubCheck = null; throw err; });
+  return githubCheck;
+}
+
 const githubHeaders = (key) => ({ Authorization: `Bearer ${key}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' });
 
 // Grenzen je Anbieter (GitHub Models: max. ~4000 Antwort-Tokens; o-/gpt-5-Modelle wollen max_completion_tokens)
@@ -126,13 +156,21 @@ const LISTERS = {
   },
 
   async github(p) {
-    const raw = await getJson('https://models.github.ai/catalog/models', githubHeaders(p.key));
-    const list = Array.isArray(raw) ? raw : raw.data ?? raw.models ?? [];
-    return list
-      .filter((m) => (m.supported_output_modalities ?? ['text']).includes('text'))
-      .filter((m) => !(m.supported_output_modalities ?? []).includes('embeddings'))
-      .filter((m) => !/(embed|whisper|tts|\/o1(-|$))/i.test(m.id))
-      .map((m) => makeModel('github', m.id, m.id.split('/').pop().toLowerCase(), m.publisher));
+    // 1) Offizieller Katalog (falls GitHub ihn liefert), 2) sonst eingebaute Liste bekannter Modelle
+    let ids = [];
+    try {
+      const res = await fetch('https://models.github.ai/catalog/models', { headers: githubHeaders(p.key), signal: AbortSignal.timeout(10_000) });
+      const raw = JSON.parse(await res.text());
+      const list = Array.isArray(raw) ? raw : raw.data ?? raw.models ?? [];
+      ids = list
+        .filter((m) => (m.supported_output_modalities ?? ['text']).includes('text'))
+        .filter((m) => !(m.supported_output_modalities ?? []).includes('embeddings'))
+        .map((m) => [m.id, m.publisher]);
+    } catch { /* Katalog nicht verfügbar */ }
+    if (!ids.length) ids = GITHUB_FALLBACK.map((id) => [id]);
+    ids = ids.filter(([id]) => id && !/(embed|whisper|tts|\/o1(-|$))/i.test(id));
+    await githubProbe(p);
+    return ids.map(([id, publisher]) => makeModel('github', id, id.split('/').pop().toLowerCase(), publisher));
   },
 
   async cerebras(p) {
