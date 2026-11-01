@@ -39,6 +39,11 @@ services:
       # Impressum: deine Anschrift (Straße, PLZ Ort) – Pflicht in Deutschland, wenn die Seite öffentlich ist
       - key: IMPRESSUM_ADDRESS
         sync: false
+      # Optional: „Mit Google anmelden“ (Google Cloud → OAuth-Client)
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
       # Datenbank bei Turso
       - key: DATABASE_URL
         sync: false

@@ -5,6 +5,7 @@ import { t } from './i18n.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { runAgent, quickReaction } from './agent.js';
 import { profile, personalFor, instructionsPrompt, remember } from './profile.js';
+import { push, addReminder } from './push.js';
 import { limitSettings, charge, refund, usageOf } from './limits.js';
 import { sourcesFromText } from './models.js';
 import { pickAvailable, isBusy } from './models.js';
@@ -68,6 +69,7 @@ chat.use(wrap(async (req, res, next) => {
 }));
 
 chat.use('/profile', profile);
+chat.use('/push', push);
 
 // Premium-Modelle (kosten Guthaben): höchstens „paidDaily“ Antworten pro Nutzer und Tag (im Admin-Bereich einstellbar)
 const paidUse = new Map();
@@ -276,6 +278,7 @@ chat.post('/stream', wrap(async (req, res) => {
           onReact,
           personal,
           onRemember: (fact) => remember(req.user.id, fact),
+          onReminder: (args) => addReminder(req.user.id, args.text, args.when, args.in_minutes),
           onStep: (step) => { steps.push(step); res.write(`${JSON.stringify({ step })}\n`); },
         });
       }

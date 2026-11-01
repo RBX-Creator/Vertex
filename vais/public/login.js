@@ -315,3 +315,16 @@ document.querySelectorAll('[data-lang-opt]').forEach((b) => {
   b.addEventListener('click', () => { if (b.dataset.langOpt !== LANG) setLang(b.dataset.langOpt); });
 });
 show(current);
+
+// „Mit Google anmelden“ nur zeigen, wenn es eingerichtet ist; Fehler aus der Weiterleitung anzeigen
+fetch('/api/auth/config').then((r) => r.json()).then((c) => { $('#google-box').hidden = !c.google; }).catch(() => {});
+const gErr = new URLSearchParams(location.search).get('error');
+if (gErr) {
+  const MSG = {
+    blocked: t('Dieses Konto wurde gesperrt.', 'This account has been blocked.'),
+    google_cancel: t('Google-Anmeldung abgebrochen.', 'Google sign-in was cancelled.'),
+    google_off: t('Die Google-Anmeldung ist gerade nicht eingerichtet.', 'Google sign-in is not set up right now.'),
+  };
+  setError(fEmail, MSG[gErr] ?? t('Die Anmeldung mit Google hat nicht geklappt. Bitte versuch es noch einmal.', 'Signing in with Google did not work. Please try again.'));
+  history.replaceState(null, '', '/login');
+}

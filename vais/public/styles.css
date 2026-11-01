@@ -376,3 +376,11 @@ html[data-lang='en'] .l-de, html:not([data-lang='en']) .l-en { display: none; }
 .legal-date { color: var(--muted); margin: 0 0 8px; }
 .legal-links { margin-top: 36px; color: var(--muted); }
 .legal-links a + a { margin-left: 0; }
+
+/* Anmelden mit Google */
+.or { display: flex; align-items: center; gap: 12px; margin: 18px 0 14px; color: var(--muted); font-size: 13px; }
+.or::before, .or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.google-btn { display: flex; align-items: center; justify-content: center; gap: 10px; text-decoration: none; background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); box-sizing: border-box; }
+.google-btn:hover { background: var(--surface-2); }
+.google-btn svg { width: 20px; height: 20px; flex: none; }
+.google-box[hidden] { display: none; }

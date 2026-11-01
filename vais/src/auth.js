@@ -288,11 +288,79 @@ auth.post('/delete', wrap(async (req, res) => {
   await purgeChats(me.id);
   await run('DELETE FROM sessions WHERE user_id = ?', me.id);
   await run('DELETE FROM memories WHERE user_id = ?', me.id);
+  await run('DELETE FROM push_subs WHERE user_id = ?', me.id).catch(() => {});
+  await run('DELETE FROM reminders WHERE user_id = ?', me.id).catch(() => {});
   await run('DELETE FROM codes WHERE email = ?', me.email);
   await run('DELETE FROM users WHERE id = ?', me.id);
   res.clearCookie(COOKIE, { path: '/' });
   res.json({ ok: true });
 }));
+
+// ── Anmelden mit Google (nur aktiv, wenn GOOGLE_CLIENT_ID und GOOGLE_CLIENT_SECRET gesetzt sind) ──
+const GOOGLE = { id: process.env.GOOGLE_CLIENT_ID?.trim(), secret: process.env.GOOGLE_CLIENT_SECRET?.trim() };
+const googleOn = () => !!(GOOGLE.id && GOOGLE.secret);
+const baseUrl = (req) => (process.env.APP_URL?.trim().replace(/\/$/, '') || `${req.protocol}://${req.get('host')}`);
+const STATE_COOKIE = 'vais_g_state';
+
+auth.get('/config', (req, res) => res.json({ google: googleOn() }));
+
+auth.get('/google', (req, res) => {
+  if (!googleOn()) return res.redirect('/login?error=google_off');
+  const state = randomBytes(24).toString('base64url');
+  res.cookie(STATE_COOKIE, state, { httpOnly: true, sameSite: 'lax', secure: process.env.COOKIE_SECURE === 'true', maxAge: 10 * 60 * 1000, path: '/api/auth/google' });
+  const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  url.search = new URLSearchParams({
+    client_id: GOOGLE.id,
+    redirect_uri: `${baseUrl(req)}/api/auth/google/callback`,
+    response_type: 'code',
+    scope: 'openid email',
+    state,
+    prompt: 'select_account',
+  }).toString();
+  res.redirect(url.href);
+});
+
+auth.get('/google/callback', async (req, res) => {
+  const fail = (code) => res.redirect(`/login?error=${code}`);
+  try {
+    if (!googleOn()) return fail('google_off');
+    const cookie = (req.headers.cookie || '').split(';').map((c) => c.trim()).find((c) => c.startsWith(`${STATE_COOKIE}=`))?.slice(STATE_COOKIE.length + 1);
+    res.clearCookie(STATE_COOKIE, { path: '/api/auth/google' });
+    const state = String(req.query.state ?? '');
+    if (!cookie || !state || state.length !== cookie.length || !timingSafeEqual(Buffer.from(state), Buffer.from(cookie))) return fail('google_state');
+    if (req.query.error || !req.query.code) return fail('google_cancel');
+    // Code direkt bei Google gegen ein ID-Token tauschen (Server zu Server, mit Geheimnis)
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: String(req.query.code), client_id: GOOGLE.id, client_secret: GOOGLE.secret,
+        redirect_uri: `${baseUrl(req)}/api/auth/google/callback`, grant_type: 'authorization_code',
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const tokens = await tokenRes.json().catch(() => ({}));
+    if (!tokenRes.ok || !tokens.id_token) return fail('google');
+    const payload = JSON.parse(Buffer.from(String(tokens.id_token).split('.')[1] ?? '', 'base64url').toString('utf8'));
+    const okIssuer = ['accounts.google.com', 'https://accounts.google.com'].includes(payload.iss);
+    if (!okIssuer || payload.aud !== GOOGLE.id || Number(payload.exp) * 1000 < Date.now() || !payload.email || payload.email_verified !== true) return fail('google');
+    const email = normEmail(payload.email);
+    let user = await get('SELECT id, verified FROM users WHERE email = ?', email);
+    if (!user) {
+      // Neues Konto: Passwort ist ein Zufallswert (später über „Passwort vergessen“ setzbar)
+      await run('INSERT INTO users (email, password_hash, verified, created_at) VALUES (?, ?, 1, ?)', email, await hashPassword(randomBytes(32).toString('hex')), Date.now());
+      user = await get('SELECT id, verified FROM users WHERE email = ?', email);
+    } else if (!user.verified) {
+      await run('UPDATE users SET verified = 1 WHERE id = ?', user.id); // Google hat die Adresse bestätigt
+    }
+    await startSession(res, user.id);
+    res.redirect('/');
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 403) return fail('blocked');
+    console.error('Google-Anmeldung fehlgeschlagen:', err.message);
+    fail('google');
+  }
+});
 
 auth.get('/me', wrap(async (req, res) => {
   const user = await currentUser(req);

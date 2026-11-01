@@ -47,6 +47,7 @@ Object.assign(ICON, {
   's-time': svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   's-error': svg('<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>'),
   's-other': svg('<circle cx="12" cy="12" r="3"/>'),
+  's-reminder': svg('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M5 3 2 6M19 3l3 3"/>'),
   's-video': svg('<rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="m10 9.5 5 2.5-5 2.5z"/>'),
   's-memory': svg('<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/>'),
   's-wiki': svg('<path d="M3 6.5 7.5 18 12 8l4.5 10L21 6.5"/>'),
@@ -738,8 +739,8 @@ function renderSources(card, a) {
 
 // Arbeitsschritte von Agent X über der Antwort anzeigen
 const STEP_LABEL = LANG === 'en'
-  ? { video: 'Watching', memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' }
-  : { video: 'Schaut Video', memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
+  ? { reminder: 'Reminder', video: 'Watching', memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' }
+  : { reminder: 'Erinnerung', video: 'Schaut Video', memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
 function renderSteps(card, a) {
   let box = $('.agent-steps', card);
   if (!a.steps?.length) { box?.remove(); return; }
@@ -1622,6 +1623,10 @@ function toggleAccount(open) {
 avatar.addEventListener('click', (e) => { e.stopPropagation(); toggleAccount($('#account-menu').hidden); });
 $('#logout').addEventListener('click', async () => {
   await forgetOffline();
+  try {
+    const sub = await currentSub();
+    if (sub) { await post('/api/chat/push/unsubscribe', { endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe(); }
+  } catch { /* egal */ }
   await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
   location.replace('/login');
 });
@@ -2093,12 +2098,83 @@ $('#set-memory-clear').addEventListener('click', async () => {
   try { await post('/api/chat/profile/memory/clear', {}); profileData.memories = []; renderMemories(); } catch (err) { toast(err.message); }
 });
 
+// ── Erinnerungen: Benachrichtigungen einschalten, offene Erinnerungen ──
+const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const isIos = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+let pushInfo = null;
+const b64ToBytes = (b64) => {
+  const s = atob((b64 + '='.repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(s, (c) => c.charCodeAt(0));
+};
+async function currentSub() {
+  if (!pushSupported) return null;
+  const reg = await navigator.serviceWorker.getRegistration();
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+async function loadPush() {
+  const on = $('#set-push-on');
+  const test = $('#set-push-test');
+  const text = $('#set-push-text');
+  try {
+    const res = await fetch('/api/chat/push');
+    if (!res.ok) return;
+    pushInfo = await res.json();
+  } catch { return; }
+  const sub = await currentSub().catch(() => null);
+  const granted = pushSupported && Notification.permission === 'granted' && sub;
+  on.hidden = !!granted;
+  test.hidden = !granted;
+  if (!pushSupported) {
+    on.hidden = true;
+    text.textContent = isIos && !isStandalone()
+      ? t('Auf dem iPhone gehen Benachrichtigungen nur, wenn VAIs als App installiert ist (Teilen → „Zum Home-Bildschirm“).', 'On iPhone, notifications only work when VAIs is installed as an app (Share → “Add to Home Screen”).')
+      : t('Dieser Browser kann leider keine Benachrichtigungen.', 'This browser does not support notifications.');
+  } else if (Notification.permission === 'denied') {
+    on.hidden = true;
+    text.textContent = t('Benachrichtigungen sind blockiert. Erlaube sie in den Browser- bzw. Handy-Einstellungen für diese Seite.', 'Notifications are blocked. Allow them for this site in your browser or phone settings.');
+  } else if (granted) {
+    text.textContent = t('✓ Benachrichtigungen sind an. Sag Agent X z. B. „Erinnere mich morgen um 8 an Mathe“.', '✓ Notifications are on. Tell Agent X e.g. “Remind me tomorrow at 8 about maths”.');
+  }
+  const list = $('#set-reminders');
+  const items = pushInfo.reminders ?? [];
+  list.innerHTML = items.map((r) => `<li><span></span><button type="button" class="mem-del" data-rem="${r.id}" aria-label="${t('Löschen', 'Delete')}" title="${t('Löschen', 'Delete')}">×</button></li>`).join('');
+  list.querySelectorAll('li > span').forEach((sp, i) => {
+    const when = new Date(items[i].due).toLocaleString(LOCALE, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    sp.textContent = `⏰ ${when} – ${items[i].text}`;
+  });
+}
+$('#set-push-on').addEventListener('click', async () => {
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { toast(t('Benachrichtigungen wurden nicht erlaubt.', 'Notifications were not allowed.')); return loadPush(); }
+    const reg = await navigator.serviceWorker.ready;
+    if (!pushInfo) await loadPush();
+    const sub = (await reg.pushManager.getSubscription()) ?? await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(pushInfo.publicKey) });
+    await post('/api/chat/push/subscribe', { subscription: sub.toJSON() });
+    haptic('success');
+    toast(t('Benachrichtigungen sind an ✓', 'Notifications are on ✓'));
+  } catch (err) {
+    toast(err.message || t('Das hat nicht geklappt.', 'That did not work.'));
+  }
+  loadPush();
+});
+$('#set-push-test').addEventListener('click', async () => {
+  try { await post('/api/chat/push/test', {}); toast(t('Gesendet – gleich sollte sie erscheinen.', 'Sent – it should appear in a moment.')); } catch (err) { toast(err.message); }
+});
+$('#set-reminders').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-rem]');
+  if (!btn) return;
+  try { await post('/api/chat/push/reminders/delete', { id: Number(btn.dataset.rem) }); loadPush(); } catch (err) { toast(err.message); }
+});
+
 function openSettings() {
   toggleAccount(false);
   closeDrawer();
   paintSettings();
   paintVoices();
   loadProfile();
+  loadPush();
   settingsEl.querySelectorAll('.msg').forEach((m) => { m.textContent = ''; m.className = m.className.replace(/ (ok|error)$/, ''); });
   settingsEl.hidden = false;
   $('.settings-head [data-close]', settingsEl).focus();

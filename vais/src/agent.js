@@ -77,6 +77,23 @@ const REMEMBER_TOOL = {
   },
 };
 
+const REMINDER_TOOL = {
+  type: 'function',
+  function: {
+    name: 'set_reminder',
+    description: 'Stellt eine Erinnerung, die dem Nutzer zur gewünschten Zeit als Benachrichtigung aufs Handy geschickt wird (z. B. „Erinnere mich morgen um 8 an Mathe“). Rechne relative Angaben mit dem heutigen Datum um.',
+    parameters: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'Woran erinnert werden soll, kurz, z. B. „Mathe-Hausaufgaben“' },
+        when: { type: 'string', description: 'Zeitpunkt in deutscher Zeit als JJJJ-MM-TTTHH:MM, z. B. 2026-11-02T08:00' },
+        in_minutes: { type: 'number', description: 'Alternativ: in so vielen Minuten (z. B. 30)' },
+      },
+      required: ['text'],
+    },
+  },
+};
+
 const TOOLS = [
   {
     type: 'function',
@@ -479,6 +496,7 @@ function runTool(name, args, signal, addSources, ctx) {
     }
     case 'calculate': return { steps: [{ kind: 'calc', text: String(args.expression ?? '') }], run: async () => String(calculate(args.expression)) };
     case 'current_datetime': return { steps: [{ kind: 'time', text: t('Datum und Uhrzeit', 'Date and time') }], run: async () => currentDatetime(args.timezone) };
+    case 'set_reminder': return { steps: [{ kind: 'reminder', text: String(args.text ?? '').slice(0, 80) }], run: () => (ctx.reminder ? ctx.reminder(args) : 'Erinnerungen sind nicht verfügbar.') };
     case 'remember': return { steps: [{ kind: 'memory', text: String(args.fact ?? '').slice(0, 80) }], run: () => (ctx.remember ? ctx.remember(args.fact) : 'Gedächtnis nicht verfügbar.') };
     case 'validate_html': {
       const html = String(args.html ?? '');
@@ -575,18 +593,18 @@ async function describeImages(messages, signal, onStep) {
 
 const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 
-export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, personal = {}, onRemember = null }) {
+export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, personal = {}, onRemember = null, onReminder = null }) {
   onReact('👀'); // „hab’s gesehen, bin dran“
-  if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null });
+  if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null, reminder: onReminder });
   const model = await pickModel(AGENT_PREFERENCE);
   if (!model) throw new Error(t('Agent X braucht einen Groq-Schlüssel (GROQ_API_KEY), damit er Werkzeuge benutzen kann.', 'Agent X needs a Groq key (GROQ_API_KEY) to use tools.'));
 
   const addSources = sourceCleaner(onSources);
   const seeing = await describeImages(messages, signal, onStep);
   const last = seeing.at(-1)?.content;
-  const ctx = { question: typeof last === 'string' ? last : '', lastHtml: '', remember: personal.memoryOn ? onRemember : null };
+  const ctx = { question: typeof last === 'string' ? last : '', lastHtml: '', remember: personal.memoryOn ? onRemember : null, reminder: onReminder };
   const convo = [{ role: 'system', content: systemPrompt(personal) }, ...seeing];
-  const agentTools = personal.memoryOn && onRemember ? [...TOOLS, REMEMBER_TOOL] : TOOLS;
+  const agentTools = [...TOOLS, ...(personal.memoryOn && onRemember ? [REMEMBER_TOOL] : []), ...(onReminder ? [REMINDER_TOOL] : [])];
 
   // Am Ende: wurde eine Webseite geprüft, aber nicht mitgeschickt, hängen wir die geprüfte Fassung an
   const finish = (content) => {
@@ -634,11 +652,19 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   return finish(final.content);
 }
 
-async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onReact, signal, remember }) {
+async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onReact, signal, remember, reminder }) {
   const lastMsg = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
   const q = Array.isArray(lastMsg) ? lastMsg.filter((p) => p.type === 'text').map((p) => p.text).join(' ') : String(lastMsg);
   const pics = Array.isArray(lastMsg) ? lastMsg.filter((p) => p.type === 'image_url').length : 0;
   const site = /webseite|website|seite|app|spiel|game|html/i.test(q);
+  const rem = q.match(/erinnere mich in (\d+) minuten? an (.+)/i);
+  if (rem && reminder) {
+    onStep({ kind: 'reminder', text: rem[2] });
+    let msg;
+    try { msg = await reminder({ text: rem[2], in_minutes: Number(rem[1]) }); } catch (err) { msg = err.message; }
+    onReact('✅');
+    return emitText(`**Agent X (Demo)** – ${msg.replace(/ ACHTUNG:.*/, ' Schalte Benachrichtigungen in den Einstellungen ein, damit sie ankommt.')}`, onText, signal);
+  }
   const fact = q.match(/(?:merk dir|ich heiße|mein name ist)\s*:?\s*(.{2,80})/i)?.[1];
   if (fact && remember) {
     onStep({ kind: 'memory', text: fact });

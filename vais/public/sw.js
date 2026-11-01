@@ -2,7 +2,7 @@
 // - macht VAIs als App installierbar
 // - zeigt „VAIs wacht auf …“, wenn der kostenlose Server gerade schläft (statt einer leeren Seite)
 // - ohne Internet: die App aus dem Zwischenspeicher, damit man gespeicherte Chats lesen kann
-const CACHE = 'vais-v4';
+const CACHE = 'vais-v5';
 const SHELL = ['/waking.html', '/waking.js', '/boot.js', '/fonts.css', '/styles.css', '/logo.svg', '/icons/app-192.png'];
 // Für den Offline-Modus zusätzlich (Fehler hier stoppen die Installation nicht)
 const APP_FILES = ['/app.css', '/app.js', '/i18n.js', '/render.js', '/tour.js', '/vendor/marked.js', '/vendor/purify.js', '/vendor/hljs.js', '/vendor/katex.js', '/vendor/katex.css', '/icons/app-512.png'];
@@ -84,5 +84,29 @@ self.addEventListener('fetch', (event) => {
       if (cached) return cached;
       throw new Error('offline');
     }
+  })());
+});
+
+// ── Erinnerungen (Push-Benachrichtigungen) ──────────────────────────
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data?.text() }; }
+  event.waitUntil(self.registration.showNotification(data.title || 'VAIs', {
+    body: data.body || '',
+    tag: data.tag,
+    icon: '/icons/app-192.png',
+    badge: '/icons/app-192.png',
+    data: { url: data.url || '/' },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || '/', self.location.origin).href;
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const open = wins.find((w) => new URL(w.url).origin === self.location.origin);
+    if (open) { await open.focus(); return; }
+    await self.clients.openWindow(target);
   })());
 });
