@@ -21,6 +21,10 @@ KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand:
 - **Agent X in der Modell-Liste** ganz oben (auch für „Direkt“ und „Nebeneinander“, z. B. Agent X gegen ein anderes Modell); **reagiert mit Emojis** auf deine Nachricht (👀 beim Arbeiten, z. B. 😂 🎉 ✅ danach), kurze Antworten wie „ok“ oder „danke“ bekommen nur ein Emoji und kosten keine Punkte
 - **Notfall-Modelle**: ist das gewählte Modell oder sein Anbieter voll, antwortet automatisch ein starkes freies Modell (bevorzugt Groq), markiert mit „⚡ Notfall“
 - **Mehrere Schlüssel pro Anbieter**: `GROQ_API_KEY` (auch mehrere mit Komma), `GROQ_API_KEY_2` … `_9` oder im Admin-Bereich; ist einer voll, springt der nächste ein
+- **Persönlich**: eigene Anweisungen („So soll die KI antworten“) und **Gedächtnis** für Agent X (in den Einstellungen sichtbar und löschbar)
+- **Python ausführen** (▶ an Python-Code, läuft abgeschirmt im Browser über Pyodide) und **Diagramme** in Antworten (```chart)
+- **YouTube-Videos** zusammenfassen (Titel über die offizielle Schnittstelle + Websuche), **Stimme, Tempo, Tonhöhe** fürs Vorlesen
+- **Erinnerungen** per Push-Benachrichtigung („Erinnere mich morgen um 8 …“) und **Anmelden mit Google** (mit `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`)
 - **Admin-Seite** (`/admin`, nur für `ADMIN_EMAILS`): Limits und Kosten einstellen, eigenes Limit pro Nutzer, Verbrauch zurücksetzen, API-Schlüssel verwalten, Nutzerzahlen, Fragen pro Tag, beliebte Modelle, Fehlerprotokoll, Nutzer sperren/entsperren, Bestenliste zurücksetzen (rückgängig machbar)
 - **Datenschutz** (`/datenschutz`) und **Impressum** (`/impressum`) mit Betreiber-Angaben aus `OWNER_NAME`, `OWNER_EMAIL`, `IMPRESSUM_ADDRESS`
 - **Bestenliste**: Elo-Wertung aus allen Battle-Stimmen, getrennt nach Alle/Text/Code/Websuche, mit Siegquote (Unentschieden und „beide schlecht“ zählen halb)
@@ -89,6 +93,10 @@ Ohne E-Mail-Einstellungen läuft VAIs im **Entwicklungsmodus**: Der 6-stellige C
 3. *Passwort vergessen?* schickt einen Code, mit dem ein neues Passwort gesetzt wird (alle anderen Geräte werden dabei abgemeldet).
 
 Sicherheit: Content-Security-Policy, Schutz vor fremden Webseiten (CSRF), Sperre nach 8 falschen Passwörtern in 15 Minuten, Tageslimit pro Nutzer (`USER_DAILY_LIMIT`, Standard 500 Antworten), Webseiten-Vorschau in abgeschirmter Seite, Passwörter mit scrypt gehasht, Codes nur als Hash gespeichert, 10 Minuten gültig, max. 5 Fehlversuche, 45 s Wartezeit zwischen Codes, Rate-Limit pro IP, Session als HttpOnly-Cookie (30 Tage).
+
+## Tests
+
+`npm test` startet schnelle Einzeltests und einen echten Server im Demo-Modus (Registrieren, Chatten, Limits, Admin-Rechte, Sperren, Gedächtnis, Konto löschen). GitHub führt die Tests bei jedem Update automatisch aus (`.github/workflows/test.yml`).
 
 ## Dateien
 
