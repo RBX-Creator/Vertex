@@ -3,7 +3,7 @@ import { markdown, enhance } from './render.js';
 import { startTour, tourDone } from './tour.js';
 import { CHANGES, LATEST } from './changelog.js';
 import { openTeam, refreshTeamBadge } from './team.js';
-import { Listener, canRecord, toText } from './listen.js';
+import { Listener, canRecord, toText, setAudioSession, hasAudioSession } from './listen.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 translateDom();
@@ -1593,7 +1593,7 @@ function startListening() {
 // Aufnahme über das Mikrofon + Whisper (zuverlässig auch auf dem iPhone); nur wenn das nicht geht,
 // die eingebaute Spracherkennung des Browsers – dann „Tippen zum Sprechen“.
 const voiceEl = $('#voice');
-const voice = { on: false, paused: false, rec: null, phase: 'idle', mode: 'record', misses: 0, listener: null };
+const voice = { on: false, paused: false, rec: null, phase: 'idle', mode: 'record', misses: 0, listener: null, earpiece: store.get('vais.earpiece', false) };
 if ((canRecord || SpeechRec) && canSpeak) $('#voice-btn').hidden = false;
 function voicePhase(phase, said) {
   voice.phase = phase;
@@ -1693,6 +1693,9 @@ function voiceSpeaker() {
   let finished = false;
   let onAllDone = () => {};
   const say = (part) => {
+    // Ausgabe festlegen: Lautsprecher (Standard) oder Hörer wie bei einem Anruf
+    setAudioSession(voice.earpiece ? 'play-and-record' : 'playback');
+    try { speechSynthesis.resume(); } catch { /* egal */ }
     const l = lang ?? guessLang(part);
     const u = new SpeechSynthesisUtterance(part);
     u.lang = { de: 'de-DE', en: 'en-US' }[l] ?? LOCALE;
@@ -1779,6 +1782,8 @@ async function startVoice() {
   voice.misses = 0;
   voice.mode = canRecord ? 'record' : 'browser';
   voiceEl.hidden = false;
+  paintEarpiece();
+  setAudioSession(voice.earpiece ? 'play-and-record' : 'playback');
   haptic('tap');
   if (voice.mode === 'record') {
     try {
@@ -1802,6 +1807,7 @@ function stopVoice() {
   try { voice.listener?.close(); } catch { /* egal */ }
   voice.listener = null;
   try { speechSynthesis.cancel(); } catch { /* egal */ }
+  setAudioSession('auto');
   orbLevel(0);
 }
 function voiceTap() {
@@ -1824,6 +1830,22 @@ $('#voice-btn').addEventListener('click', startVoice);
 onTap('#voice-close', stopVoice);
 onTap('#voice-end', stopVoice);
 onTap('#voice-orb', voiceTap);
+// 🔊 Lautsprecher / 📞 Am Ohr (wie ein echter Anruf)
+function paintEarpiece() {
+  const btn = $('#voice-route');
+  btn.textContent = voice.earpiece ? t('📞 Am Ohr', '📞 At your ear') : t('🔊 Lautsprecher', '🔊 Speaker');
+  btn.setAttribute('aria-pressed', String(voice.earpiece));
+  btn.hidden = !hasAudioSession && !iosDevice;
+  const old = /iPhone|iPad|iPod/.test(navigator.userAgent) && !hasAudioSession;
+  $('#voice-ios').hidden = !old;
+}
+onTap('#voice-route', () => {
+  voice.earpiece = !voice.earpiece;
+  store.set('vais.earpiece', voice.earpiece);
+  paintEarpiece();
+  if (voice.phase === 'speak') setAudioSession(voice.earpiece ? 'play-and-record' : 'playback');
+  haptic('tap');
+});
 onTap('#voice-pause', () => {
   if (voice.phase === 'speak') { speechSynthesis.cancel(); return voiceListen(); } // unterbrechen und gleich zuhören
   if (voice.paused) { voice.paused = false; return voiceListen(); }
@@ -1892,6 +1914,9 @@ async function trTranslate(text, fromCode, toCode, side) {
     item.scrollIntoView({ behavior: 'smooth', block: 'end' });
     if (canSpeak) {
       speechSynthesis.cancel();
+      tr.listener?.release();
+      setAudioSession('playback'); // iPhone: über den Lautsprecher, nicht den Hörer
+      try { speechSynthesis.resume(); } catch { /* egal */ }
       const u = new SpeechSynthesisUtterance(data.text);
       u.lang = toCode;
       const v = speechSynthesis.getVoices().find((x) => x.lang?.replace('_', '-').toLowerCase() === toCode.toLowerCase())

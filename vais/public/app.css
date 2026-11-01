@@ -1839,3 +1839,7 @@ body.incognito .composer { border-style: dashed; border-color: var(--border-stro
 .team-form .tr-send { height: 46px; }
 #d-team .team-unread { margin-left: auto; }
 .tr-mic.live { transform: scale(calc(1 + var(--lvl, 0) * .06)); }
+.voice-route { margin-top: 4px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
+.voice-route[hidden], .voice-ios[hidden] { display: none; }
+.voice-route[aria-pressed='true'] { background: var(--surface-2); }
+.voice-ios { margin: 0; max-width: 320px; font-size: 12.5px; color: var(--muted); }

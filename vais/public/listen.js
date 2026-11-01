@@ -2,6 +2,12 @@
 // Zuverlässiger als die eingebaute Spracherkennung von Safari auf dem iPhone.
 export const canRecord = !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
 
+// iPhone (iOS 17+): Ton-Ausgabe steuern. 'playback' = Lautsprecher, 'play-and-record' = wie ein Anruf (Hörer am Ohr)
+export const hasAudioSession = !!navigator.audioSession;
+export function setAudioSession(type) {
+  try { if (navigator.audioSession && navigator.audioSession.type !== type) navigator.audioSession.type = type; } catch { /* egal */ }
+}
+
 const MIME = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/aac', 'audio/ogg;codecs=opus']
   .find((m) => window.MediaRecorder?.isTypeSupported?.(m)) || '';
 
@@ -11,6 +17,7 @@ export class Listener {
   // Muss aus einem Tipp heraus aufgerufen werden (iPhone: Mikrofon + Audio freischalten)
   async open() {
     if (this.stream) return;
+    setAudioSession('play-and-record');
     this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     const AC = window.AudioContext || window.webkitAudioContext;
     if (AC && !this.ctx) {
@@ -33,6 +40,7 @@ export class Listener {
     this.source = null;
     this.stream?.getTracks().forEach((tr) => tr.stop());
     this.stream = null;
+    setAudioSession('playback'); // zurück auf Lautsprecher
   }
 
   level() {
