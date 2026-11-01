@@ -669,15 +669,18 @@ chat.post('/tts', wrap(async (req, res) => {
   limit(req.user.id, L.burst * 4);
   const key = `${voice}:${text}`;
   let buf = ttsCache.get(key);
+  const apiKey = process.env.POLLINATIONS_API_KEY?.trim();
+  // Pollinations verlangt für Sprache inzwischen einen (kostenlosen) Schlüssel
+  if (!buf && !apiKey) throw new HttpError(501, t('Für die Online-Stimme fehlt der Pollinations-Schlüssel (POLLINATIONS_API_KEY).', 'The online voice needs a Pollinations key (POLLINATIONS_API_KEY).'));
   if (!buf) {
     const fetchIt = async () => {
-      const apiKey = process.env.POLLINATIONS_API_KEY?.trim();
       for (let attempt = 0; attempt < 3; attempt++) {
         const r = await fetch(`https://gen.pollinations.ai/audio/${encodeURIComponent(text)}?voice=${voice}`, {
           headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
           signal: AbortSignal.timeout(30_000),
         });
         if (r.ok && /audio/.test(r.headers.get('content-type') ?? '')) return Buffer.from(await r.arrayBuffer());
+        if (r.status === 401 || r.status === 402 || r.status === 403) throw Object.assign(new Error(t('Der Pollinations-Schlüssel wird nicht akzeptiert oder das Guthaben ist aufgebraucht.', 'The Pollinations key was rejected or its credit is used up.')), { status: 501 });
         if (r.status !== 429) throw new Error(`Sprachausgabe fehlgeschlagen (${r.status}).`);
         await new Promise((ok) => setTimeout(ok, 1500 * (attempt + 1)));
       }
@@ -685,7 +688,7 @@ chat.post('/tts', wrap(async (req, res) => {
     };
     const job = ttsQueue.then(fetchIt, fetchIt);
     ttsQueue = job.catch(() => {});
-    try { buf = await job; } catch (err) { throw new HttpError(503, err.message); }
+    try { buf = await job; } catch (err) { throw new HttpError(err.status ?? 503, err.message); }
     ttsCache.set(key, buf);
     if (ttsCache.size > 60) ttsCache.delete(ttsCache.keys().next().value);
   }

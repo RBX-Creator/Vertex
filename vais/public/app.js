@@ -1460,7 +1460,16 @@ function pickVoice(lang) {
 }
 // Vorlesen: „online“ (natürliche Stimme als Audiodatei, Standard auf iPhone/Mac) oder „device“ (Stimme des Geräts)
 const onlineVoice = new OnlineVoice();
-const useOnline = () => (voicePrefs().engine ?? (appleDevice ? 'online' : 'device')) === 'online';
+const useOnline = () => !onlineVoice.broken && (voicePrefs().engine ?? (appleDevice ? 'online' : 'device')) === 'online';
+let voiceErrShown = '';
+onlineVoice.onError = (msg) => {
+  const text = msg === 'play'
+    ? t('Das Handy hat das Abspielen blockiert. Tippe einmal auf „🔈 Ton testen“.', 'Your phone blocked playback. Tap “🔈 Test sound” once.')
+    : msg;
+  if (voiceErrShown === text) return; // nicht ständig wiederholen
+  voiceErrShown = text;
+  toast(`🔇 ${text}`);
+};
 // Geräte-Stimme als Promise (endet, wenn fertig gesprochen)
 function deviceSay(text, langCode) {
   return new Promise((resolve) => {
@@ -1684,6 +1693,7 @@ async function voiceListen() {
     blob = await voice.listener.record({ onLevel: orbLevel });
   } catch { blob = null; }
   if (!voice.on || voice.paused) return;
+  if (voice.phase !== 'listen') return; // z. B. „Ton testen“ hat das Zuhören abgebrochen
   if (!blob) {
     // Nichts gehört: ein paar Mal weiter zuhören, dann pausieren statt endlos zu laufen
     if (++voice.misses >= 3) { voice.paused = true; voice.misses = 0; voice.listener.release(); return voicePhase('tap', t('Ich habe nichts gehört.', 'I didn’t hear anything.')); }
@@ -1934,7 +1944,11 @@ onTap('#voice-test', () => {
   voice.paused = false;
   voicePhase('speak', phrase);
   const back = () => { if (voice.on && !voice.paused && voice.phase === 'speak') voiceListen(); };
-  if (useOnline()) { onlineVoice.unlock(); onlineSay(phrase); onlineVoice.whenIdle(back); } else deviceSay(phrase).then(back);
+  voiceErrShown = '';
+  // erst ein kurzer Klang (zeigt, ob der Lautsprecher geht), dann die Stimme
+  onlineVoice.chime().then(() => {
+    if (useOnline()) { onlineSay(phrase); onlineVoice.whenIdle(back); } else deviceSay(phrase).then(back);
+  });
 });
 onTap('#voice-route', () => {
   voice.earpiece = !voice.earpiece;

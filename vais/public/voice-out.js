@@ -2,25 +2,46 @@
 // Läuft auf dem iPhone zuverlässiger als die eingebaute Vorlese-Stimme.
 import { setAudioSession } from './listen.js';
 
-// 0,1 s Stille als WAV – zum Freischalten des Abspielens per Tipp (iPhone)
-function silence() {
-  const rate = 8000; const n = rate / 10; const buf = new ArrayBuffer(44 + n * 2); const v = new DataView(buf);
+// Kurzer WAV-Klang (freq 0 = Stille) – zum Freischalten des Abspielens per Tipp (iPhone) und als Ton-Test
+function wav(freq = 0, secs = 0.1) {
+  const rate = 16000; const n = Math.round(rate * secs); const buf = new ArrayBuffer(44 + n * 2); const v = new DataView(buf);
   const w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
   w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
   v.setUint16(22, 1, true); v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
   w(36, 'data'); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) {
+    const fade = Math.min(1, i / 400, (n - i) / 400);
+    v.setInt16(44 + i * 2, freq ? Math.sin((2 * Math.PI * freq * i) / rate) * 12000 * fade : 0, true);
+  }
   let bin = ''; new Uint8Array(buf).forEach((b) => { bin += String.fromCharCode(b); });
   return `data:audio/wav;base64,${btoa(bin)}`;
 }
-const SILENCE = silence();
+const SILENCE = wav();
+const CHIME = wav(880, 0.35);
 
 export class OnlineVoice {
-  constructor() { this.audio = null; this.queue = []; this.busy = false; this.gen = 0; this.idle = []; this.failed = 0; }
+  constructor() {
+    this.audio = null; this.queue = []; this.busy = false; this.gen = 0; this.idle = []; this.failed = 0;
+    this.broken = false; // Server hat keine Online-Stimme (z. B. Schlüssel fehlt)
+    this.onError = () => {};
+  }
 
   // Muss aus einem Tipp heraus aufgerufen werden
-  unlock() {
+  unlock(sound = SILENCE) {
     if (!this.audio) { this.audio = new Audio(); this.audio.setAttribute('playsinline', ''); this.audio.preload = 'auto'; }
-    try { this.audio.src = SILENCE; this.audio.play().catch(() => {}); } catch { /* egal */ }
+    try { this.audio.src = sound; return this.audio.play(); } catch (err) { return Promise.reject(err); }
+  }
+
+  // Ton-Test: kurzer Klang direkt aus dem Tipp → zeigt, ob der Lautsprecher überhaupt geht
+  chime() {
+    setAudioSession('playback');
+    return new Promise((resolve) => {
+      const p = this.unlock(CHIME);
+      this.audio.onended = () => resolve(true);
+      this.audio.onerror = () => resolve(false);
+      Promise.resolve(p).catch(() => resolve(false));
+      setTimeout(() => resolve(true), 1500);
+    });
   }
 
   cancel() {
@@ -40,7 +61,12 @@ export class OnlineVoice {
     const url = fetch('/api/chat/tts', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice }), signal: ctrl.signal,
     }).then(async (r) => {
-      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'tts');
+      if (!r.ok) {
+        const msg = (await r.json().catch(() => ({}))).error || 'tts';
+        if (r.status === 501) this.broken = true;
+        this.onError(msg, r.status);
+        throw new Error(msg);
+      }
       return URL.createObjectURL(await r.blob());
     });
     url.catch(() => {});
@@ -70,9 +96,10 @@ export class OnlineVoice {
       });
       URL.revokeObjectURL(src);
       this.failed = 0;
-    } catch {
+    } catch (err) {
       if (gen !== this.gen) return;
       this.failed++;
+      if (err?.message === 'play') this.onError('play', 0);
       if (item.fallback) await item.fallback(item.text).catch(() => {}); // Notlösung: Geräte-Stimme
     } finally {
       if (gen === this.gen) { this.busy = false; this.next(); }
