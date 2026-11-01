@@ -36,6 +36,9 @@ services:
       # Bilder: funktionieren ohne Schlüssel; mit Pollinations-Schlüssel mehr Modelle
       - key: POLLINATIONS_API_KEY
         sync: false
+      # Impressum: deine Anschrift (Straße, PLZ Ort) – Pflicht in Deutschland, wenn die Seite öffentlich ist
+      - key: IMPRESSUM_ADDRESS
+        sync: false
       # Datenbank bei Turso
       - key: DATABASE_URL
         sync: false

@@ -2,7 +2,7 @@
 
 KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand:
 - **Login** mit E-Mail-Bestätigung
-- **Agent X**: arbeitet selbstständig in mehreren Schritten (Websuche, Webseiten lesen, Rechnen, Datum/Uhrzeit) mit dem stärksten verfügbaren Modell; braucht `GROQ_API_KEY`
+- **Agent X**: arbeitet selbstständig in mehreren Schritten mit dem stärksten verfügbaren Modell – mehrere Websuchen gleichzeitig (Quellen werden entdoppelt, seriöse zuerst), Wikipedia, Webseiten lesen, Rechnen, Datum/Uhrzeit; baut Webseiten und **prüft sie selbst** (`validate_html`: Aufbau, offene Tags, JavaScript-Fehler) und **sieht angehängte Bilder** (ein Bildmodell beschreibt sie); braucht `GROQ_API_KEY`
 - **Chat** in drei Modi: **Battle** (2 anonyme Modelle, Namen erst nach der Abstimmung), **Side by Side** (2 Modelle deiner Wahl), **Direkt** (1 Modell)
 - Antworten nebeneinander (PC) bzw. zum Wischen (Handy), Abstimmen mit „A ist besser“, Unentschieden, Beide schlecht, „B ist besser“
 - **Art der Anfrage** (zweites Menü): Auto, Text, Code (mit Vorschau für erstellte Webseiten), Websuche, **Bild** (Bilder aus Text, kostenlos über Pollinations – ohne Schlüssel; mit `POLLINATIONS_API_KEY` mehr Modelle und Bild-Battles); Video folgt
@@ -14,6 +14,11 @@ KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand:
 - **Spracheingabe** (🎙️ neben Senden) und **Vorlesen** (🔊 an jeder Antwort), direkt über den Browser
 - **Einstellungen**: Hell/Dunkel/System, Deutsch/English, Passwort ändern, alle Chats löschen, Konto löschen
 - **Als App installierbar** (PWA) mit eigenem Symbol; schläft der kostenlose Server, erscheint „VAIs wacht auf …“ statt einer leeren Seite
+- **Antworten**: farbiger Code mit Kopier-Knopf, Mathe-Formeln (KaTeX), 3 **Vorschläge für die nächste Frage** unter jeder Antwort, **automatische Chat-Titel**
+- **Offline lesen**: die letzten 25 Chats liegen auf dem Gerät und lassen sich ohne Internet öffnen (beim Abmelden gelöscht)
+- **Willkommens-Tour** beim ersten Besuch (in den Einstellungen wiederholbar), sanfte Animationen und kurzes Vibrieren beim Senden/Abstimmen (Android)
+- **Admin-Seite** (`/admin`, nur für `ADMIN_EMAILS`): Nutzerzahlen, Fragen pro Tag, beliebte Modelle, Fehlerprotokoll, Nutzer sperren/entsperren, Bestenliste zurücksetzen (rückgängig machbar)
+- **Datenschutz** (`/datenschutz`) und **Impressum** (`/impressum`) mit Betreiber-Angaben aus `OWNER_NAME`, `OWNER_EMAIL`, `IMPRESSUM_ADDRESS`
 - **Bestenliste**: Elo-Wertung aus allen Battle-Stimmen, getrennt nach Alle/Text/Code/Websuche, mit Siegquote (Unentschieden und „beide schlecht“ zählen halb)
 
 Ohne OpenRouter-Schlüssel läuft der Chat im **Demo-Modus** mit Platzhalter-Modellen.
@@ -88,6 +93,11 @@ Sicherheit: Content-Security-Policy, Schutz vor fremden Webseiten (CSRF), Sperre
 | `server.js` | Webserver (Express) |
 | `src/auth.js` | Registrieren, Anmelden, Codes, Sessions |
 | `src/agent.js` | Agent X: Werkzeuge und Ablauf |
+| `src/admin.js`, `public/admin.*` | Admin-Seite |
+| `src/config.js` | Betreiber-Angaben und Admin-Konten |
+| `public/render.js` | Markdown, Formeln, Code-Farben |
+| `public/tour.js` | Willkommens-Tour |
+| `public/legal/` | Datenschutz und Impressum |
 | `src/chat.js` | Chats starten, Antworten streamen, Abstimmen |
 | `src/models.js` | Modelle von OpenRouter, Google, Groq, Cerebras und Mistral, Logos, Kategorien (+ Demo-Modus) |
 | `public/icons/` | Hersteller-Logos (MIT, LobeHub) |

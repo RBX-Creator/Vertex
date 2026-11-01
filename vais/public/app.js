@@ -1,5 +1,6 @@
 import { t, LANG, LOCALE, translateDom, setLang, getTheme, setTheme } from './i18n.js';
 import { markdown, enhance } from './render.js';
+import { startTour, tourDone } from './tour.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 translateDom();
@@ -123,6 +124,13 @@ function setOffline(on) {
   document.body.classList.toggle('is-offline', on);
   $('#offline-banner').hidden = !on;
   updateSend?.();
+}
+
+// Kurzes Vibrieren als Rückmeldung (nur Geräte, die das können; nie bei „weniger Bewegung“)
+const quietMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+function haptic(kind = 'tap') {
+  if (!navigator.vibrate || quietMotion?.matches) return;
+  try { navigator.vibrate({ tap: 8, send: 12, success: [10, 40, 14], error: [30, 50, 30] }[kind] ?? 8); } catch { /* egal */ }
 }
 
 const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -847,6 +855,7 @@ async function send() {
 
   const chat = state.chat;
   historyDirty = true;
+  haptic('send');
   recognition?.stop();
   el.prompt.value = '';
   state.pending = [];
@@ -921,6 +930,7 @@ el.vote.addEventListener('click', async (e) => {
   el.vote.setAttribute('aria-busy', 'true');
   try {
     const data = await post('/api/chat/vote', { chatId: chat.id, winner: btn.dataset.vote });
+    haptic('success');
     chat.names = data.models;
     chat.winner = data.winner;
     refreshOfflineChat(chat.id);
@@ -965,7 +975,9 @@ el.thread.addEventListener('click', async (e) => {
     const value = act === 'like' ? 1 : -1;
     const before = a.feedback ?? 0;
     a.feedback = before === value ? 0 : value;
+    if (a.feedback) haptic('tap');
     updateCard(turnIndex, side);
+    if (a.feedback) cardEl(turnIndex, side)?.querySelector(`[data-act="${act}"]`)?.classList.add('bump');
     try {
       await post('/api/chat/feedback', { chatId: state.chat.id, turn: turnIndex, side, value: a.feedback });
       if (a.feedback) toast(a.feedback === 1 ? t('Danke für dein Feedback 👍', 'Thanks for your feedback 👍') : t('Danke, wir merken uns das 👎', 'Thanks, noted 👎'));
@@ -993,6 +1005,7 @@ el.thread.addEventListener('click', async (e) => {
   if (act === 'copy') {
     try {
       await navigator.clipboard.writeText(a.text);
+      haptic('tap');
       btn.innerHTML = ICON.check;
       setTimeout(() => (btn.innerHTML = ICON.copy), 1500);
       toast(t('Kopiert', 'Copied'));
@@ -2028,7 +2041,14 @@ async function init() {
   if (state.picks[0] && state.picks[0] === state.picks[1]) state.picks[1] = state.models.find((m) => m.id !== state.picks[0])?.id ?? null;
   fitPicks();
   renderControls();
-  route();
+  await route();
+  if (!tourDone() && !offline && !location.hash) setTimeout(startTour, 500);
 }
+
+$('#set-tour').addEventListener('click', () => {
+  closeSettings();
+  go('');
+  setTimeout(startTour, 350);
+});
 
 init();
