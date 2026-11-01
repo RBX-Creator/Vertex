@@ -1329,6 +1329,110 @@ function startListening() {
   }
 }
 
+// ── Sprach-Modus: zuhören → senden → vorlesen → wieder zuhören ─────
+const voiceEl = $('#voice');
+const voice = { on: false, paused: false, rec: null, phase: 'idle' };
+if (SpeechRec && canSpeak) $('#voice-btn').hidden = false;
+function voicePhase(phase, said) {
+  voice.phase = phase;
+  voiceEl.dataset.phase = phase;
+  $('#voice-state').textContent = {
+    listen: t('Ich höre zu …', 'Listening …'),
+    think: t('Denkt nach …', 'Thinking …'),
+    speak: t('Spricht …', 'Speaking …'),
+    paused: t('Pausiert', 'Paused'),
+  }[phase] ?? '';
+  if (said !== undefined) $('#voice-said').textContent = said;
+  $('#voice-pause').textContent = phase === 'paused' ? t('▶ Weiter', '▶ Resume') : phase === 'speak' ? t('Unterbrechen', 'Interrupt') : t('Pause', 'Pause');
+}
+function voiceListen() {
+  if (!voice.on || voice.paused) return;
+  const rec = new SpeechRec();
+  rec.lang = LOCALE;
+  rec.interimResults = true;
+  rec.continuous = false;
+  let finalText = '';
+  rec.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    $('#voice-said').textContent = `${finalText}${interim}`.trim();
+  };
+  rec.onerror = (e) => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { toast(t('Bitte erlaube den Zugriff aufs Mikrofon.', 'Please allow access to the microphone.')); stopVoice(); }
+  };
+  rec.onend = () => {
+    voice.rec = null;
+    if (!voice.on || voice.paused) return;
+    const text = finalText.trim();
+    if (!text) return setTimeout(voiceListen, 250); // nichts gehört → weiter zuhören
+    voiceAsk(text);
+  };
+  try { rec.start(); voice.rec = rec; voicePhase('listen', ''); } catch { setTimeout(voiceListen, 500); }
+}
+async function voiceAsk(text) {
+  voicePhase('think', text);
+  if (busy() || offline) { voicePhase('paused'); voice.paused = true; return; }
+  el.prompt.value = text;
+  await send();
+  const chat = state.chat;
+  const turn = chat?.turns.at(-1);
+  if (!voice.on || !turn) return;
+  const answer = turn.answers.find((a) => a.status === 'done' && a.text) ?? turn.answers[0];
+  const card = cardEl(chat.turns.length - 1, turn.answers.indexOf(answer));
+  const spoken = answer?.text ? speakableText(card) : answer?.reaction ? '' : t('Das hat leider nicht geklappt.', 'Sorry, that did not work.');
+  if (!spoken) return voiceListen(); // nur ein Emoji als Antwort
+  voicePhase('speak', spoken.length > 220 ? `${spoken.slice(0, 220)} …` : spoken);
+  const lang = guessLang(spoken);
+  const v = pickVoice(lang);
+  const prefs = voicePrefs();
+  const parts = speechChunks(spoken);
+  speechSynthesis.cancel();
+  parts.forEach((part, i) => {
+    const u = new SpeechSynthesisUtterance(part);
+    u.lang = lang === 'en' ? 'en-US' : 'de-DE';
+    if (v) u.voice = v;
+    u.rate = prefs.rate;
+    u.pitch = prefs.pitch;
+    if (i === parts.length - 1) u.onend = () => { if (voice.on && !voice.paused && voice.phase === 'speak') voiceListen(); };
+    speechSynthesis.speak(u);
+  });
+}
+function startVoice() {
+  if (!SpeechRec || !canSpeak) return toast(t('Dein Browser kann leider keine Sprache erkennen.', 'Your browser cannot recognize speech.'));
+  if (offline) return toast(t('Du bist offline.', 'You are offline.'));
+  stopSpeaking();
+  recognition?.stop();
+  // iPhone: Vorlesen einmal durch den Tipp freischalten
+  try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch { /* egal */ }
+  voice.on = true;
+  voice.paused = false;
+  voiceEl.hidden = false;
+  haptic('tap');
+  voiceListen();
+}
+function stopVoice() {
+  voice.on = false;
+  voice.paused = false;
+  try { voice.rec?.abort(); } catch { /* egal */ }
+  voice.rec = null;
+  speechSynthesis.cancel();
+  voiceEl.hidden = true;
+}
+$('#voice-btn').addEventListener('click', startVoice);
+$('#voice-close').addEventListener('click', stopVoice);
+$('#voice-end').addEventListener('click', stopVoice);
+$('#voice-pause').addEventListener('click', () => {
+  if (voice.phase === 'speak') { speechSynthesis.cancel(); return voiceListen(); } // unterbrechen und gleich zuhören
+  if (voice.paused) { voice.paused = false; return voiceListen(); }
+  voice.paused = true;
+  try { voice.rec?.abort(); } catch { /* egal */ }
+  voicePhase('paused');
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && voice.on) stopVoice(); });
+
 // ── Webseiten (Code-Modus) ────────────────────────────────────────
 const codeChat = () => state.chat?.modality === 'code';
 

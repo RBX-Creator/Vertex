@@ -1644,3 +1644,29 @@ a.set-export { display: flex; justify-content: center; text-decoration: none; bo
 .pic-edit { position: absolute; left: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 0; border-radius: 999px; background: rgba(20, 20, 18, .72); color: #fff; font: inherit; font-size: 13px; font-weight: 500; backdrop-filter: blur(6px); cursor: pointer; }
 .pic-edit svg { width: 16px; height: 16px; }
 .pic-edit:active { transform: scale(.96); }
+
+/* ── Sprach-Modus ─────────────────────────────────────────────────── */
+.voice { position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: max(24px, env(safe-area-inset-top)) 24px max(28px, env(safe-area-inset-bottom)); background: var(--bg); animation: fade .25s ease both; text-align: center; }
+.voice[hidden] { display: none; }
+.voice-close { position: absolute; top: max(16px, env(safe-area-inset-top)); right: 16px; width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--surface-2); color: var(--text); display: grid; place-items: center; cursor: pointer; }
+.voice-close svg { width: 22px; height: 22px; }
+.voice-orb { position: relative; width: 180px; height: 180px; margin-bottom: 18px; }
+.voice-orb i { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 35% 30%, color-mix(in oklab, var(--series-1) 70%, white), var(--series-1) 55%, var(--series-7)); }
+.voice-orb i:nth-child(2) { inset: -14px; opacity: .22; }
+.voice-orb i:nth-child(3) { inset: -30px; opacity: .1; }
+.voice[data-phase='listen'] .voice-orb i:nth-child(n+2) { animation: orb-breathe 1.6s ease-in-out infinite; }
+.voice[data-phase='listen'] .voice-orb i:nth-child(3) { animation-delay: .3s; }
+.voice[data-phase='think'] .voice-orb i:first-child { animation: orb-spin 1.2s linear infinite; background: conic-gradient(from 0deg, var(--series-1), var(--series-7), var(--series-3), var(--series-1)); }
+.voice[data-phase='speak'] .voice-orb i:first-child { animation: orb-talk .5s ease-in-out infinite alternate; }
+.voice[data-phase='speak'] .voice-orb i:nth-child(n+2) { animation: orb-breathe .9s ease-in-out infinite; }
+.voice[data-phase='paused'] .voice-orb { filter: grayscale(1); opacity: .5; }
+@keyframes orb-breathe { 50% { transform: scale(1.12); } }
+@keyframes orb-spin { to { transform: rotate(360deg); } }
+@keyframes orb-talk { from { transform: scale(.94); } to { transform: scale(1.05); } }
+.voice-state { margin: 0; font-family: var(--serif); font-size: 34px; line-height: 1.1; color: var(--heading); }
+.voice-said { margin: 0; max-width: 520px; min-height: 3em; color: var(--muted); font-size: 16px; line-height: 1.5; overflow-wrap: anywhere; }
+.voice-actions { display: flex; gap: 10px; margin-top: 12px; }
+.voice-act { min-width: 130px; padding: 13px 18px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; }
+.voice-act.end { background: var(--danger); border-color: var(--danger); color: #fff; }
+.voice-act:active { transform: scale(.97); }
+@media (prefers-reduced-motion: reduce) { .voice-orb i { animation: none !important; } }

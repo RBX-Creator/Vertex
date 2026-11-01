@@ -142,6 +142,9 @@
               <button type="button" class="mic" id="mic" aria-label="Sprechen" data-en-aria-label="Speak" title="Sprechen" data-en-title="Speak" aria-pressed="false" hidden>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
               </button>
+              <button type="button" class="mic voice-btn" id="voice-btn" aria-label="Sprach-Modus" data-en-aria-label="Voice mode" title="Sprach-Modus" data-en-title="Voice mode" hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg>
+              </button>
               <button class="send" id="send" type="submit" aria-label="Senden"></button>
             </div>
           </div>
@@ -404,6 +407,18 @@
     </div>
   </div>
 
+  <div class="voice" id="voice" hidden role="dialog" aria-modal="true" aria-labelledby="voice-state">
+    <button class="voice-close" id="voice-close" type="button" aria-label="Beenden" data-en-aria-label="End">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+    <div class="voice-orb" id="voice-orb" aria-hidden="true"><i></i><i></i><i></i></div>
+    <p class="voice-state" id="voice-state"></p>
+    <p class="voice-said" id="voice-said"></p>
+    <div class="voice-actions">
+      <button class="voice-act" id="voice-pause" type="button"></button>
+      <button class="voice-act end" id="voice-end" type="button" data-en="End">Beenden</button>
+    </div>
+  </div>
   <div class="toast" id="toast" role="status"></div>
 
   <script src="/app.js" type="module"></script>

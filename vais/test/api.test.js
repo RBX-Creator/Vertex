@@ -160,3 +160,20 @@ test('Konto löschen entfernt alles', async () => {
   assert.equal((await c.json('/api/auth/me')).status, 401);
   assert.equal((await client().json('/api/auth/start', { email: 'weg@example.com' })).data.mode, 'register');
 });
+
+test('Daten herunterladen und Chats sortieren', async () => {
+  const c = await signUp('export@example.com');
+  const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
+  const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'Export' });
+  await stream(c, start.data.id, 'Hallo');
+  assert.equal((await c.json('/api/chat/organize', { chatId: start.data.id, pinned: true, folder: 'Schule' })).status, 200);
+  const item = (await c.json('/api/chat/list')).data.chats[0];
+  assert.equal(item.pinned, true);
+  assert.equal(item.folder, 'Schule');
+  const res = await c.call('/api/chat/export');
+  assert.match(res.headers.get('content-disposition'), /attachment; filename="vais-daten-/);
+  const data = await res.json();
+  assert.equal(data.account.email, 'export@example.com');
+  assert.equal(data.chats.length, 1);
+  assert.ok(data.chats[0].turns[0].answers[0].text.length > 0);
+});
