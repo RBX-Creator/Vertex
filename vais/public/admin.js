@@ -254,6 +254,23 @@ $('#keys').addEventListener('click', async (e) => {
   try { renderKeys((await api('keys/remove', { provider: btn.dataset.provider, id: btn.dataset.rmKey })).providers); toast(t('Entfernt.', 'Removed.')); } catch (err) { toast(err.message); }
 });
 
+// ── Veröffentlichte Webseiten ────────────────────────────────────
+async function loadSitesAdmin() {
+  try {
+    const { sites } = await api('sites');
+    $('#sites').innerHTML = sites.length ? sites.map((x) => `
+      <li><div class="adm-user-row"><span class="adm-user"><b><a href="/w/${esc(x.id)}" target="_blank" rel="noopener">${esc(x.title || x.id)}</a></b>
+        <small>${esc(x.email ?? '–')} · ${when(x.created)} · ${num(x.views)} ${t('Aufrufe', 'views')}</small></span>
+        <button class="adm-btn small danger" data-rm-site="${esc(x.id)}">${t('Entfernen', 'Remove')}</button></div></li>`).join('')
+      : `<li class="adm-empty">${t('Noch keine.', 'None yet.')}</li>`;
+  } catch (err) { toast(err.message); }
+}
+$('#sites').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-rm-site]');
+  if (!btn || !confirm(t('Diese Webseite entfernen?', 'Remove this website?'))) return;
+  try { await api('sites/remove', { id: btn.dataset.rmSite }); toast(t('Entfernt.', 'Removed.')); loadSitesAdmin(); } catch (err) { toast(err.message); }
+});
+
 // ── Bestenliste ──────────────────────────────────────────────────
 $('#reset-board').addEventListener('click', async () => {
   if (!confirm(t('Bestenliste wirklich zurücksetzen? Danach zählen nur neue Stimmen.', 'Really reset the leaderboard? Only new votes will count.'))) return;
@@ -269,3 +286,4 @@ load();
 loadLimits();
 loadKeys();
 loadUsers();
+loadSitesAdmin();

@@ -225,3 +225,36 @@ test('Agent X arbeitet weiter, wenn die Verbindung abbricht – „Stopp“ häl
   const after = (await c.json(`/api/chat/${s2.data.id}`)).data.turns[0].answers[0];
   assert.notEqual(after.status, 'streaming');
 });
+
+test('Webseiten veröffentlichen – abgeschottet vom Rest', async () => {
+  const c = await signUp('site@example.com');
+  const start = await c.json('/api/chat/start', { mode: 'agent', modality: 'auto', title: 'Seite' });
+  await stream(c, start.data.id, 'Bau mir eine Webseite mit Zähler');
+  const pub = await c.json('/api/chat/sites/publish', { chatId: start.data.id, turn: 0, side: 0 });
+  assert.equal(pub.status, 200, JSON.stringify(pub.data));
+  const again = await c.json('/api/chat/sites/publish', { chatId: start.data.id, turn: 0, side: 0 });
+  assert.equal(again.data.id, pub.data.id); // gleicher Link
+  const page = await fetch(BASE + pub.data.path);
+  assert.equal(page.status, 200);
+  assert.match(page.headers.get('content-security-policy'), /^sandbox allow-scripts/);
+  assert.equal(page.headers.get('x-frame-options'), null);
+  const html = await page.text();
+  assert.match(html, /Erstellt mit VAIs/);
+  assert.match(html, /<button id="b">/);
+  // fremde Nutzer können sie nicht offline nehmen
+  const other = await signUp('other-site@example.com');
+  await other.json('/api/chat/sites/unpublish', { id: pub.data.id });
+  assert.equal((await fetch(BASE + pub.data.path)).status, 200);
+  await c.json('/api/chat/sites/unpublish', { id: pub.data.id });
+  assert.equal((await fetch(BASE + pub.data.path)).status, 404);
+});
+
+test('Übersetzer übersetzt und zählt einen Punkt', async () => {
+  const c = await signUp('tr@example.com');
+  const before = (await c.json('/api/chat/usage')).data.used;
+  const r = await c.json('/api/chat/translate', { text: 'Wo ist der Bahnhof?', from: 'Deutsch', to: 'English' });
+  assert.equal(r.status, 200);
+  assert.ok(r.data.text.length > 3);
+  assert.equal((await c.json('/api/chat/usage')).data.used, before + 1);
+  assert.equal((await c.json('/api/chat/translate', { text: '', to: 'English' })).status, 400);
+});

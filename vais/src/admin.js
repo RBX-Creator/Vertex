@@ -8,6 +8,7 @@ import { isAdmin, ADMIN_EMAILS } from './config.js';
 import { describeModel, listModels, demoMode, keyStatus, addKey, removeKey } from './models.js';
 import { limitSettings, saveLimitSettings, LIMIT_FIELDS, usageMap, resetUsage } from './limits.js';
 import { clearBoards } from './chat.js';
+import { listAllSites, removeSite } from './sites.js';
 
 export const admin = Router();
 
@@ -167,6 +168,16 @@ admin.post('/keys/remove', wrap(async (req, res) => {
   try { await removeKey(provider, id); } catch (err) { throw new HttpError(400, err.message); }
   await logEvent('admin', null, `Schlüssel entfernt: ${provider} ${id}`);
   res.json({ ok: true, providers: keyStatus() });
+}));
+
+admin.get('/sites', wrap(async (req, res) => {
+  res.json({ sites: (await listAllSites()).map((s) => ({ id: s.id, title: s.title, views: Number(s.views), created: Number(s.created_at), email: s.email })) });
+}));
+admin.post('/sites/remove', wrap(async (req, res) => {
+  const id = String(req.body?.id ?? '');
+  await removeSite(id);
+  await logEvent('admin', null, `Webseite entfernt: /w/${id}`);
+  res.json({ ok: true });
 }));
 
 admin.use(errorHandler);

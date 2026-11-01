@@ -1447,6 +1447,119 @@ $('#voice-pause').addEventListener('click', () => {
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && voice.on) stopVoice(); });
 
+// ── Live-Übersetzer: zwei Leute, zwei Sprachen ────────────────────
+const TR_LANGS = [
+  ['de-DE', 'Deutsch', '🇩🇪'], ['en-US', 'English', '🇬🇧'], ['tr-TR', 'Türkçe', '🇹🇷'], ['es-ES', 'Español', '🇪🇸'], ['fr-FR', 'Français', '🇫🇷'],
+  ['it-IT', 'Italiano', '🇮🇹'], ['pl-PL', 'Polski', '🇵🇱'], ['ru-RU', 'Русский', '🇷🇺'], ['uk-UA', 'Українська', '🇺🇦'], ['ar-SA', 'العربية', '🇸🇦'],
+  ['nl-NL', 'Nederlands', '🇳🇱'], ['pt-PT', 'Português', '🇵🇹'], ['el-GR', 'Ελληνικά', '🇬🇷'], ['hr-HR', 'Hrvatski', '🇭🇷'], ['ro-RO', 'Română', '🇷🇴'],
+  ['zh-CN', '中文', '🇨🇳'], ['ja-JP', '日本語', '🇯🇵'], ['ko-KR', '한국어', '🇰🇷'], ['hi-IN', 'हिन्दी', '🇮🇳'], ['fa-IR', 'فارسی', '🇮🇷'],
+];
+const trEl = $('#tr');
+const tr = { rec: null, busy: false };
+const trLang = (code) => TR_LANGS.find((l) => l[0] === code) ?? TR_LANGS[0];
+function trPaint() {
+  const [a, b] = [$('#tr-a').value, $('#tr-b').value];
+  store.set('vais.tr', { a, b });
+  [['#tr-mic-a', a], ['#tr-mic-b', b]].forEach(([sel, code]) => {
+    const [, name, flag] = trLang(code);
+    $(`${sel} .tr-flag`).textContent = flag;
+    $(`${sel} b`).textContent = name;
+    $(sel).hidden = !SpeechRec;
+  });
+}
+function openTranslator() {
+  closeDrawer();
+  const saved = store.get('vais.tr', { a: LANG === 'en' ? 'en-US' : 'de-DE', b: LANG === 'en' ? 'de-DE' : 'en-US' });
+  for (const sel of ['#tr-a', '#tr-b']) {
+    $(sel).innerHTML = TR_LANGS.map(([code, name, flag]) => `<option value="${code}">${flag} ${name}</option>`).join('');
+  }
+  $('#tr-a').value = saved.a;
+  $('#tr-b').value = saved.b;
+  trPaint();
+  if (!$('#tr-log').children.length) $('#tr-log').innerHTML = `<li class="tr-hint">${SpeechRec ? t('Tippe auf deine Sprache und sprich. VAIs übersetzt und liest die Übersetzung laut vor – dann ist die andere Person dran.', 'Tap your language and speak. VAIs translates and reads the translation aloud – then it is the other person’s turn.') : t('Tippe deinen Satz unten ein – VAIs übersetzt ihn.', 'Type your sentence below – VAIs translates it.')}</li>`;
+  trEl.hidden = false;
+}
+function closeTranslator() {
+  try { tr.rec?.abort(); } catch { /* egal */ }
+  tr.rec = null;
+  if (canSpeak) speechSynthesis.cancel();
+  document.querySelectorAll('.tr-mic.live').forEach((b) => b.classList.remove('live'));
+  trEl.hidden = true;
+}
+async function trTranslate(text, fromCode, toCode, side) {
+  if (!text.trim()) return;
+  $('#tr-log .tr-hint')?.remove();
+  const item = document.createElement('li');
+  item.className = `tr-item ${side}`;
+  item.innerHTML = '<p class="tr-orig"></p><p class="tr-out"><span class="gen-dots"></span></p>';
+  item.querySelector('.tr-orig').textContent = `${trLang(fromCode)[2]} ${text}`;
+  $('#tr-log').append(item);
+  item.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  tr.busy = true;
+  try {
+    const data = await post('/api/chat/translate', { text, from: trLang(fromCode)[1], to: trLang(toCode)[1] });
+    const out = item.querySelector('.tr-out');
+    out.textContent = `${trLang(toCode)[2]} ${data.text}`;
+    out.dir = /^(ar|fa)/.test(toCode) ? 'rtl' : 'auto';
+    item.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    if (canSpeak) {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(data.text);
+      u.lang = toCode;
+      const v = speechSynthesis.getVoices().find((x) => x.lang?.replace('_', '-').toLowerCase() === toCode.toLowerCase())
+        ?? speechSynthesis.getVoices().find((x) => x.lang?.toLowerCase().startsWith(toCode.slice(0, 2)));
+      if (v) u.voice = v;
+      u.rate = voicePrefs().rate;
+      speechSynthesis.speak(u);
+    }
+    haptic('tap');
+  } catch (err) {
+    item.querySelector('.tr-out').textContent = err.message;
+    item.classList.add('error');
+  } finally { tr.busy = false; }
+}
+function trListen(btn, fromCode, toCode, side) {
+  if (tr.rec) { try { tr.rec.stop(); } catch { /* egal */ } return; }
+  if (tr.busy) return;
+  if (canSpeak) speechSynthesis.cancel();
+  const rec = new SpeechRec();
+  rec.lang = fromCode;
+  rec.interimResults = true;
+  rec.continuous = false;
+  let finalText = '';
+  rec.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    btn.querySelector('small').textContent = `${finalText}${interim}`.slice(-60) || t('hört zu …', 'listening …');
+  };
+  rec.onerror = (e) => { if (e.error === 'not-allowed') toast(t('Bitte erlaube den Zugriff aufs Mikrofon.', 'Please allow access to the microphone.')); };
+  rec.onend = () => {
+    tr.rec = null;
+    btn.classList.remove('live');
+    btn.querySelector('small').textContent = t('tippen & sprechen', 'tap and speak');
+    if (finalText.trim()) trTranslate(finalText.trim(), fromCode, toCode, side);
+  };
+  try { rec.start(); tr.rec = rec; btn.classList.add('live'); btn.querySelector('small').textContent = t('hört zu …', 'listening …'); haptic('tap'); } catch { tr.rec = null; }
+}
+$('#d-translate').addEventListener('click', openTranslator);
+$('#tr-close').addEventListener('click', closeTranslator);
+$('#tr-a').addEventListener('change', trPaint);
+$('#tr-b').addEventListener('change', trPaint);
+$('#tr-swap').addEventListener('click', () => { const a = $('#tr-a').value; $('#tr-a').value = $('#tr-b').value; $('#tr-b').value = a; trPaint(); });
+$('#tr-mic-a').addEventListener('click', (e) => trListen(e.currentTarget, $('#tr-a').value, $('#tr-b').value, 'a'));
+$('#tr-mic-b').addEventListener('click', (e) => trListen(e.currentTarget, $('#tr-b').value, $('#tr-a').value, 'b'));
+$('#tr-type').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = $('#tr-input').value.trim();
+  if (!text || tr.busy) return;
+  $('#tr-input').value = '';
+  trTranslate(text, $('#tr-a').value, $('#tr-b').value, 'a');
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !trEl.hidden) closeTranslator(); });
+
 // ── Webseiten (Code-Modus) ────────────────────────────────────────
 const codeChat = () => state.chat?.modality === 'code';
 
@@ -2449,6 +2562,55 @@ $('#set-reminders').addEventListener('click', async (e) => {
   try { await post('/api/chat/push/reminders/delete', { id: Number(btn.dataset.rem) }); loadPush(); } catch (err) { toast(err.message); }
 });
 
+// ── Webseiten veröffentlichen ─────────────────────────────────────
+const siteSheet = $('#site-sheet');
+let siteNow = null;
+function showSite(site) {
+  siteNow = site;
+  const url = location.origin + site.path;
+  $('#site-link').value = url;
+  $('#site-open').href = url;
+  $('#site-native').hidden = !navigator.share;
+  siteSheet.hidden = false;
+  $('#site-link').select();
+}
+$('#preview-publish').addEventListener('click', async (e) => {
+  const chat = state.chat;
+  if (!chat || pv.turn === null) return;
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    const data = await post('/api/chat/sites/publish', { chatId: chat.id, turn: pv.turn, side: pv.side ?? 0 });
+    haptic('success');
+    showSite(data);
+  } catch (err) { toast(err.message); } finally { btn.disabled = false; }
+});
+siteSheet.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) siteSheet.hidden = true; });
+$('#site-copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('#site-link').value); toast(t('Link kopiert', 'Link copied')); } catch { $('#site-link').select(); }
+});
+$('#site-native').addEventListener('click', () => navigator.share?.({ title: siteNow?.title || 'VAIs', url: $('#site-link').value }).catch(() => {}));
+$('#site-stop').addEventListener('click', async () => {
+  if (!siteNow || !confirm(t('Webseite offline nehmen? Der Link funktioniert dann nicht mehr.', 'Take the website offline? The link will stop working.'))) return;
+  try { await post('/api/chat/sites/unpublish', { id: siteNow.id }); siteSheet.hidden = true; toast(t('Offline genommen', 'Taken offline')); } catch (err) { toast(err.message); }
+});
+async function loadSites() {
+  try {
+    const res = await fetch('/api/chat/sites');
+    if (!res.ok) return;
+    const { sites } = await res.json();
+    $('#set-sites-group').hidden = !sites.length;
+    const list = $('#set-sites');
+    list.innerHTML = sites.map((x) => `<li><a href="/w/${escapeHtml(x.id)}" target="_blank" rel="noopener"></a><small>${x.views} ${x.views === 1 ? t('Aufruf', 'view') : t('Aufrufe', 'views')}</small><button type="button" class="mem-del" data-site-off="${escapeHtml(x.id)}" aria-label="${t('Offline nehmen', 'Take offline')}" title="${t('Offline nehmen', 'Take offline')}">×</button></li>`).join('');
+    list.querySelectorAll('li > a').forEach((a, i) => { a.textContent = `🌐 ${sites[i].title}`; });
+  } catch { /* offline */ }
+}
+$('#set-sites').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-site-off]');
+  if (!btn || !confirm(t('Webseite offline nehmen?', 'Take the website offline?'))) return;
+  try { await post('/api/chat/sites/unpublish', { id: btn.dataset.siteOff }); loadSites(); } catch (err) { toast(err.message); }
+});
+
 function openSettings() {
   toggleAccount(false);
   closeDrawer();
@@ -2456,6 +2618,7 @@ function openSettings() {
   paintVoices();
   loadProfile();
   loadPush();
+  loadSites();
   settingsEl.querySelectorAll('.msg').forEach((m) => { m.textContent = ''; m.className = m.className.replace(/ (ok|error)$/, ''); });
   settingsEl.hidden = false;
   $('.settings-head [data-close]', settingsEl).focus();

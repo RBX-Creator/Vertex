@@ -7,6 +7,7 @@ const { auth, currentUser } = await import('./src/auth.js');
 const { mailConfigured } = await import('./src/mailer.js');
 const { chat, share } = await import('./src/chat.js');
 const { admin } = await import('./src/admin.js');
+const { serveSite } = await import('./src/sites.js');
 const { demoMode, tempImage } = await import('./src/models.js');
 const { OWNER, isAdmin } = await import('./src/config.js');
 const { readFile } = await import('node:fs/promises');
@@ -100,6 +101,9 @@ app.get('/login', async (req, res) => {
   noCache(res);
   res.sendFile(page('login.html'));
 });
+
+// Veröffentlichte Webseiten (abgeschottet, siehe src/sites.js)
+app.get('/w/:id', serveSite);
 
 // Vorlage für die Bildbearbeitung (nur kurz, unerratbare Adresse)
 app.get('/tmpimg/:token', (req, res) => {

@@ -6,6 +6,7 @@ import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { runAgent, quickReaction } from './agent.js';
 import { profile, personalFor, instructionsPrompt, remember } from './profile.js';
 import { push, addReminder, notifyUser } from './push.js';
+import { sites } from './sites.js';
 import { limitSettings, charge, refund, usageOf } from './limits.js';
 import { sourcesFromText } from './models.js';
 import { pickAvailable, isBusy } from './models.js';
@@ -70,6 +71,7 @@ chat.use(wrap(async (req, res, next) => {
 
 chat.use('/profile', profile);
 chat.use('/push', push);
+chat.use('/sites', sites);
 
 // Premium-Modelle (kosten Guthaben): höchstens „paidDaily“ Antworten pro Nutzer und Tag (im Admin-Bereich einstellbar)
 const paidUse = new Map();
@@ -590,6 +592,37 @@ chat.post('/unshare', wrap(async (req, res) => {
 }));
 
 // ── Meine Statistik ───────────────────────────────────────────────
+// ── Live-Übersetzer ──────────────────────────────────────────────
+const TRANSLATE_PREFERENCE = [/^groq:openai\/gpt-oss-120b$/, /^groq:moonshotai\/kimi-k2/, /^groq:.*llama-3\.3-70b/, /^groq:openai\/gpt-oss-20b$/, /^groq:meta-llama\/llama-4/, /^gemini:/, /^openrouter:.*:free$/];
+chat.post('/translate', wrap(async (req, res) => {
+  const text = String(req.body?.text ?? '').trim().slice(0, 2000);
+  const from = String(req.body?.from ?? '').slice(0, 40);
+  const to = String(req.body?.to ?? '').slice(0, 40);
+  if (!text || !to) throw new HttpError(400, t('Nichts zu übersetzen.', 'Nothing to translate.'));
+  const L = await limitSettings();
+  limit(req.user.id, L.burst);
+  const charged = await charge(req.user, L.costText, t('Eine Übersetzung', 'A translation'));
+  try {
+    if (demoMode) return res.json({ text: `[${to}] ${text}` });
+    const all = (await listModels()).filter((m) => m.caps.includes('text') && !m.paid && !m.busy);
+    const model = TRANSLATE_PREFERENCE.map((re) => all.find((m) => re.test(m.id))).find(Boolean) ?? (await helperModel());
+    if (!model) throw new HttpError(503, t('Gerade ist kein Modell frei.', 'No model is free right now.'));
+    const msg = await complete({
+      model: model.id,
+      messages: [
+        { role: 'system', content: `Du bist ein Dolmetscher. Übersetze die Nachricht von ${from || 'der erkannten Sprache'} nach ${to}. Natürlich und so, wie man es gesprochen sagen würde. Antworte NUR mit der Übersetzung – keine Erklärungen, keine Anführungszeichen.` },
+        { role: 'user', content: text },
+      ],
+    });
+    const out = String(msg.content ?? '').replace(/^["„“«»\s]+|["„“«»\s]+$/g, '').trim();
+    if (!out) throw new Error(t('Keine Übersetzung erhalten.', 'No translation received.'));
+    res.json({ text: out.slice(0, 4000) });
+  } catch (err) {
+    await refund(req.user, charged);
+    throw err instanceof HttpError ? err : new HttpError(502, err.message);
+  }
+}));
+
 // Alle eigenen Daten als Datei (Recht auf Auskunft/Datenübertragbarkeit, Art. 15 und 20 DSGVO)
 chat.get('/export', wrap(async (req, res) => {
   const uid = req.user.id;

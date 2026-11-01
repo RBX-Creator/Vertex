@@ -27,6 +27,10 @@ KI-Modelle kostenlos nutzen und vergleichen. Aktueller Stand:
 - **Erinnerungen** per Push-Benachrichtigung („Erinnere mich morgen um 8 …“) und **Anmelden mit Google** (mit `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`)
 - **Chats anheften und in Ordner sortieren** (⋯ an jedem Chat), **alle eigenen Daten herunterladen** (Einstellungen → Daten)
 - **Bilder bearbeiten** („Bearbeiten“ an erstellten Bildern oder eigenes Bild anhängen) und **Sprach-Modus** (wie ein Telefonat: zuhören → antworten → vorlesen)
+- **Webseiten veröffentlichen** (🌐 in der Vorschau → eigener Link `/w/…`, läuft abgeschottet mit `CSP sandbox`, im Admin-Bereich moderierbar)
+- **Agent X im Hintergrund**: Verbindung weg oder App zu → er arbeitet weiter und meldet sich per Benachrichtigung; „Stopp“ hält ihn wirklich an
+- **Live-Übersetzer** (Seitenleiste → Übersetzer): zwei Sprachen, sprechen oder tippen, Übersetzung wird vorgelesen
+- **Lange Chats** werden automatisch zusammengefasst statt abzubrechen
 - **Admin-Seite** (`/admin`, nur für `ADMIN_EMAILS`): Limits und Kosten einstellen, eigenes Limit pro Nutzer, Verbrauch zurücksetzen, API-Schlüssel verwalten, Nutzerzahlen, Fragen pro Tag, beliebte Modelle, Fehlerprotokoll, Nutzer sperren/entsperren, Bestenliste zurücksetzen (rückgängig machbar)
 - **Datenschutz** (`/datenschutz`) und **Impressum** (`/impressum`) mit Betreiber-Angaben aus `OWNER_NAME`, `OWNER_EMAIL`, `IMPRESSUM_ADDRESS`
 - **Bestenliste**: Elo-Wertung aus allen Battle-Stimmen, getrennt nach Alle/Text/Code/Websuche, mit Siegquote (Unentschieden und „beide schlecht“ zählen halb)

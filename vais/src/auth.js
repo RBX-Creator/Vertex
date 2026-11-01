@@ -290,6 +290,7 @@ auth.post('/delete', wrap(async (req, res) => {
   await run('DELETE FROM memories WHERE user_id = ?', me.id);
   await run('DELETE FROM push_subs WHERE user_id = ?', me.id).catch(() => {});
   await run('DELETE FROM reminders WHERE user_id = ?', me.id).catch(() => {});
+  await run('DELETE FROM sites WHERE user_id = ?', me.id).catch(() => {});
   await run('DELETE FROM codes WHERE email = ?', me.email);
   await run('DELETE FROM users WHERE id = ?', me.id);
   res.clearCookie(COOKIE, { path: '/' });
