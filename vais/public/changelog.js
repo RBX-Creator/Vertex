@@ -3,6 +3,13 @@ import { t } from './i18n.js';
 
 export const CHANGES = () => [
   {
+    id: 11, date: '2026-11-01',
+    items: [
+      ['🏗️', t('Webseiten wie vom Profi', 'Websites like a pro'), t('Agent X fragt erst nach, was du willst (Antworten zum Antippen), und baut die Seite dann Schritt für Schritt: Entwurf, Design-System, jeder Abschnitt einzeln, Prüfung. Größer, schöner – und ohne erfundene Fake-Inhalte.', 'Agent X first asks what you want (tap to answer), then builds the site step by step: draft, design system, each section on its own, check. Bigger, nicer – and without made-up fake content.')],
+      ['✏️', t('Gezielt ändern', 'Targeted changes'), t('Sag einfach, was anders sein soll – nur die betroffenen Teile werden neu geschrieben.', 'Just say what should change – only the affected parts are rewritten.')],
+    ],
+  },
+  {
     id: 10, date: '2026-11-01',
     items: [
       ['📽️', t('Präsentationen mit Agent X', 'Presentations with Agent X'), t('Sag „Mach mir eine Präsentation über …“ – Agent X recherchiert und baut schöne Folien. Wischen zum Blättern, 📝 für Sprechernotizen, mit 🌐 als Link teilen.', 'Say “Make me a presentation about …” – Agent X researches and builds beautiful slides. Swipe to flip, 📝 for speaker notes, share as a link with 🌐.')],

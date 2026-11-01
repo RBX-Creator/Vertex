@@ -1736,6 +1736,17 @@ a.site-open { display: flex; justify-content: center; text-decoration: none; box
 .plan-acts button { padding: 9px 14px; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); }
 .plan-acts .plan-go { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
 .plan-acts button:active { transform: scale(.97); }
+/* Rückfragen von Agent X */
+.q-card { margin: 10px 0; padding: 14px 16px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); display: grid; gap: 14px; }
+.q-card .plan-head { margin: 0; }
+.q-item { display: grid; gap: 8px; }
+.q-text { margin: 0; font-weight: 600; color: var(--heading); line-height: 1.4; }
+.q-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.q-chip { padding: 7px 12px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font: inherit; font-size: 14px; cursor: pointer; transition: background .15s, border-color .15s, transform .1s; }
+.q-chip:active { transform: scale(.96); }
+.q-chip[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+.q-input { width: 100%; box-sizing: border-box; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; font-size: 16px; }
+.q-input:focus { outline: none; border-color: var(--border-strong); box-shadow: 0 0 0 3px var(--focus, rgba(0,0,0,.08)); }
 
 /* ── Kamera-Menü am „+“ ───────────────────────────────────────────── */
 .attach-menu { position: fixed; z-index: 40; display: grid; gap: 2px; padding: 6px; min-width: 200px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 12px 30px rgba(0, 0, 0, .2); animation: pop .18s ease both; }

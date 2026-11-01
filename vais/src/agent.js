@@ -4,6 +4,7 @@
 import { lookup } from 'node:dns/promises';
 import net from 'node:net';
 import vm from 'node:vm';
+import { buildWebsite, editWebsite, assemble } from './sitebuilder.js';
 import { t, lang } from './i18n.js';
 import { listModels, complete, demoMode, sourcesFromText, makeSource } from './models.js';
 
@@ -157,9 +158,24 @@ const TOOLS = [
   {
     type: 'function',
     function: {
-      name: 'validate_html',
-      description: 'Prüft eine komplette Webseite (eine HTML-Datei mit eingebettetem CSS/JS), bevor du sie dem Nutzer gibst: Aufbau, nicht geschlossene Tags, JavaScript-Syntaxfehler, fehlende Angaben für Handys. Gibt eine Liste mit Problemen zurück oder „OK“.',
-      parameters: { type: 'object', properties: { html: { type: 'string', description: 'Der komplette HTML-Code der Seite' } }, required: ['html'] },
+      name: 'build_website',
+      description: 'Baut eine komplette, große und hochwertige Webseite, Web-App oder ein Browser-Spiel in mehreren Schritten (Entwurf → Design-System → jeder Abschnitt einzeln → Prüfung). Dauert 1–3 Minuten. Die fertige Seite wird automatisch an deine Antwort angehängt. Schreibe den HTML-Code NIE selbst.',
+      parameters: {
+        type: 'object',
+        properties: {
+          brief: { type: 'string', description: 'Sehr ausführlicher Auftrag: Zweck und Zielgruppe, ALLE echten Inhalte (Namen, Texte, Angebote, Termine, Fakten aus deiner Recherche, Links), gewünschte Abschnitte und was in jeden kommt, Stil/Stimmung/Farben, Funktionen und Interaktionen. Je mehr echte Details, desto besser. Nichts erfinden.' },
+          kind: { type: 'string', enum: ['website', 'app', 'game'], description: 'website = Informations-/Präsentationsseite, app = Werkzeug/Anwendung, game = Spiel' },
+        },
+        required: ['brief'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'edit_website',
+      description: 'Ändert die zuletzt gebaute Webseite aus diesem Gespräch gezielt (nur die betroffenen Abschnitte werden neu geschrieben). Die geänderte Seite wird automatisch angehängt.',
+      parameters: { type: 'object', properties: { change: { type: 'string', description: 'Genaue Beschreibung der gewünschten Änderungen (mit allen neuen Inhalten)' } }, required: ['change'] },
     },
   },
 ];
@@ -175,7 +191,7 @@ function systemPrompt(personal = {}) {
     'Nutze deine Werkzeuge, wann immer sie die Antwort besser machen: web_search für alles Aktuelle oder Unsichere (gerne 2–3 verschiedene Suchanfragen auf einmal), wikipedia für Grundwissen, read_webpage um Quellen oder Links zu lesen, calculate für jede Rechnung, current_datetime für Zeitfragen.',
     'Du kannst mehrere Werkzeuge in einem Schritt gleichzeitig aufrufen – mach das, wenn die Aufrufe unabhängig sind.',
     'Prüfe wichtige Fakten bei Bedarf mit einer zweiten Suche. Bevorzuge seriöse Quellen (offizielle Seiten, Wikipedia, bekannte Medien). Erfinde keine Fakten oder Links.',
-    'Wenn der Nutzer eine Webseite, App oder ein Spiel möchte: Schreibe EINE komplette HTML-Datei (<!doctype html>, <meta name="viewport">, CSS in <style>, JS in <script>, ohne externe Dateien außer bei Bedarf von cdnjs/jsdelivr), schön gestaltet und fürs Handy geeignet. Prüfe sie mit validate_html, behebe alle gemeldeten Probleme und prüfe erneut (schicke dabei immer die ganze, verbesserte Seite). Die zuletzt geprüfte Fassung wird automatisch an deine Antwort angehängt – schreibe sie am Ende NICHT noch einmal aus, sondern nur 1–3 Sätze, was du gebaut hast.',
+    'WEBSEITEN, APPS, SPIELE: (1) Fehlen wichtige Angaben (wofür genau, echte Inhalte wie Name/Texte/Angebote/Termine, gewünschte Bereiche, Stil/Farben, bei Apps/Spielen die Funktionen bzw. Regeln) und hat der Nutzer nicht „mach einfach“ o. ä. gesagt: Benutze KEINE Werkzeuge, sondern stelle 2–4 kurze Rückfragen in einem Block ```questions – eine Frage pro Zeile im Format „Frage? | Option | Option | Option“ (2–5 kurze, passende Antwortvorschläge; die App zeigt Knöpfe zum Antippen und ein Feld für eigene Antworten). Darüber höchstens ein kurzer Satz. (2) Bei Themen-Seiten (z. B. über ein Tier, einen Ort, eine Band) recherchiere zuerst echte Fakten mit den Werkzeugen. (3) Rufe dann build_website mit einem sehr ausführlichen Auftrag auf, der ALLE echten Inhalte enthält. Schreibe HTML NIE selbst. (4) Änderungswünsche an einer bestehenden Seite → edit_website. Erfinde nie Kundenstimmen, Preise, Kontaktdaten, Personen oder Zahlen. Nach dem Bauen: 2–4 Sätze, was die Seite kann, und eine Frage, was verbessert werden soll.',
     'Präsentationen: Möchte der Nutzer eine Präsentation, Folien, ein Referat oder einen Vortrag, baue KEINE HTML-Seite, sondern schreibe einen Block ```slides. Erste Zeile optional „theme: NAME“ (nacht, hell, ozean, sonne, wald oder bonbon – passend zum Thema). Dann die Folien in Markdown, getrennt durch eine Zeile mit nur ---. Folie 1 ist die Titelfolie: „# Titel“ und darunter eine Zeile Untertitel. Danach 6–12 Folien, je mit „## Überschrift“ und 3–5 kurzen, starken Stichpunkten (höchstens ca. 12 Wörter, **wichtige Wörter fett**, gern ein passendes Emoji), oder einem Zitat (> …) oder einer kleinen Tabelle. Bilder nur mit echten https-Adressen, die du in Quellen gefunden hast (z. B. upload.wikimedia.org), sonst keine. Unter eine Folie kannst du „Notiz: …“ schreiben – das sind Sprechernotizen (was man dazu sagen kann). Letzte Folie: Zusammenfassung oder Fazit. Recherchiere Fakten vorher mit den Werkzeugen. Kein HTML im Block. Unter dem Block nur 1–2 Sätze; die App zeigt die Präsentation mit „Präsentieren“ und „Veröffentlichen“ an.',
     'Diagramme: Wenn Zahlen als Diagramm helfen (Vergleiche, Entwicklungen, Anteile), füge einen Block ```chart mit JSON ein, z. B. {"type":"bar","title":"Einwohner (Mio.)","unit":"Mio.","labels":["Berlin","Hamburg"],"series":[{"name":"2024","data":[3.8,1.9]}]}. type ist bar, line (für Verläufe) oder pie (Anteile, nur eine Reihe). Höchstens 8 Reihen und 40 Werte. Die App zeichnet das Diagramm selbst.',
     'Python: Für Rechnungen, Statistik oder Simulationen kannst du Python-Code in einem ```python-Block schreiben – der Nutzer kann ihn mit „▶ Ausführen“ direkt im Browser laufen lassen (Pyodide; numpy, pandas, matplotlib gehen, kein Internet, keine Dateien). Gib Ergebnisse mit print() aus.',
@@ -187,7 +203,7 @@ function systemPrompt(personal = {}) {
       personal.memories?.length ? `Was du über den Nutzer weißt:\n${personal.memories.map((m) => `- ${m.text}`).join('\n')}\nNutze das natürlich, ohne es ständig zu erwähnen.` : 'Du weißt noch nichts über den Nutzer.',
     ] : []),
     ...(personal.planFirst ? [
-      'PLAN ZUERST: Bei GROSSEN Aufgaben (eine Webseite/App/ein Spiel bauen, eine Recherche mit mehreren Teilen, ein langer Text) und wenn im Gespräch noch KEIN Plan von dir bestätigt wurde: Benutze KEINE Werkzeuge. Antworte nur mit einem kurzen Plan in einem Block ```plan (3–7 nummerierte Schritte, je eine kurze Zeile) und darunter genau einer Frage, ob du so loslegen sollst. Bei kleinen Fragen antwortest du direkt ohne Plan. Hat der Nutzer den Plan bestätigt oder geändert, führst du ihn sofort aus.',
+      'PLAN ZUERST: Bei GROSSEN Aufgaben (eine Webseite/App/ein Spiel bauen, eine Recherche mit mehreren Teilen, ein langer Text) und wenn im Gespräch noch KEIN Plan von dir bestätigt wurde: Benutze KEINE Werkzeuge. Antworte nur mit einem kurzen Plan in einem Block ```plan (3–7 nummerierte Schritte, je eine kurze Zeile) und darunter genau einer Frage, ob du so loslegen sollst. Bei Webseiten/Apps/Spielen stellst du stattdessen die Rückfragen (```questions); die Antworten gelten als Bestätigung – danach sofort bauen. Bei kleinen Fragen antwortest du direkt ohne Plan. Hat der Nutzer den Plan bestätigt oder geändert, führst du ihn sofort aus.',
     ] : []),
     ...(personal.summary ? [`Zusammenfassung des bisherigen Gesprächs (ältere Nachrichten werden nicht mehr mitgeschickt):\n${personal.summary}`] : []),
     ...(personal.instructions ? [`So möchte der Nutzer, dass du antwortest (aus seinen Einstellungen):\n"""\n${personal.instructions}\n"""`] : []),
@@ -508,6 +524,24 @@ function runTool(name, args, signal, addSources, ctx) {
       ctx.lastHtml = html;
       return { steps: [{ kind: 'check', text: t('Webseite', 'Website') }], run: async () => validateHtml(html) };
     }
+    case 'build_website': return {
+      steps: [],
+      run: async () => {
+        const out = await buildWebsite({ brief: String(args.brief ?? ctx.question), kind: args.kind, signal, onStep: ctx.onStep, validate: validateHtml });
+        ctx.lastHtml = out.html;
+        return out.report;
+      },
+    };
+    case 'edit_website': return {
+      steps: [],
+      run: async () => {
+        const page = ctx.lastHtml || ctx.pageHtml;
+        if (!page) return 'In diesem Gespräch gibt es noch keine Webseite. Baue zuerst eine mit build_website.';
+        const out = await editWebsite({ html: page, change: String(args.change ?? ctx.question), signal, onStep: ctx.onStep, validate: validateHtml });
+        ctx.lastHtml = out.html;
+        return out.report;
+      },
+    };
     default: return { steps: [{ kind: 'other', text: String(name) }], run: async () => `Unbekanntes Werkzeug: ${name}` };
   }
 }
@@ -662,7 +696,19 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   const addSources = sourceCleaner(onSources);
   const seeing = compactHistory(await describeImages(messages, signal, onStep));
   const last = seeing.at(-1)?.content;
-  const ctx = { question: typeof last === 'string' ? last : '', lastHtml: '', remember: personal.memoryOn ? onRemember : null, reminder: onReminder };
+  const ctx = { question: typeof last === 'string' ? last : '', lastHtml: '', pageHtml: '', onStep, remember: personal.memoryOn ? onRemember : null, reminder: onReminder };
+  // Die neueste Webseite aus dem Verlauf merken und im Gespräch nur kurz erwähnen (spart sehr viele Tokens);
+  // geändert wird sie mit edit_website direkt auf dem Server
+  for (let i = seeing.length - 1; i >= 0; i--) {
+    const m = seeing[i];
+    if (m.role !== 'assistant' || typeof m.content !== 'string') continue;
+    const code = [...m.content.matchAll(/```html?\b[^\n]*\n([\s\S]*?)```/gi)].map((x) => x[1]).filter((c) => /<\/html>/i.test(c)).at(-1);
+    if (!code) continue;
+    ctx.pageHtml = code.trim();
+    const parts = [...code.matchAll(/<!--vx:([\w-]+)-->/g)].map((x) => x[1]);
+    seeing[i] = { ...m, content: m.content.replace(HTML_FENCE, `[Aktuelle Webseite, ${lines(code)} Zeilen${parts.length ? `, Abschnitte: ${parts.join(', ')}` : ''} – zum Ändern edit_website benutzen]`) };
+    break;
+  }
   const convo = [{ role: 'system', content: systemPrompt(personal) }, ...seeing];
   const agentTools = [...TOOLS, ...(personal.memoryOn && onRemember ? [REMEMBER_TOOL] : []), ...(onReminder ? [REMINDER_TOOL] : [])];
 
@@ -752,7 +798,7 @@ async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onR
   const q = Array.isArray(lastMsg) ? lastMsg.filter((p) => p.type === 'text').map((p) => p.text).join(' ') : String(lastMsg);
   const pics = Array.isArray(lastMsg) ? lastMsg.filter((p) => p.type === 'image_url').length : 0;
   const planned = messages.some((m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('```plan'));
-  const site = /webseite|website|seite|app|spiel|game|html/i.test(q) || (planned && /leg los|go ahead|\bja\b|\byes\b/i.test(q));
+  const site = /webseite|website|seite|app|spiel|game|html/i.test(q) || (planned && /leg los|go ahead|\bja\b|\byes\b/i.test(q)) || messages.some((m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('```questions'));
   const rem = q.match(/erinnere mich in (\d+) minuten? an (.+)/i);
   if (rem && reminder) {
     onStep({ kind: 'reminder', text: rem[2] });
@@ -773,18 +819,27 @@ async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onR
     onReact('🔥');
     return emitText('**Agent X (Demo)** – hier ist deine Präsentation:\n\n```slides\ntheme: ozean\n# Der Mond 🌙\nUnser nächster Nachbar im All\n---\n## Steckbrief\n- 🌍 **384.400 km** von der Erde entfernt\n- 📏 Durchmesser: **3.474 km**\n- 🕐 Umlauf: **27,3 Tage**\nNotiz: Vergleich – die Erde ist fast viermal so groß.\n---\n## Warum hat er Phasen?\n- ☀️ Die Sonne beleuchtet **immer eine Hälfte**\n- 🔄 Wir sehen je nach Stellung mehr oder weniger davon\n- 🌑 Neumond → 🌕 Vollmond in ca. **15 Tagen**\n---\n## Fazit\n> Ohne den Mond gäbe es kaum Ebbe und Flut.\n- Er stabilisiert die **Erdachse**\n- Bisher waren **12 Menschen** dort\n```\n\nTippe auf **Präsentieren**, um die Folien zu zeigen.', onText, signal, 8, 6);
   }
-  if (site && planFirst && !planned) {
+  const said = (re) => messages.some((m) => m.role === 'user' && re.test(Array.isArray(m.content) ? m.content.map((p) => p.text ?? '').join(' ') : String(m.content)));
+  const asked = messages.some((m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('```questions'));
+  if (site && !asked && !said(/meine antworten|my answers|mach einfach|just do it/i)) {
     await sleep(300);
-    return emitText('Gute Idee! So würde ich vorgehen:\n\n```plan\n1. Aufbau und Farben festlegen\n2. Startbereich mit großer Überschrift\n3. Zähler-Knopf mit Animation\n4. Fürs Handy anpassen\n5. Seite prüfen und verbessern\n```\n\nSoll ich so loslegen?', onText, signal, 6, 8);
+    return emitText('Gern! Damit die Seite richtig gut wird und nur echte Inhalte drauf sind, kurz ein paar Fragen:\n\n```questions\nWofür ist die Webseite? | Mein Verein | Mein Portfolio | Ein Produkt | Eine Veranstaltung\nWelcher Stil gefällt dir? | Modern & dunkel | Hell & freundlich | Bunt & verspielt\nWelche Bereiche soll sie haben? | Über uns | Galerie | Termine | Kontakt\nWie heißt dein Projekt?\n```', onText, signal, 6, 8);
   }
-  await emitText(`Der Nutzer möchte: „${q.slice(0, 80)}“. ${site ? 'Ich baue eine Webseite, prüfe sie und verbessere sie.' : 'Ich suche parallel, schlage in Wikipedia nach, lese eine Quelle und rechne nach.'}`, onReasoning, signal, 2, 40);
+  await emitText(`Der Nutzer möchte: „${q.slice(0, 80)}“. ${site ? 'Ich baue die Seite Schritt für Schritt: Entwurf, Design-System, Abschnitte, Prüfung.' : 'Ich suche parallel, schlage in Wikipedia nach, lese eine Quelle und rechne nach.'}`, onReasoning, signal, 2, 40);
   if (pics) { await sleep(400); onStep({ kind: 'look', text: pics === 1 ? '1 Bild' : `${pics} Bilder` }); }
   if (site) {
-    await sleep(500); onStep({ kind: 'check', text: 'Webseite' });
-    await sleep(500); onStep({ kind: 'check', text: 'Webseite' });
-    const page = '<!doctype html>\n<html lang="de">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>Demo</title>\n<style>body{font-family:system-ui;display:grid;place-items:center;min-height:100vh;margin:0;background:#f6f5f1}button{font-size:20px;padding:12px 20px;border-radius:12px;border:0;background:#1f1e1c;color:#fff}</style>\n</head>\n<body>\n<button id="b">Klick mich: 0</button>\n<script>let n=0;b.onclick=()=>{b.textContent=`Klick mich: ${++n}`;};</script>\n</body>\n</html>';
+    onStep({ kind: 'draft', text: 'Aufbau, Farben und Schriften' });
+    await sleep(300); onStep({ kind: 'draft', text: '3 Abschnitte: nav, zaehler, footer' });
+    for (const id of ['nav', 'zaehler', 'footer']) { await sleep(250); onStep({ kind: 'section', text: `Abschnitt „${id}“` }); }
+    await sleep(300); onStep({ kind: 'check', text: 'Webseite prüfen' });
+    const spec = { kind: 'website', title: 'Demo', lang: 'de', style: 'schlicht', palette: { bg: '#f6f5f1', surface: '#ffffff', surface2: '#efede7', text: '#1f1e1c', muted: '#6b6860', primary: '#1f1e1c', primaryContrast: '#ffffff', accent: '#d9572b', border: '#e2dfd7' }, fonts: { heading: 'Inter', body: 'Inter' }, radius: '12px', sections: [{ id: 'nav', goal: 'Kopfzeile' }, { id: 'zaehler', goal: 'Zähler' }, { id: 'footer', goal: 'Fußzeile' }] };
+    const page = assemble(spec, { css: 'body{margin:0;font-family:var(--font-body);background:var(--bg);color:var(--text)}.container{max-width:var(--max);margin:auto;padding:0 var(--space)}.btn{font-size:20px;padding:12px 20px;border-radius:var(--radius);border:0;background:var(--primary);color:var(--primary-contrast)}', js: "document.querySelectorAll('[data-year]').forEach((n)=>{n.textContent=new Date().getFullYear()});" }, {
+      nav: { html: '<header id="nav"><div class="container"><b>Demo</b></div></header>', css: '#nav{padding:16px 0}', js: '' },
+      zaehler: { html: '<section id="zaehler" class="vx-section"><div class="container" style="display:grid;place-items:center;min-height:60vh"><button id="b" class="btn">Klick mich: 0</button></div></section>', css: '', js: "(() => { const root = document.getElementById('zaehler'); if (!root) return; let n = 0; const b = root.querySelector('#b'); b.onclick = () => { b.textContent = `Klick mich: ${++n}`; }; })();" },
+      footer: { html: '<footer id="footer"><div class="container">© <span data-year></span></div></footer>', css: '#footer{padding:24px 0;color:var(--muted)}', js: '' },
+    });
     onReact('🔥');
-    return emitText(`**Agent X (Demo)** – ich habe die Seite gebaut und mit \`validate_html\` geprüft.\n\n\`\`\`html\n${page}\n\`\`\``, onText, signal, 6, 8);
+    return emitText(`**Agent X (Demo)** – ich habe die Seite in mehreren Schritten gebaut und geprüft: Kopfzeile, Zähler und Fußzeile.\n\n\`\`\`html\n${page}\n\`\`\``, onText, signal, 6, 8);
   }
   if (/diagramm|chart|python|statistik/i.test(q)) {
     await sleep(300);

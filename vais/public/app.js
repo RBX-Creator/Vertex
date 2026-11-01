@@ -63,6 +63,8 @@ Object.assign(ICON, {
   's-memory': svg('<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/>'),
   's-wiki': svg('<path d="M3 6.5 7.5 18 12 8l4.5 10L21 6.5"/>'),
   's-check': svg('<path d="m9 12 2 2 4-4"/><path d="M4 5h16v12H4zM9 21h6"/>'),
+  's-draft': svg('<path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.9 1.5-2-.4-1.4.5-2.5 2-2.5H18a3 3 0 0 0 3-3c0-5.3-4-10.5-9-10.5z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/>'),
+  's-section': svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 13h4M8 16h8"/>'),
   's-look': svg('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
   'm-video': svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="m10 9 5 3-5 3z"/>'),
   'm-image': svg('<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><circle cx="15.5" cy="8.5" r="1.8"/><path d="m3.5 17 5-5 5 5 2-2 5 5"/>'),
@@ -822,8 +824,8 @@ function renderSources(card, a) {
 }
 
 // Arbeitsschritte von Agent X über der Antwort anzeigen
-const STEP_EN = { inbox: 'Your addition', edit: 'Editing', reminder: 'Reminder', video: 'Watching', memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' };
-const STEP_DE = { inbox: 'Nachtrag', edit: 'Bearbeitet', reminder: 'Erinnerung', video: 'Schaut Video', memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
+const STEP_EN = { draft: 'Designing', section: 'Building', inbox: 'Your addition', edit: 'Editing', reminder: 'Reminder', video: 'Watching', memory: 'Remembering', search: 'Searching', wiki: 'Wikipedia', read: 'Reading', calc: 'Calculating', time: 'Checking', check: 'Testing', look: 'Looking at', error: 'Problem', other: 'Using' };
+const STEP_DE = { draft: 'Entwirft', section: 'Baut', inbox: 'Nachtrag', edit: 'Bearbeitet', reminder: 'Erinnerung', video: 'Schaut Video', memory: 'Merkt sich', search: 'Sucht', wiki: 'Wikipedia', read: 'Liest', calc: 'Rechnet', time: 'Prüft', check: 'Testet', look: 'Sieht an', error: 'Problem', other: 'Nutzt' };
 const STEP_LABEL = Object.fromEntries(Object.keys(STEP_EN).map((k) => [k, t(STEP_DE[k], STEP_EN[k])]));
 function renderSteps(card, a) {
   let box = $('.agent-steps', card);
@@ -1191,6 +1193,39 @@ el.thread.addEventListener('click', (e) => {
     el.prompt.focus();
     el.prompt.setSelectionRange(el.prompt.value.length, el.prompt.value.length);
   }
+});
+
+// Rückfragen von Agent X beantworten (Knöpfe antippen, eigenes Feld, dann senden)
+el.thread.addEventListener('click', (e) => {
+  const chip = e.target.closest('.q-chip');
+  if (chip) { chip.setAttribute('aria-pressed', String(chip.getAttribute('aria-pressed') !== 'true')); haptic('tap'); return; }
+  const btn = e.target.closest('[data-q-send], [data-q-skip]');
+  if (!btn) return;
+  const card = btn.closest('.q-card');
+  const turnNode = btn.closest('.turn');
+  if (!state.chat || Number(turnNode?.dataset.index) !== state.chat.turns.length - 1) return toast(t('Das sind ältere Fragen.', 'Those are older questions.'));
+  if (busy()) return;
+  if (btn.hasAttribute('data-q-skip')) {
+    el.prompt.value = t('Mach einfach – entscheide selbst sinnvoll, aber erfinde keine Fakten oder Kontaktdaten.', 'Just do it – decide sensibly yourself, but do not invent facts or contact details.');
+    return send();
+  }
+  const lines = [...card.querySelectorAll('.q-item')].map((item) => {
+    const picked = [...item.querySelectorAll('.q-chip[aria-pressed="true"]')].map((c) => c.textContent);
+    const own = item.querySelector('.q-input')?.value.trim();
+    const answer = [...picked, ...(own ? [own] : [])].join(', ');
+    return answer ? `- ${item.dataset.q} → ${answer}` : null;
+  }).filter(Boolean);
+  if (!lines.length) return toast(t('Tippe mindestens eine Antwort an oder schreib etwas.', 'Pick at least one answer or type something.'));
+  el.prompt.value = `${t('Meine Antworten:', 'My answers:')}\n${lines.join('\n')}`;
+  send();
+});
+// Enter im Antwortfeld = zum nächsten Feld bzw. senden
+el.thread.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || !e.target.classList?.contains('q-input')) return;
+  e.preventDefault();
+  const inputs = [...e.target.closest('.q-card').querySelectorAll('.q-input')];
+  const next = inputs[inputs.indexOf(e.target) + 1];
+  if (next) next.focus(); else e.target.closest('.q-card').querySelector('[data-q-send]').click();
 });
 
 // Erstelltes Bild bearbeiten: als Anhang für die nächste Nachricht übernehmen

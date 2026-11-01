@@ -89,6 +89,42 @@ export function enhance(root) {
       pre.replaceWith(card);
       return;
     }
+    if (lang === 'questions') {
+      // Rückfragen von Agent X: Antworten zum Antippen + eigenes Feld, unten „Antworten senden“
+      const qs = code.textContent.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 6).map((line) => {
+        const [q, ...opts] = line.split('|').map((x) => x.trim());
+        return { q: q.replace(/^\s*(\d+[.)]|[-*•])\s*/, ''), opts: opts.filter((o) => o && !/^[_….]+$/.test(o)).slice(0, 6) };
+      }).filter((x) => x.q);
+      const card = document.createElement('div');
+      card.className = 'q-card';
+      const head = document.createElement('p');
+      head.className = 'plan-head';
+      head.textContent = t('Kurz ein paar Fragen', 'A few quick questions');
+      card.append(head);
+      qs.forEach((item, i) => {
+        const box = document.createElement('div');
+        box.className = 'q-item';
+        box.dataset.q = item.q;
+        box.append(Object.assign(document.createElement('p'), { className: 'q-text', textContent: item.q }));
+        if (item.opts.length) {
+          const chips = document.createElement('div');
+          chips.className = 'q-chips';
+          for (const o of item.opts) chips.append(Object.assign(document.createElement('button'), { type: 'button', className: 'q-chip', textContent: o, ariaPressed: 'false' }));
+          box.append(chips);
+        }
+        const input = Object.assign(document.createElement('input'), { className: 'q-input', type: 'text', maxLength: 300, placeholder: item.opts.length ? t('Oder eigene Antwort …', 'Or your own answer …') : t('Deine Antwort …', 'Your answer …') });
+        input.setAttribute('aria-label', item.q);
+        input.id = `q-${Math.random().toString(36).slice(2, 8)}-${i}`;
+        box.append(input);
+        card.append(box);
+      });
+      const acts = document.createElement('div');
+      acts.className = 'plan-acts';
+      acts.innerHTML = `<button type="button" class="plan-go" data-q-send>${t('Antworten senden', 'Send answers')}</button><button type="button" class="plan-edit" data-q-skip>${t('Mach einfach', 'Just do it')}</button>`;
+      card.append(acts);
+      pre.replaceWith(card);
+      return;
+    }
     if (lang === 'chart') {
       // Diagramm statt Code (solange das JSON noch unvollständig ist: Platzhalter)
       let spec = null;

@@ -230,8 +230,9 @@ test('Webseiten veröffentlichen – abgeschottet vom Rest', async () => {
   const c = await signUp('site@example.com');
   const start = await c.json('/api/chat/start', { mode: 'agent', modality: 'auto', title: 'Seite' });
   const plan = await stream(c, start.data.id, 'Bau mir eine Webseite mit Zähler');
-  assert.match(plan.text, /```plan/); // Agent X zeigt erst einen Plan
-  const res = await c.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 1, messages: [{ role: 'user', content: 'Bau mir eine Webseite mit Zähler' }, { role: 'assistant', content: plan.text }, { role: 'user', content: 'Ja, leg los!' }], display: { text: 'Ja, leg los!' } });
+  assert.match(plan.text, /```questions/); // Agent X stellt erst Rückfragen
+  const answers = 'Meine Antworten:\n- Wofür ist die Webseite? → Ein Produkt';
+  const res = await c.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 1, messages: [{ role: 'user', content: 'Bau mir eine Webseite mit Zähler' }, { role: 'assistant', content: plan.text }, { role: 'user', content: answers }], display: { text: answers } });
   await res.text();
   const pub = await c.json('/api/chat/sites/publish', { chatId: start.data.id, turn: 1, side: 0 });
   assert.equal(pub.status, 200, JSON.stringify(pub.data));
@@ -243,7 +244,8 @@ test('Webseiten veröffentlichen – abgeschottet vom Rest', async () => {
   assert.equal(page.headers.get('x-frame-options'), null);
   const html = await page.text();
   assert.match(html, /Erstellt mit VAIs/);
-  assert.match(html, /<button id="b">/);
+  assert.match(html, /<button id="b"/);
+  assert.match(html, /<!--vx:zaehler-->/); // Baukasten-Markierungen für spätere Änderungen
   // fremde Nutzer können sie nicht offline nehmen
   const other = await signUp('other-site@example.com');
   await other.json('/api/chat/sites/unpublish', { id: pub.data.id });

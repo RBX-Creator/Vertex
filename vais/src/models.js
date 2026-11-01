@@ -666,7 +666,7 @@ function demoImage(name, text) {
 }
 
 // Eine Antwort ohne Streaming, optional mit Werkzeugen (für Agent X)
-export async function complete({ model, messages, tools, signal, maxTokens }) {
+export async function complete({ model, messages, tools, signal, maxTokens, reasoningEffort, timeoutMs = 90_000 }) {
   const [provider, ...rest] = model.split(':');
   let upstream = rest.join(':');
   const search = upstream.endsWith(SEARCH_SUFFIX);
@@ -676,7 +676,7 @@ export async function complete({ model, messages, tools, signal, maxTokens }) {
   const allTools = [...(tools ?? []), ...(search ? [{ type: 'browser_search' }] : [])];
   const res = await withKeys(provider, model, (key) => fetch(`${p.base}/chat/completions`, {
     method: 'POST',
-    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(90_000)]) : AbortSignal.timeout(90_000),
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
     headers: {
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
@@ -687,6 +687,8 @@ export async function complete({ model, messages, tools, signal, maxTokens }) {
       messages,
       ...(maxTokens ? { max_tokens: maxTokens } : tokenLimit(provider, upstream)),
       ...(allTools.length ? { tools: allTools, tool_choice: 'auto' } : {}),
+      // gpt-oss: wie viel das Modell vorher nachdenkt (Denken kostet Ausgabe-Tokens)
+      ...(reasoningEffort && /gpt-oss/.test(upstream) && ['groq', 'cerebras', 'openrouter'].includes(provider) ? { reasoning_effort: reasoningEffort } : {}),
     }),
   }));
   if (!res.ok) {
@@ -696,6 +698,7 @@ export async function complete({ model, messages, tools, signal, maxTokens }) {
   }
   const json = await res.json();
   const message = json.choices?.[0]?.message ?? { content: '' };
+  message.finish = json.choices?.[0]?.finish_reason ?? null; // 'length' = abgeschnitten
   message.sources = sourcesFromData({ m: { ...message, content: undefined }, citations: json.citations });
   return message;
 }
