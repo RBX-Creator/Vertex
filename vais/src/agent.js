@@ -10,6 +10,7 @@ const MAX_STEPS = 8;
 const AGENT_PREFERENCE = [
   /^groq:openai\/gpt-oss-120b$/,
   /^cerebras:gpt-oss-120b$/,
+  /^github:openai\/gpt-4\.1$/,
   /^groq:moonshotai\/kimi-k2/,
   /^groq:.*llama-3\.3-70b/,
   /^groq:openai\/gpt-oss-20b$/,

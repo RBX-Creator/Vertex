@@ -14,6 +14,7 @@ const PROVIDERS = {
   openrouter: { key: process.env.OPENROUTER_API_KEY?.trim(), base: 'https://openrouter.ai/api/v1', label: 'OpenRouter', env: 'OPENROUTER_API_KEY' },
   gemini: { key: process.env.GEMINI_API_KEY?.trim(), base: 'https://generativelanguage.googleapis.com/v1beta/openai', label: 'Google AI Studio', env: 'GEMINI_API_KEY' },
   groq: { key: process.env.GROQ_API_KEY?.trim(), base: 'https://api.groq.com/openai/v1', label: 'Groq', env: 'GROQ_API_KEY' },
+  github: { key: process.env.GITHUB_MODELS_TOKEN?.trim(), base: 'https://models.github.ai/inference', label: 'GitHub Models', env: 'GITHUB_MODELS_TOKEN' },
   cerebras: { key: process.env.CEREBRAS_API_KEY?.trim(), base: 'https://api.cerebras.ai/v1', label: 'Cerebras', env: 'CEREBRAS_API_KEY' },
   mistral: { key: process.env.MISTRAL_API_KEY?.trim(), base: 'https://api.mistral.ai/v1', label: 'Mistral', env: 'MISTRAL_API_KEY' },
 };
@@ -35,6 +36,9 @@ const MAKERS = {
   qwen: ['Qwen', 'qwen-color'],
   alibaba: ['Qwen', 'qwen-color'],
   mistralai: ['Mistral', 'mistral-color'],
+  'mistral-ai': ['Mistral', 'mistral-color'],
+  xai: ['xAI', 'grok'],
+  'ai21-labs': ['AI21', 'ai21-brand-color'],
   nvidia: ['NVIDIA', 'nvidia-color'],
   'z-ai': ['Z.ai', 'zhipu'],
   thudm: ['Z.ai', 'zhipu'],
@@ -78,7 +82,7 @@ function maker(upstreamId, fallbackName) {
 }
 
 // Welche Modelle tauchen zusätzlich unter „Code“ auf (Text können alle)?
-const CODE_RE = /(code|coder|devstral|codestral|gpt-oss|gpt-[5-9]|claude|qwen3|kimi|glm|deepseek|gemini-[\d.]+-(pro|flash)|north|minimax|nemotron.*(super|ultra)|inkling|gemma-4-31b|llama-4|grok)/i;
+const CODE_RE = /(code|coder|gpt-4\.1|gpt-4o(?!-mini)|devstral|codestral|gpt-oss|gpt-[5-9]|claude|qwen3|kimi|glm|deepseek|gemini-[\d.]+-(pro|flash)|north|minimax|nemotron.*(super|ultra)|inkling|gemma-4-31b|llama-4|grok)/i;
 
 function makeModel(provider, upstream, name, fallbackMaker, extraCaps = []) {
   const m = maker(upstream, fallbackMaker);
@@ -87,6 +91,14 @@ function makeModel(provider, upstream, name, fallbackMaker, extraCaps = []) {
 }
 
 // ── Modell-Listen der Anbieter ────────────────────────────────────
+const githubHeaders = (key) => ({ Authorization: `Bearer ${key}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' });
+
+// Grenzen je Anbieter (GitHub Models: max. ~4000 Antwort-Tokens; o-/gpt-5-Modelle wollen max_completion_tokens)
+function tokenLimit(provider, upstream) {
+  if (provider !== 'github') return { max_tokens: MAX_OUTPUT_TOKENS };
+  return /(\/o\d|gpt-5)/i.test(upstream) ? { max_completion_tokens: 4000 } : { max_tokens: 4000 };
+}
+
 async function getJson(url, headers = {}) {
   const res = await fetch(url, { headers, signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -111,6 +123,16 @@ const LISTERS = {
       .filter((id) => /^(gemini-(2\.5|[3-9])|gemma-[3-9])/.test(id))
       .filter((id) => !/(embedding|tts|image|live|audio|aqa|imagen|veo|robotics|computer-use|learnlm|-latest$|-\d{3}$)/i.test(id))
       .map((id) => makeModel('gemini', id, id, 'Google'));
+  },
+
+  async github(p) {
+    const raw = await getJson('https://models.github.ai/catalog/models', githubHeaders(p.key));
+    const list = Array.isArray(raw) ? raw : raw.data ?? raw.models ?? [];
+    return list
+      .filter((m) => (m.supported_output_modalities ?? ['text']).includes('text'))
+      .filter((m) => !(m.supported_output_modalities ?? []).includes('embeddings'))
+      .filter((m) => !/(embed|whisper|tts|\/o1(-|$))/i.test(m.id))
+      .map((m) => makeModel('github', m.id, m.id.split('/').pop().toLowerCase(), m.publisher));
   },
 
   async cerebras(p) {
@@ -153,7 +175,7 @@ const DEMO_MODELS = [
   { id: 'demo:fjord', provider: 'demo', upstream: 'fjord', name: 'fjord-search-demo', maker: 'VAIs Demo', icon: null, caps: ['web'] },
 ];
 
-const ORDER = { gemini: 0, groq: 1, cerebras: 2, mistral: 3, openrouter: 4 };
+const ORDER = { gemini: 0, github: 1, groq: 2, cerebras: 3, mistral: 4, openrouter: 5 };
 const cache = {}; // provider → { at, list }
 
 export async function listModels() {
@@ -295,6 +317,7 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
     headers['HTTP-Referer'] = process.env.APP_URL || 'https://vais.onrender.com';
     headers['X-Title'] = 'VAIs';
   }
+  if (provider === 'github') headers['X-GitHub-Api-Version'] = '2022-11-28';
   const res = await fetch(`${p.base}/chat/completions`, {
     method: 'POST',
     signal,
@@ -303,7 +326,7 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
       model: upstream,
       messages,
       stream: true,
-      max_tokens: MAX_OUTPUT_TOKENS,
+      ...tokenLimit(provider, upstream),
       ...(search ? { tools: [{ type: 'browser_search' }], tool_choice: 'auto' } : {}),
     }),
   });
@@ -351,6 +374,7 @@ export async function complete({ model, messages, tools, signal }) {
   if (!p?.key) throw new Error('Dieses Modell ist gerade nicht verfügbar.');
   const headers = { Authorization: `Bearer ${p.key}`, 'Content-Type': 'application/json' };
   if (provider === 'openrouter') { headers['HTTP-Referer'] = process.env.APP_URL || 'https://vais.onrender.com'; headers['X-Title'] = 'VAIs'; }
+  if (provider === 'github') headers['X-GitHub-Api-Version'] = '2022-11-28';
   const allTools = [...(tools ?? []), ...(search ? [{ type: 'browser_search' }] : [])];
   const res = await fetch(`${p.base}/chat/completions`, {
     method: 'POST',
@@ -359,7 +383,7 @@ export async function complete({ model, messages, tools, signal }) {
     body: JSON.stringify({
       model: upstream,
       messages,
-      max_tokens: MAX_OUTPUT_TOKENS,
+      ...tokenLimit(provider, upstream),
       ...(allTools.length ? { tools: allTools, tool_choice: 'auto' } : {}),
     }),
   });
@@ -378,6 +402,7 @@ function friendlyError(status, message = '', p) {
   if (status === 429 && isDailyLimit(message)) return `Das kostenlose Tageslimit von ${p.label} ist für heute aufgebraucht. Wähle ein Modell von einem anderen Anbieter.`;
   if (status === 429) return 'Dieses Modell ist gerade ausgelastet. Versuche es gleich noch einmal oder wähle ein anderes Modell.';
   if (status === 401 || status === 403 || /api key/i.test(message)) return `Der Schlüssel für ${p.label} wurde abgelehnt. Bitte ${p.env} prüfen.`;
+  if (status === 413 || /too large|tokens_limit_reached|max.*tokens/i.test(message)) return 'Der Chat ist zu lang für dieses Modell. Starte einen neuen Chat oder wähle ein anderes Modell.';
   if (status === 404) return 'Dieses Modell ist nicht mehr verfügbar. Bitte wähle ein anderes.';
   if (status === 400 && /context|token/i.test(message)) return 'Der Chat ist zu lang für dieses Modell. Starte einen neuen Chat.';
   return `Das Modell konnte nicht antworten${message ? `: ${message}` : '.'}`;
