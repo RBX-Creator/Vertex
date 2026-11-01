@@ -177,7 +177,7 @@ async function post(url, body) {
   const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (res.status === 401) location.replace('/login');
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || t('Etwas ist schiefgelaufen.', 'Something went wrong.'));
+  if (!res.ok) throw Object.assign(new Error(data.error || t('Etwas ist schiefgelaufen.', 'Something went wrong.')), { data, status: res.status });
   return data;
 }
 
@@ -960,6 +960,7 @@ async function send() {
       const data = await post('/api/chat/start', body);
       state.chat = { id: data.id, mode: state.mode, modality: state.modality, labels: data.models, names: null, winner: null, turns: [], incognito: state.incognito };
     } catch (err) {
+      if (err.data?.chatLimit) return openChatLimit(err.data.chatLimit);
       return toast(err.message);
     } finally {
       el.send.disabled = false;
@@ -1904,6 +1905,9 @@ async function trTranslate(text, fromCode, toCode, side) {
   item.innerHTML = '<p class="tr-orig"></p><p class="tr-out"><span class="gen-dots"></span></p>';
   item.querySelector('.tr-orig').textContent = `${trLang(fromCode)[2]} ${text}`;
   $('#tr-log').append(item);
+  // Nur die letzten 6 Übersetzungen behalten
+  const all = $('#tr-log').querySelectorAll('.tr-item');
+  for (let k = 0; k < all.length - 6; k++) all[k].remove();
   item.scrollIntoView({ behavior: 'smooth', block: 'end' });
   tr.busy = true;
   try {
@@ -2474,6 +2478,48 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden && state.chat && state.chat.turns.some((tn) => tn.answers.some((a) => a.background))) watchBackground(state.chat.id);
 });
 
+// ── Chat-Limit: höchstens N gespeicherte Chats – einen löschen, dann geht es weiter ──
+let maxChats = 0;
+async function openChatLimit(max) {
+  const sheet = $('#limit-sheet');
+  $('#limit-text').textContent = t(`Du kannst höchstens ${max} Chats speichern. Lösche einen – danach startet dein neuer Chat sofort. (Tipp: 🕶️ Inkognito-Chats zählen nicht.)`, `You can save at most ${max} chats. Delete one – your new chat starts right after. (Tip: 🕶️ incognito chats don’t count.)`);
+  sheet.hidden = false;
+  await paintLimitList();
+}
+async function paintLimitList() {
+  const list = $('#limit-list');
+  try {
+    const res = await fetch('/api/chat/list');
+    const data = await res.json();
+    historyItems = data.chats ?? [];
+    maxChats = data.maxChats ?? 0;
+    historyDirty = false;
+  } catch { /* egal */ }
+  const items = [...historyItems].sort((a, b) => a.updated - b.updated); // älteste zuerst
+  list.innerHTML = items.map((c) => `<li><span class="lim-icon">${c.pinned ? ICON.pin : ICON[c.mode] ?? ''}</span><span class="lim-text"><b></b><small>${new Date(c.updated).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}${c.folder ? ` · ${escapeHtml(c.folder)}` : ''}</small></span><button type="button" class="mem-del" data-lim-del="${escapeHtml(c.id)}" aria-label="${t('Löschen', 'Delete')}" title="${t('Löschen', 'Delete')}">×</button></li>`).join('');
+  list.querySelectorAll('.lim-text b').forEach((b, i) => { b.textContent = items[i].title; });
+  $('#limit-oldest').hidden = !items.some((c) => !c.pinned);
+}
+async function limitDelete(id) {
+  const res = await fetch(`/api/chat/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok) return toast(t('Löschen fehlgeschlagen.', 'Deleting failed.'));
+  historyItems = historyItems.filter((c) => c.id !== id);
+  historyDirty = true;
+  haptic('tap');
+  // Platz frei → Fenster zu und die Nachricht gleich abschicken
+  $('#limit-sheet').hidden = true;
+  if (el.prompt.value.trim() || state.pending.length) send();
+}
+$('#limit-list').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-lim-del]');
+  if (b) limitDelete(b.dataset.limDel);
+});
+$('#limit-oldest').addEventListener('click', () => {
+  const oldest = [...historyItems].filter((c) => !c.pinned).sort((a, b) => a.updated - b.updated)[0];
+  if (oldest) limitDelete(oldest.id);
+});
+$('#limit-sheet').addEventListener('click', (e) => { if (e.target.closest('[data-close]')) $('#limit-sheet').hidden = true; });
+
 // ── Seitenleiste mit Verlauf ──────────────────────────────────────
 let historyDirty = true;
 let historyItems = [];
@@ -2528,6 +2574,10 @@ function renderHistory() {
     const g = groupLabel(c.updated);
     if (g !== last) { html += `<p class="drawer-group">${g}</p>`; last = g; }
     html += chatRow(c);
+  }
+  if (maxChats && !q) {
+    const full = historyItems.length >= maxChats;
+    html = `<p class="drawer-count${full ? ' full' : ''}">${t(`${historyItems.length} von ${maxChats} Chats`, `${historyItems.length} of ${maxChats} chats`)}${full ? ` · ${t('voll', 'full')}` : ''}</p>${html}`;
   }
   el.dList.innerHTML = html;
   // Titel und Ordnernamen sicher als Text einsetzen
@@ -2621,7 +2671,9 @@ async function openDrawer() {
     try {
       if (offline) throw new TypeError('offline');
       const res = await fetch('/api/chat/list');
-      historyItems = (await res.json()).chats ?? [];
+      const listData = await res.json();
+      historyItems = listData.chats ?? [];
+      maxChats = listData.maxChats ?? 0;
       historyDirty = false;
       saveOffline({ list: historyItems.slice(0, 200) });
     } catch {

@@ -340,6 +340,20 @@
     </div>
   </div>
 
+  <div class="sheet small-sheet" id="limit-sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="limit-title">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <div class="settings-head">
+        <h2 id="limit-title" data-en="Chat limit reached">Chat-Limit erreicht</h2>
+        <button class="card-btn" data-close aria-label="Schließen" data-en-aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
+      <p class="set-hint" id="limit-text"></p>
+      <button type="button" class="btn" id="limit-oldest" data-en="Delete oldest and continue">Ältesten löschen und weiter</button>
+      <ul class="mem-list limit-list" id="limit-list"></ul>
+    </div>
+  </div>
+
   <div class="sheet small-sheet" id="news-sheet" hidden>
     <div class="sheet-backdrop"></div>
     <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="news-title">

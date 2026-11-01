@@ -209,6 +209,7 @@ const LIMIT_LABELS = {
   costPremium: [t('Premium-Modell', 'Premium model'), t('kostet echtes Guthaben', 'costs real credit')],
   paidDaily: [t('Premium pro Tag', 'Premium per day'), t('Antworten, zusätzlich', 'answers, extra cap')],
   burst: [t('Schutz vor Spam', 'Spam protection'), t('Antworten in 5 Minuten', 'answers in 5 minutes')],
+  maxChats: [t('Chats pro Person', 'Chats per person'), t('gespeichert, 0 = unbegrenzt', 'saved, 0 = unlimited')],
 };
 let limitsCache = null;
 function limitExample() {

@@ -14,6 +14,7 @@ export const LIMIT_FIELDS = {
   costPremium: { min: 0, max: 1000, def: 5 }, // Premium-Modell (kostet echtes Guthaben)
   paidDaily: { min: 0, max: 10000, def: Number(process.env.PAID_DAILY_LIMIT ?? 20) }, // Premium-Antworten pro Tag
   burst: { min: 1, max: 1000, def: 40 }, // höchstens so viele Antworten in 5 Minuten
+  maxChats: { min: 0, max: 1000, def: 10 }, // so viele gespeicherte Chats pro Person (0 = unbegrenzt)
 };
 
 let cached = null;

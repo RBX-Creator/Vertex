@@ -393,3 +393,28 @@ test('Sprache → Text (Whisper) für Sprach-Modus und Diktieren', async () => {
   });
   assert.ok([200, 401].includes(res.status));
 });
+
+test('Höchstens N gespeicherte Chats – Inkognito zählt nicht', async () => {
+  const a = client();
+  await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
+  await a.json('/api/admin/limits', { limits: { maxChats: 2 } });
+  try {
+    const c = await signUp('maxchats@example.com');
+    const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
+    const ids = [];
+    for (let i = 0; i < 2; i++) {
+      const s = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: `C${i}` });
+      ids.push(s.data.id);
+      await stream(c, s.data.id, `Frage ${i}`);
+    }
+    const full = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'zu viel' });
+    assert.equal(full.status, 409);
+    assert.equal(full.data.chatLimit, 2);
+    assert.equal((await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'geheim', incognito: true })).status, 200);
+    await c.call(`/api/chat/${ids[0]}`, undefined, 'DELETE');
+    assert.equal((await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'jetzt geht es' })).status, 200);
+    assert.equal((await c.json('/api/chat/list')).data.maxChats, 2);
+  } finally {
+    await a.json('/api/admin/limits', { limits: { maxChats: 10 } });
+  }
+});

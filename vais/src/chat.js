@@ -137,9 +137,18 @@ chat.post('/start', wrap(async (req, res) => {
     throw new HttpError(400, t('Unbekannter Modus.', 'Unknown mode.'));
   }
 
-  const id = randomBytes(12).toString('base64url');
-  const now = Date.now();
   const incognito = req.body?.incognito ? 1 : null; // wird nicht gespeichert (verschwindet beim Verlassen)
+  // Höchstens „maxChats“ gespeicherte Chats pro Person (Inkognito zählt nicht)
+  const { maxChats } = await limitSettings();
+  if (maxChats && !incognito) {
+    await run('DELETE FROM chats WHERE user_id = ? AND NOT EXISTS (SELECT 1 FROM messages WHERE messages.chat_id = chats.id) AND created_at < ?', req.user.id, Date.now() - 60_000);
+    const open = Number((await get('SELECT COUNT(*) AS n FROM chats WHERE user_id = ? AND incognito IS NULL AND EXISTS (SELECT 1 FROM messages WHERE messages.chat_id = chats.id)', req.user.id))?.n ?? 0);
+    if (open >= maxChats) {
+      throw new HttpError(409, t(`Du hast schon ${maxChats} Chats. Lösche einen, um einen neuen zu starten.`, `You already have ${maxChats} chats. Delete one to start a new one.`), { chatLimit: maxChats, open });
+    }
+  }
+  const id = randomBytes(12).toString('base64url');
+  const now = Date.now(); // wird nicht gespeichert (verschwindet beim Verlassen)
   await run(
     'INSERT INTO chats (id, user_id, mode, modality, model_a, model_b, title, created_at, updated_at, incognito) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     id, req.user.id, mode, modality, picked[0], picked[1] ?? null, String(title ?? '').trim().slice(0, 80) || t('Neuer Chat', 'New chat'), now, now, incognito,
@@ -488,7 +497,7 @@ chat.get('/list', wrap(async (req, res) => {
      ORDER BY updated DESC LIMIT 300`,
     req.user.id,
   );
-  res.json({ chats: rows.map((r) => ({ id: r.id, title: r.title || t('Chat', 'Chat'), mode: r.mode, updated: r.updated, pinned: !!r.pinned, folder: r.folder || null })) });
+  res.json({ maxChats: (await limitSettings()).maxChats, chats: rows.map((r) => ({ id: r.id, title: r.title || t('Chat', 'Chat'), mode: r.mode, updated: r.updated, pinned: !!r.pinned, folder: r.folder || null })) });
 }));
 
 // Anheften und Ordner
