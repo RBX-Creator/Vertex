@@ -109,6 +109,7 @@ const state = {
   modality: store.get('vais.modality', 'auto'),
   picks: store.get('vais.picks', [null, null]),
   models: [],
+  pending: [], // Anhänge für die nächste Nachricht: { kind: 'image', name, url } | { kind: 'file', name, text }
   chat: null, // { id, mode, labels, names, winner, turns: [{ user, answers: [{ text, status, error }] }] }
   controllers: new Set(),
 };
@@ -253,7 +254,7 @@ function renderModelList() {
     ? items.map((m) => {
         const selected = m.id === state.picks[sheetSlot];
         return `<li><button type="button" class="model-opt${selected ? ' selected' : ''}${m.id === other ? ' taken' : ''}${m.busy ? ' busy' : ''}" data-id="${escapeHtml(m.id)}">
-          ${modelLogo(m)}<span class="name">${escapeHtml(m.name)}</span>
+          ${modelLogo(m)}<span class="name">${escapeHtml(m.name)}</span>${m.caps.includes('vision') ? `<span class="vis" title="Kann Bilder ansehen">${ICON.preview}</span>` : ''}
           ${selected ? ICON.check.replace('<svg ', '<svg width="18" height="18" ') : ''}
           <span class="prov">${m.busy ? 'ausgelastet' : `${m.paid ? '<span class="premium">Premium</span> ' : ''}${escapeHtml(m.maker)}`}</span></button></li>`;
       }).join('')
@@ -375,10 +376,21 @@ function resetChat() {
 
 el.newChat.addEventListener('click', () => { go(''); el.prompt.focus(); });
 
+// Deine Nachricht fürs Modell: Text + Dateiinhalte, Bilder als eigene Teile
+function userContent(t) {
+  const att = t.attachments ?? [];
+  const files = att.filter((a) => a.kind === 'file')
+    .map((a) => `\n\n--- Datei: ${a.name} ---\n\`\`\`\n${a.text}\n\`\`\``).join('');
+  const text = `${t.user || (att.length ? 'Siehe Anhang.' : '')}${files}`;
+  const images = att.filter((a) => a.kind === 'image');
+  if (!images.length) return text;
+  return [{ type: 'text', text }, ...images.map((a) => ({ type: 'image_url', image_url: { url: a.url } }))];
+}
+
 function buildMessages(turnIndex, side) {
   const msgs = [];
   state.chat.turns.slice(0, turnIndex + 1).forEach((t, i) => {
-    msgs.push({ role: 'user', content: t.user });
+    msgs.push({ role: 'user', content: userContent(t) });
     const a = t.answers[side];
     if (i < turnIndex && a.text && a.status === 'done') msgs.push({ role: 'assistant', content: a.text });
     else if (i < turnIndex) msgs.pop(); // Frage ohne Antwort weglassen
@@ -426,7 +438,32 @@ function renderTurn(turnIndex) {
         <button class="nav-btn prev" data-go="0" aria-label="Antwort A zeigen" hidden>${ICON.prev}</button>
         <div class="dots">${turn.answers.map((_, i) => `<button class="dot${i ? '' : ' active'}" data-go="${i}" aria-label="Antwort ${'AB'[i]}"></button>`).join('')}</div>` : ''}
     </div>`;
-  $('.bubble', node).textContent = turn.user;
+  const bubble = $('.bubble', node);
+  bubble.textContent = turn.user;
+  if (!turn.user) bubble.remove();
+  if (turn.attachments?.length) {
+    const box = document.createElement('div');
+    box.className = 'att-list';
+    for (const a of turn.attachments) {
+      if (a.kind === 'image') {
+        const img = Object.assign(document.createElement('img'), { src: a.url, alt: a.name, className: 'att-img', loading: 'lazy' });
+        img.addEventListener('click', () => {
+          $('#expand-title').textContent = a.name;
+          $('#expand-body').innerHTML = '';
+          $('#expand-body').append(Object.assign(document.createElement('img'), { src: a.url, alt: a.name, className: 'att-full' }));
+          $('#expand').hidden = false;
+        });
+        box.append(img);
+      } else {
+        const chip = document.createElement('span');
+        chip.className = 'att-file';
+        chip.innerHTML = ICON['s-read'];
+        chip.append(Object.assign(document.createElement('span'), { textContent: a.name }));
+        box.append(chip);
+      }
+    }
+    $('.turn-user', node).prepend(box);
+  }
   el.thread.append(node);
 
   const track = $('.track', node);
@@ -617,7 +654,10 @@ async function runSide(turnIndex, side) {
     const res = await fetch('/api/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId: chat.id, side, turn: turnIndex, messages: buildMessages(turnIndex, side) }),
+      body: JSON.stringify({
+        chatId: chat.id, side, turn: turnIndex, messages: buildMessages(turnIndex, side),
+        display: { text: chat.turns[turnIndex].user, attachments: chat.turns[turnIndex].attachments ?? [] },
+      }),
       signal: ctrl.signal,
     });
     if (res.status === 401) location.replace('/login');
@@ -677,8 +717,21 @@ function afterTurn() {
 
 async function send() {
   const text = el.prompt.value.trim();
-  if (!text || busy()) return;
+  const attachments = state.pending;
+  if ((!text && !attachments.length) || busy()) return;
+  if (pendingReads) return toast('Anhänge werden noch geladen …');
   if (!state.models.length) return toast('Modelle konnten nicht geladen werden. Lade die Seite neu.');
+  const hasImages = attachments.some((a) => a.kind === 'image');
+  if (hasImages && (state.chat?.mode ?? state.mode) === 'agent') return toast('Agent X kann noch keine Bilder ansehen. Nutze „Direkt“.');
+  if (hasImages && ['sxs', 'direct'].includes(state.chat?.mode ?? state.mode)) {
+    const need = (state.chat?.mode ?? state.mode) === 'sxs' ? 2 : 1;
+    const blind = state.picks.slice(0, need).findIndex((id) => !modelById(id)?.caps.includes('vision'));
+    if (blind !== -1) {
+      toast('Dieses Modell kann keine Bilder ansehen. Wähle eins mit 👁.');
+      if (!state.chat) return openSheet(blind);
+      return;
+    }
+  }
 
   if (!state.chat) {
     if (state.mode === 'sxs' || state.mode === 'direct') {
@@ -686,7 +739,8 @@ async function send() {
       const missing = state.picks.slice(0, need).findIndex((id) => !modelById(id));
       if (missing !== -1) return openSheet(missing);
     }
-    const body = { mode: state.mode, modality: state.modality, title: text.slice(0, 80) };
+    const title = text || attachments.map((a) => a.name).join(', ') || 'Anhang';
+    const body = { mode: state.mode, modality: state.modality, title: title.slice(0, 80), images: hasImages };
     if (state.mode === 'sxs') body.models = state.picks.slice(0, 2);
     if (state.mode === 'direct') body.models = [state.picks[0]];
     el.send.disabled = true;
@@ -698,7 +752,7 @@ async function send() {
     } finally {
       el.send.disabled = false;
     }
-    el.title.textContent = text.length > 40 ? `${text.slice(0, 40)}…` : text;
+    el.title.textContent = title.length > 40 ? `${title.slice(0, 40)}…` : title;
     history.pushState(null, '', `#c/${state.chat.id}`);
     historyDirty = true;
     showView('thread');
@@ -708,12 +762,14 @@ async function send() {
   const chat = state.chat;
   historyDirty = true;
   el.prompt.value = '';
+  state.pending = [];
+  renderTray();
   autosize();
   el.vote.hidden = true;
   el.voteResult.hidden = true;
 
   const sides = chat.mode === 'direct' || chat.mode === 'agent' ? 1 : 2;
-  chat.turns.push({ user: text, answers: Array.from({ length: sides }, () => ({ text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0 })) });
+  chat.turns.push({ user: text, attachments, answers: Array.from({ length: sides }, () => ({ text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0 })) });
   const index = chat.turns.length - 1;
   if (index > 0) chat.turns[index - 1].answers.forEach((_, s) => updateCard(index - 1, s)); // „Neu generieren“ dort abschalten
   const node = renderTurn(index);
@@ -967,6 +1023,83 @@ $('#preview-download').addEventListener('click', () => {
 
 $('#expand').addEventListener('click', (e) => { if (e.target.closest('[data-close]')) $('#expand').hidden = true; });
 
+// ── Anhänge (+) ───────────────────────────────────────────────────
+const MAX_ATTACHMENTS = 4;
+const MAX_FILE_BYTES = 200_000;
+let pendingReads = 0;
+
+// Bilder verkleinern (max. 1280 px, JPEG), damit sie schnell hochgeladen sind
+async function shrinkImage(file) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  return canvas.toDataURL('image/jpeg', 0.82);
+}
+
+async function addFiles(fileList) {
+  for (const file of [...fileList]) {
+    if (state.pending.length + pendingReads >= MAX_ATTACHMENTS) { toast(`Höchstens ${MAX_ATTACHMENTS} Anhänge pro Nachricht.`); break; }
+    pendingReads++;
+    try {
+      if (file.type.startsWith('image/')) {
+        state.pending.push({ kind: 'image', name: file.name || 'Bild', url: await shrinkImage(file) });
+      } else if (/pdf|zip|octet-stream|word|excel|powerpoint|audio|video/.test(file.type)) {
+        toast(`„${file.name}“: Nur Bilder und Textdateien werden unterstützt.`);
+      } else if (file.size > MAX_FILE_BYTES) {
+        toast(`„${file.name}“ ist zu groß (max. 200 KB).`);
+      } else {
+        const text = await file.text();
+        if (/\u0000/.test(text.slice(0, 2000))) toast(`„${file.name}“ ist keine Textdatei.`);
+        else state.pending.push({ kind: 'file', name: file.name, text });
+      }
+    } catch {
+      toast(`„${file.name}“ konnte nicht gelesen werden.`);
+    } finally {
+      pendingReads--;
+      renderTray();
+      updateSend();
+    }
+  }
+}
+
+function renderTray() {
+  const tray = $('#tray');
+  tray.hidden = !state.pending.length;
+  tray.innerHTML = '';
+  state.pending.forEach((a, i) => {
+    const item = document.createElement('div');
+    item.className = `tray-item ${a.kind}`;
+    if (a.kind === 'image') item.append(Object.assign(document.createElement('img'), { src: a.url, alt: '' }));
+    else {
+      item.innerHTML = ICON['s-read'];
+      item.append(Object.assign(document.createElement('span'), { textContent: a.name }));
+    }
+    const del = Object.assign(document.createElement('button'), { type: 'button', className: 'tray-del', ariaLabel: `${a.name} entfernen` });
+    del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>';
+    del.addEventListener('click', () => { state.pending.splice(i, 1); renderTray(); updateSend(); });
+    item.append(del);
+    tray.append(item);
+  });
+}
+
+$('#attach-btn').addEventListener('click', () => $('#attach-input').click());
+$('#attach-input').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; el.prompt.focus(); });
+// Bilder einfügen (Strg+V) und per Drag & Drop
+el.prompt.addEventListener('paste', (e) => {
+  const files = [...(e.clipboardData?.files ?? [])];
+  if (files.length) { e.preventDefault(); addFiles(files); }
+});
+el.form.addEventListener('dragover', (e) => { e.preventDefault(); el.form.classList.add('drop'); });
+el.form.addEventListener('dragleave', () => el.form.classList.remove('drop'));
+el.form.addEventListener('drop', (e) => { e.preventDefault(); el.form.classList.remove('drop'); addFiles(e.dataTransfer.files); });
+
 // ── Eingabefeld ───────────────────────────────────────────────────
 function autosize() {
   el.prompt.style.height = 'auto';
@@ -977,7 +1110,7 @@ function autosize() {
 function updateSend() {
   const isBusy = busy();
   el.send.classList.toggle('stop', isBusy);
-  el.send.classList.toggle('ready', !isBusy && !!el.prompt.value.trim());
+  el.send.classList.toggle('ready', !isBusy && (!!el.prompt.value.trim() || state.pending.length > 0));
   el.send.innerHTML = isBusy ? ICON.stop : ICON.send;
   el.send.setAttribute('aria-label', isBusy ? 'Stoppen' : 'Senden');
 }

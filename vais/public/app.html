@@ -84,10 +84,16 @@
             <button type="button" data-vote="b">B ist besser</button>
           </div>
           <div class="vote-result" id="vote-result" hidden></div>
+          <div class="tray" id="tray" hidden></div>
           <label class="sr-only" for="prompt">Nachricht</label>
           <textarea id="prompt" rows="1" placeholder="Frag irgendwas …" enterkeyhint="send"></textarea>
           <div class="composer-bar">
             <div class="controls">
+              <button type="button" class="ctrl" id="attach-btn" aria-label="Bild oder Datei anhängen" title="Bild oder Datei anhängen">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+              <input type="file" id="attach-input" multiple hidden
+                accept="image/*,.txt,.md,.csv,.json,.js,.mjs,.ts,.tsx,.jsx,.py,.html,.htm,.css,.xml,.yml,.yaml,.java,.c,.h,.cpp,.cs,.go,.rs,.php,.rb,.sql,.lua,.sh,.log,.ini,.toml">
               <button type="button" class="ctrl" id="mode-btn" aria-haspopup="true" aria-expanded="false" aria-controls="mode-menu"></button>
               <button type="button" class="ctrl" id="modality-btn" aria-haspopup="true" aria-expanded="false" aria-controls="modality-menu"></button>
               <button type="button" class="ctrl model-chip" data-slot="0" hidden></button>

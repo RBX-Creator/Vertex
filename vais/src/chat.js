@@ -10,6 +10,46 @@ import { listModels, findModel, streamChat, displayName, describeModel, modelKey
 const MAX_MESSAGES = 40;          // so viele Nachrichten gehen max. ans Modell
 const MAX_CHARS = 20_000;         // pro Nachricht
 const WINNERS = new Set(['a', 'b', 'tie', 'bad']);
+const MAX_IMAGES = 4;               // so viele Bilder gehen max. ans Modell (die neuesten)
+const MAX_IMAGE_CHARS = 3_000_000;  // ~2,2 MB pro Bild (base64)
+const IMAGE_URL = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+
+// Nachricht prüfen: Text oder (nur vom Nutzer) eine Liste aus Text- und Bild-Teilen
+function cleanMessage(m) {
+  if (!m || !['user', 'assistant'].includes(m.role)) throw new HttpError(400, 'Ungültige Nachricht.');
+  if (typeof m.content === 'string') return { role: m.role, content: m.content.slice(0, MAX_CHARS) };
+  if (m.role !== 'user' || !Array.isArray(m.content) || m.content.length > 12) throw new HttpError(400, 'Ungültige Nachricht.');
+  return {
+    role: 'user',
+    content: m.content.map((p) => {
+      if (p?.type === 'text' && typeof p.text === 'string') return { type: 'text', text: p.text.slice(0, MAX_CHARS * 3) };
+      const url = p?.image_url?.url;
+      if (p?.type === 'image_url' && typeof url === 'string' && url.length <= MAX_IMAGE_CHARS && IMAGE_URL.test(url)) {
+        return { type: 'image_url', image_url: { url } };
+      }
+      throw new HttpError(400, 'Dieses Bild kann nicht verarbeitet werden.');
+    }),
+  };
+}
+const imageCount = (msgs) => msgs.reduce((n, m) => n + (Array.isArray(m.content) ? m.content.filter((p) => p.type === 'image_url').length : 0), 0);
+
+// Nur die neuesten Bilder behalten, ältere durch einen Hinweis ersetzen
+function limitImages(msgs) {
+  let keep = MAX_IMAGES;
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (!Array.isArray(msgs[i].content)) continue;
+    msgs[i].content = msgs[i].content.map((p) => {
+      if (p.type !== 'image_url') return p;
+      if (keep > 0) { keep--; return p; }
+      return { type: 'text', text: '[älteres Bild]' };
+    });
+  }
+  return msgs;
+}
+// Für Modelle ohne Bilder: Teile zu reinem Text zusammenfügen
+const flatten = (msgs) => msgs.map((m) => (Array.isArray(m.content)
+  ? { ...m, content: m.content.map((p) => (p.type === 'text' ? p.text : '[Bild]')).join('\n') }
+  : m));
 // Art der Anfrage → welche Modelle passen
 const MODALITY_CAP = { auto: 'text', text: 'text', code: 'code', web: 'web' };
 const CODE_PROMPT = 'Du bist ein erfahrener Entwickler. Antworte in der Sprache des Nutzers. Wenn eine Webseite, ein Spiel oder eine App gewünscht ist, liefere eine vollständige, lauffähige einzelne HTML-Datei (CSS und JavaScript eingebettet) in genau einem ```html-Codeblock und erkläre danach kurz, was sie macht.';
@@ -63,7 +103,7 @@ chat.post('/start', wrap(async (req, res) => {
   if (mode === 'agent') {
     picked = ['agent'];
   } else if (mode === 'battle') {
-    const cap = MODALITY_CAP[modality];
+    const cap = req.body?.images ? 'vision' : MODALITY_CAP[modality];
     const first = await pickAvailable(cap);
     const second = first && await pickAvailable(cap, [first.id]);
     if (!first || !second) throw new HttpError(503, modality === 'web' ? 'Für ein Websuche-Battle sind gerade nicht genug Such-Modelle frei. Versuche es gleich noch einmal.' : 'Gerade sind nicht genug Modelle frei. Versuche es gleich noch einmal.');
@@ -88,18 +128,31 @@ chat.post('/start', wrap(async (req, res) => {
 
 // Antwort einer Seite (0 = A, 1 = B) als NDJSON-Stream
 chat.post('/stream', wrap(async (req, res) => {
-  const { chatId, side = 0, messages, turn } = req.body ?? {};
+  const { chatId, side = 0, messages, turn, display } = req.body ?? {};
   const row = await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
   if (!row) throw new HttpError(404, 'Chat nicht gefunden. Starte einen neuen Chat.');
   let model = side === 1 ? row.model_b : row.model_a;
   if (!model) throw new HttpError(400, 'Ungültige Seite.');
 
   if (!Array.isArray(messages) || !messages.length) throw new HttpError(400, 'Keine Nachricht.');
-  const clean = messages.slice(-MAX_MESSAGES).map((m) => {
-    if (!m || !['user', 'assistant'].includes(m.role) || typeof m.content !== 'string') throw new HttpError(400, 'Ungültige Nachricht.');
-    return { role: m.role, content: m.content.slice(0, MAX_CHARS) };
-  });
+  let clean = limitImages(messages.slice(-MAX_MESSAGES).map(cleanMessage));
   if (clean.at(-1).role !== 'user') throw new HttpError(400, 'Die letzte Nachricht muss von dir sein.');
+  const hasImages = imageCount(clean) > 0;
+  if (hasImages && row.mode === 'agent') throw new HttpError(400, 'Agent X kann noch keine Bilder ansehen. Nutze „Direkt“ mit einem Modell mit 👁-Symbol.');
+  if (hasImages && model !== 'agent' && !(await findModel(model))?.caps.includes('vision')) {
+    if (row.mode === 'battle') {
+      // Im Battle still ein Modell nehmen, das Bilder sehen kann
+      const fresh = await get('SELECT model_a, model_b FROM chats WHERE id = ?', row.id);
+      const next = await pickAvailable('vision', [side === 1 ? fresh.model_a : fresh.model_b]);
+      if (!next) throw new HttpError(503, 'Gerade ist kein Modell frei, das Bilder ansehen kann.');
+      model = next.id;
+      await run(`UPDATE chats SET ${side === 1 ? 'model_b' : 'model_a'} = ? WHERE id = ?`, model, row.id);
+    } else {
+      throw new HttpError(400, 'Dieses Modell kann keine Bilder ansehen. Wähle ein Modell mit 👁-Symbol.');
+    }
+  }
+  // Ältere Bilder für Modelle ohne Bild-Fähigkeit nicht mitschicken
+  if (!hasImages) clean = flatten(clean);
   const turnNo = Number.isInteger(turn) && turn >= 0 && turn < 1000 ? turn : null;
   limit(req.user.id);
 
@@ -118,14 +171,21 @@ chat.post('/stream', wrap(async (req, res) => {
   };
   let thinkStart = 0;
   let thinkMs = 0;
-  const save = (s, content, status = 'done', error = null) => (turnNo === null ? null : run(
-    `INSERT INTO messages (chat_id, turn, side, content, status, error, meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(chat_id, turn, side) DO UPDATE SET content = excluded.content, status = excluded.status, error = excluded.error, meta = excluded.meta`,
+  const save = (s, content, status = 'done', error = null, attachments = null) => (turnNo === null ? null : run(
+    `INSERT INTO messages (chat_id, turn, side, content, status, error, meta, attachments, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(chat_id, turn, side) DO UPDATE SET content = excluded.content, status = excluded.status, error = excluded.error,
+       meta = excluded.meta, attachments = COALESCE(excluded.attachments, messages.attachments)`,
     row.id, turnNo, s, content, status, error,
     s >= 0 && (steps.length || thinking || sources.size)
-      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, sources: [...sources.values()] }) : null, Date.now(),
+      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, sources: [...sources.values()] }) : null,
+    attachments, Date.now(),
   ).catch((e) => console.error('Verlauf speichern fehlgeschlagen:', e.message)));
-  await save(-1, clean.at(-1).content);
+  // Deine Frage so speichern, wie sie angezeigt wird (Text + Anhänge), nicht als Modell-Format
+  const shown = typeof display?.text === 'string' ? display.text.slice(0, MAX_CHARS) : (typeof clean.at(-1).content === 'string' ? clean.at(-1).content : '');
+  const files = Array.isArray(display?.attachments) ? display.attachments.slice(0, 8).map((a) => (a?.kind === 'image' && typeof a.url === 'string' && a.url.length <= MAX_IMAGE_CHARS && IMAGE_URL.test(a.url)
+    ? { kind: 'image', name: String(a.name ?? 'Bild').slice(0, 120), url: a.url }
+    : { kind: 'file', name: String(a?.name ?? 'Datei').slice(0, 120), text: String(a?.text ?? '').slice(0, MAX_CHARS * 3) })) : [];
+  await save(-1, shown, 'done', null, files.length ? JSON.stringify(files) : null);
   await run('UPDATE chats SET updated_at = ? WHERE id = ?', Date.now(), row.id);
 
   res.set({
@@ -170,7 +230,7 @@ chat.post('/stream', wrap(async (req, res) => {
           }
           await streamChat({
             model,
-            messages: row.modality === 'code' ? [{ role: 'system', content: CODE_PROMPT }, ...clean] : clean,
+            messages: row.modality === 'code' ? [{ role: 'system', content: CODE_PROMPT }, ...(hasImages ? clean : flatten(clean))] : clean,
             signal: controller.signal,
             onText,
             onReasoning,
@@ -182,7 +242,7 @@ chat.post('/stream', wrap(async (req, res) => {
           const fresh = await get('SELECT model_a, model_b FROM chats WHERE id = ?', row.id);
           const other = side === 1 ? fresh.model_a : fresh.model_b;
           const premiumIds = paidAllowed(req.user.id) ? [] : (await listModels()).filter((m) => m.paid).map((m) => m.id);
-          const next = await pickAvailable(MODALITY_CAP[row.modality] ?? 'text', [...tried, other, ...premiumIds]);
+          const next = await pickAvailable(hasImages ? 'vision' : (MODALITY_CAP[row.modality] ?? 'text'), [...tried, other, ...premiumIds]);
           if (!next) throw err;
           console.log(`Battle-Ersatz: ${model} → ${next.id} (${err.message})`);
           model = next.id;
@@ -254,12 +314,15 @@ chat.get('/leaderboard', wrap(async (req, res) => {
 chat.get('/:id', wrap(async (req, res) => {
   const row = await get('SELECT * FROM chats WHERE id = ? AND user_id = ?', req.params.id, req.user.id);
   if (!row) throw new HttpError(404, 'Chat nicht gefunden.');
-  const msgs = await all('SELECT turn, side, content, status, error, meta, feedback FROM messages WHERE chat_id = ? ORDER BY turn, side', row.id);
+  const msgs = await all('SELECT turn, side, content, status, error, meta, feedback, attachments FROM messages WHERE chat_id = ? ORDER BY turn, side', row.id);
   const sides = row.mode === 'direct' || row.mode === 'agent' ? 1 : 2;
   const turns = [];
   for (const m of msgs) {
     turns[m.turn] ??= { user: '', answers: Array.from({ length: sides }, () => ({ text: '', status: 'stopped', error: null })) };
-    if (m.side < 0) turns[m.turn].user = m.content;
+    if (m.side < 0) {
+      turns[m.turn].user = m.content;
+      try { turns[m.turn].attachments = JSON.parse(m.attachments || '[]'); } catch { turns[m.turn].attachments = []; }
+    }
     else if (m.side < sides) {
       let meta = {};
       try { meta = JSON.parse(m.meta || '{}'); } catch { /* egal */ }
@@ -281,7 +344,7 @@ chat.get('/:id', wrap(async (req, res) => {
     winner: row.winner,
     models: row.mode === 'battle' || row.mode === 'agent' ? null : ids,
     labels: reveal ? names : null,
-    turns: turns.filter((t) => t && t.user),
+    turns: turns.filter((t) => t && (t.user || t.attachments?.length)),
   });
 }));
 

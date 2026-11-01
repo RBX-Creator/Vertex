@@ -83,10 +83,14 @@ function maker(upstreamId, fallbackName) {
 // Welche Modelle tauchen zusätzlich unter „Code“ auf (Text können alle)?
 const CODE_RE = /(code|coder|gpt-4\.1|gpt-4o(?!-mini)|devstral|codestral|gpt-oss|gpt-[5-9]|claude|qwen3|kimi|glm|deepseek|gemini-[\d.]+-(pro|flash)|north|minimax|nemotron.*(super|ultra)|inkling|gemma-4-31b|llama-4|grok)/i;
 
+// Modelle, die Bilder ansehen können (zusätzlich zu den Angaben der Anbieter)
+const VISION_RE = /(llama-4|vision|-vl\b|-vl-|pixtral|gemma-[34]|gpt-4o|gpt-4\.1|omni|maverick|scout)/i;
+
 function makeModel(provider, upstream, name, fallbackMaker, extraCaps = []) {
   const m = maker(upstream, fallbackMaker);
   const caps = extraCaps.length ? extraCaps : ['text', ...(CODE_RE.test(upstream) ? ['code'] : [])];
-  return { id: `${provider}:${upstream}`, provider, upstream, name, maker: m.maker, icon: m.icon, caps };
+  const vision = !extraCaps.length && (provider === 'gemini' || VISION_RE.test(upstream));
+  return { id: `${provider}:${upstream}`, provider, upstream, name, maker: m.maker, icon: m.icon, caps: vision ? [...caps, 'vision'] : caps };
 }
 
 // ── Modell-Listen der Anbieter ────────────────────────────────────
@@ -107,10 +111,11 @@ const LISTERS = {
       .filter((m) => (m.id.endsWith(':free') || EXTRA.includes(m.id)) && !m.id.startsWith('openrouter/'))
       .filter((m) => !/(safety|guard|moderation)/i.test(m.id))
       .filter((m) => (m.architecture?.output_modalities ?? ['text']).includes('text'))
-      .map((m) => ({
-        ...makeModel('openrouter', m.id, m.id.split('/').pop().replace(/:free$/, ''), (m.name.split(':')[0] || '').trim()),
-        paid: !m.id.endsWith(':free'), // kostet Guthaben (über OPENROUTER_EXTRA_MODELS freigeschaltet)
-      }));
+      .map((m) => {
+        const model = makeModel('openrouter', m.id, m.id.split('/').pop().replace(/:free$/, ''), (m.name.split(':')[0] || '').trim());
+        if ((m.architecture?.input_modalities ?? []).includes('image') && !model.caps.includes('vision')) model.caps.push('vision');
+        return { ...model, paid: !m.id.endsWith(':free') }; // paid: kostet Guthaben (OPENROUTER_EXTRA_MODELS)
+      });
   },
 
   async gemini(p) {
@@ -155,8 +160,8 @@ const LISTERS = {
 };
 
 const DEMO_MODELS = [
-  { id: 'demo:aurora', provider: 'demo', upstream: 'aurora', name: 'aurora-demo', maker: 'VAIs Demo', icon: null, caps: ['text', 'code'] },
-  { id: 'demo:basalt', provider: 'demo', upstream: 'basalt', name: 'basalt-demo', maker: 'VAIs Demo', icon: null, caps: ['text'] },
+  { id: 'demo:aurora', provider: 'demo', upstream: 'aurora', name: 'aurora-demo', maker: 'VAIs Demo', icon: null, caps: ['text', 'code', 'vision'] },
+  { id: 'demo:basalt', provider: 'demo', upstream: 'basalt', name: 'basalt-demo', maker: 'VAIs Demo', icon: null, caps: ['text', 'vision'] },
   { id: 'demo:cirrus', provider: 'demo', upstream: 'cirrus', name: 'cirrus-demo', maker: 'VAIs Demo', icon: null, caps: ['text', 'code'] },
   { id: 'demo:dune', provider: 'demo', upstream: 'dune', name: 'dune-demo', maker: 'VAIs Demo', icon: null, caps: ['text'] },
   { id: 'demo:echo', provider: 'demo', upstream: 'echo', name: 'echo-search-demo', maker: 'VAIs Demo', icon: null, caps: ['web'] },
@@ -401,7 +406,10 @@ const sleep = (ms, signal) => new Promise((resolve, reject) => {
 });
 
 async function demoStream({ name, messages, signal, onText, onReasoning = () => {} }) {
-  const last = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+  const lastRaw = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+  const images = Array.isArray(lastRaw) ? lastRaw.filter((p) => p.type === 'image_url').length : 0;
+  const last = (Array.isArray(lastRaw) ? lastRaw.filter((p) => p.type === 'text').map((p) => p.text).join(' ') : lastRaw)
+    + (images ? ` [ich sehe ${images} Bild${images > 1 ? 'er' : ''}]` : '');
   const quote = last.length > 120 ? `${last.slice(0, 120)}…` : last;
   const code = messages[0]?.role === 'system';
   const text = code

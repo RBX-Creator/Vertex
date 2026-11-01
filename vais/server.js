@@ -10,7 +10,10 @@ const { demoMode } = await import('./src/models.js');
 const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
-app.use(express.json({ limit: '50kb' }));
+// Antworten mit Bildern brauchen mehr Platz; alles andere bleibt klein
+const smallJson = express.json({ limit: '50kb' });
+const bigJson = express.json({ limit: '10mb' });
+app.use((req, res, next) => (req.path === '/api/chat/stream' ? bigJson : smallJson)(req, res, next));
 
 app.use((req, res, next) => {
   res.set({

@@ -1117,3 +1117,54 @@ body { overflow: hidden; }
   font-size: 11px;
   font-weight: 600;
 }
+
+/* ── Anhänge ───────────────────────────────────────────── */
+.tray { display: flex; gap: 8px; padding: 12px 12px 0; overflow-x: auto; scrollbar-width: none; }
+.tray-item {
+  position: relative;
+  flex-shrink: 0;
+  height: 64px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.tray-item.image { width: 64px; overflow: hidden; }
+.tray-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tray-item.file { display: flex; align-items: center; gap: 8px; max-width: 200px; padding: 0 30px 0 12px; font-size: 13px; }
+.tray-item.file svg { width: 20px; height: 20px; flex-shrink: 0; color: var(--muted); }
+.tray-item.file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tray-del {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .65);
+  color: #fff;
+}
+.tray-del svg { width: 12px; height: 12px; }
+.composer.drop { border-color: var(--text); border-style: dashed; }
+#attach-btn { padding: 0 8px; }
+.turn-user { flex-direction: column; align-items: flex-end; gap: 8px; }
+.att-list { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; max-width: min(80%, 620px); }
+.att-img { width: 120px; height: 120px; object-fit: cover; border-radius: 14px; border: 1px solid var(--border); cursor: zoom-in; }
+.att-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 14px;
+  max-width: 260px;
+}
+.att-file svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--muted); }
+.att-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-full { display: block; max-width: 100%; margin: 0 auto; border-radius: 12px; }
+.model-opt .vis { display: inline-grid; color: var(--muted); }
+.model-opt .vis svg { width: 16px; height: 16px; }
