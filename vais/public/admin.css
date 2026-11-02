@@ -197,3 +197,12 @@ textarea.adm-input { resize: vertical; min-height: 80px; line-height: 1.45; }
 .adm-rep-title { margin: 0; overflow-wrap: anywhere; }
 .adm-rep-note { margin: 0; color: var(--text); font-style: italic; font-size: 14px; }
 .adm-pill.warn { color: var(--danger); }
+
+/* Server & Modell-Gesundheit */
+.adm-h3 { margin: 16px 0 2px; font-size: 14px; font-weight: 600; color: var(--heading); }
+.adm-health { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.adm-health li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 13px; }
+.adm-health li small { color: var(--muted); flex-basis: 100%; padding-left: 16px; overflow-wrap: anywhere; }
+.adm-health-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success, #2e9e5b); flex: none; }
+.adm-health .bad .adm-health-dot { background: var(--danger); }
+.adm-health .bad b { color: var(--danger); }

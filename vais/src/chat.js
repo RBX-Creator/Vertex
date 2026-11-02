@@ -1,6 +1,7 @@
 import express, { Router } from 'express';
 import { maintenance, maintenanceText, blockDuringMaintenance } from './maintenance.js';
 import { isStaff } from './config.js';
+import { registerCache } from './stability.js';
 import { randomBytes, createHash } from 'node:crypto';
 import { get, run, all, purgeChats, getSetting, logEvent } from './db.js';
 import { t } from './i18n.js';
@@ -155,6 +156,26 @@ export async function autoPick(text = '', { images = false, modality = 'auto' } 
   const m = find(AUTO_GENERAL, modality === 'code' ? 'code' : 'text') ?? any(modality === 'code' ? 'code' : 'text');
   return m && { model: m, kind: 'general', label: t('Allgemein', 'General') };
 }
+
+// ── Antwort-Speicher: gleiche erste Frage an dasselbe Modell → Antwort sofort, ohne KI-Anfrage ──
+await run(`CREATE TABLE IF NOT EXISTS answer_cache (
+  key TEXT PRIMARY KEY, model TEXT NOT NULL, text TEXT NOT NULL, hits INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
+)`);
+const CACHE_TTL = 3 * 24 * 3600 * 1000;
+const TIME_WORDS = /\b(heute|gestern|morgen|jetzt|gerade|aktuell\w*|uhr|uhrzeit|datum|wochentag|news|nachrichten|wetter|preis\w*|kurs|neueste\w*|zufall\w*|würfel\w*|random)\b|\b20\d\d\b/i;
+const normQ = (q) => String(q).toLowerCase().replace(/[\s]+/g, ' ').replace(/[!?.,;:„“"'’`´]+/g, '').trim();
+const answerKey = (model, modality, q) => createHash('sha256').update(`${model}\n${modality}\n${normQ(q)}`).digest('hex');
+async function cachedAnswer(key) {
+  const row = await get('SELECT text, created_at FROM answer_cache WHERE key = ?', key);
+  if (!row || Date.now() - Number(row.created_at) > CACHE_TTL) return null;
+  run('UPDATE answer_cache SET hits = hits + 1 WHERE key = ?', key).catch(() => {});
+  return row.text;
+}
+const storeAnswer = (key, model, text) => run('INSERT INTO answer_cache (key, model, text, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET text = excluded.text, created_at = excluded.created_at', key, model, text.slice(0, 20000), Date.now()).catch(() => {});
+setInterval(() => {
+  run('DELETE FROM answer_cache WHERE created_at < ?', Date.now() - CACHE_TTL).catch(() => {});
+  run('DELETE FROM answer_cache WHERE key NOT IN (SELECT key FROM answer_cache ORDER BY created_at DESC LIMIT 3000)').catch(() => {});
+}, 6 * 3600 * 1000).unref();
 
 // Neuen Chat anlegen. Im Battle wählt der Server zwei zufällige Modelle und verrät sie erst nach der Abstimmung.
 chat.post('/start', wrap(async (req, res) => {
@@ -350,15 +371,15 @@ chat.post('/stream', wrap(async (req, res) => {
   let thinkMs = 0;
   let reaction = null; // Emoji-Reaktion von Agent X auf deine Nachricht
   let fallback = null; // Notfall-Modell, falls das gewählte voll war
-  // (auto steht weiter oben: Auto-Modus-Wahl)
+  let cached = false; // Antwort kam aus dem Antwort-Speicher
   const summarized = fitted.summarized || null;
   const save = (s, content, status = 'done', error = null, attachments = null) => (turnNo === null ? null : run(
     `INSERT INTO messages (chat_id, turn, side, content, status, error, meta, attachments, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(chat_id, turn, side) DO UPDATE SET content = excluded.content, status = excluded.status, error = excluded.error,
        meta = excluded.meta, attachments = COALESCE(excluded.attachments, messages.attachments)`,
     row.id, turnNo, s, content, status, error,
-    s >= 0 && (steps.length || thinking || sources.size || images.length || reaction || fallback || summarized || auto)
-      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, sources: [...sources.values()], images, reaction, fallback, summarized, auto }) : null,
+    s >= 0 && (steps.length || thinking || sources.size || images.length || reaction || fallback || summarized || auto || cached)
+      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, sources: [...sources.values()], images, reaction, fallback, summarized, auto, cached: cached || undefined }) : null,
     attachments, Date.now(),
   ).catch((e) => console.error('Verlauf speichern fehlgeschlagen:', e.message)));
   // Deine Frage so speichern, wie sie angezeigt wird (Text + Anhänge), nicht als Modell-Format
@@ -388,25 +409,48 @@ chat.post('/stream', wrap(async (req, res) => {
     return res.end();
   }
 
+  // Antwort-Speicher: nur erste Frage, ohne Bilder, ohne eigene Anweisungen, nichts Zeitabhängiges, nicht im Battle
+  const firstQuestion = clean.length === 1 && typeof clean[0].content === 'string' ? clean[0].content : null;
+  const cacheKey = model !== 'agent' && row.mode !== 'battle' && ['auto', 'text', 'code'].includes(row.modality ?? 'auto') && firstQuestion
+    && firstQuestion.length <= 400 && !custom && !fitted.summary && !TIME_WORDS.test(firstQuestion) && !row.incognito
+    ? answerKey(model, row.modality ?? 'auto', firstQuestion) : null;
+  const hit = cacheKey && !req.body?.fresh ? await cachedAnswer(cacheKey) : null;
+  if (hit) {
+    await refund(req.user, charged); // zählt nicht
+    cached = true;
+    out(`${JSON.stringify({ cached: true })}\n`);
+    for (let i = 0; i < hit.length; i += 24) {
+      out(`${JSON.stringify({ t: hit.slice(i, i + 24) })}\n`);
+      if (i % 240 === 0) await new Promise((ok) => setTimeout(ok, 8)); // fühlt sich wie Tippen an, nur schneller
+    }
+    out(`${JSON.stringify({ done: true })}\n`);
+    await save(side === 1 ? 1 : 0, hit, 'done');
+    return res.end();
+  }
+
   const controller = new AbortController();
   const runKey = `${row.id}:${turnNo}:${side === 1 ? 1 : 0}`;
   const inbox = []; // Nachträge des Nutzers, während Agent X arbeitet
   running.set(runKey, { controller, userId: req.user.id, inbox: model === 'agent' ? inbox : null });
-  // Verbindung weg (App zu, Funkloch): Agent X macht weiter und meldet sich, alles andere bricht ab
+  // Verbindung weg (App zu, Funkloch): die Antwort wird trotzdem fertig geschrieben und gespeichert –
+  // die App holt sie dann nach (Agent X meldet sich zusätzlich per Push)
   let detached = false;
   res.on('close', () => {
     if (res.writableFinished) return;
-    if (model === 'agent' && turnNo !== null && !controller.signal.aborted) detached = true;
+    if (turnNo !== null && !controller.signal.aborted) detached = true;
     else controller.abort();
   });
-  if (model === 'agent' && turnNo !== null) await save(side === 1 ? 1 : 0, '', 'streaming');
+  if (turnNo !== null) await save(side === 1 ? 1 : 0, '', 'streaming');
 
   let text = '';
+  let lastPartial = Date.now();
   try {
     const onText = (t) => {
       if (thinkStart && !thinkMs) thinkMs = Date.now() - thinkStart;
       text += t;
       out(`${JSON.stringify({ t })}\n`);
+      // Ohne Verbindung: Zwischenstand speichern, damit die App ihn schon zeigen kann
+      if (detached && Date.now() - lastPartial > 3000) { lastPartial = Date.now(); save(side === 1 ? 1 : 0, text, 'streaming').catch(() => {}); }
     };
     const onReasoning = (r) => {
       if (!thinkStart) thinkStart = Date.now();
@@ -463,6 +507,13 @@ chat.post('/stream', wrap(async (req, res) => {
           });
           break;
         } catch (err) {
+          // Selbstheilung: Modell bleibt mitten in der Antwort hängen → das Geschriebene behalten statt Fehler
+          if (!controller.signal.aborted && text && err.status === 504) {
+            const note = t('\n\n*(Das Modell ist hier stehen geblieben – tippe auf ↻ für eine neue Antwort.)*', '\n\n*(The model stopped here – tap ↻ for a new answer.)*');
+            onText(note);
+            logEvent('fallback', model, 'hängen geblieben – Teilantwort behalten');
+            break;
+          }
           if (controller.signal.aborted || text || images.length || attempt >= 3 || err.premium) throw err;
           const battle = row.mode === 'battle';
           // In „Direkt“ und „Nebeneinander“ nur, wenn das Modell voll/nicht erreichbar ist – nicht bei anderen Fehlern
@@ -492,6 +543,7 @@ chat.post('/stream', wrap(async (req, res) => {
     out(`${JSON.stringify({ done: true })}\n`);
     const got = text || images.length || reaction;
     if (!got) await refund(req.user, charged);
+    if (cacheKey && text && !fallback && !/stehen geblieben|stopped here/.test(text.slice(-160))) storeAnswer(cacheKey, model, text);
     await save(side === 1 ? 1 : 0, text, got ? 'done' : 'error', got ? null : t('Das Modell hat keine Antwort geliefert.', 'The model returned no answer.'));
   } catch (err) {
     if (!text && !images.length && !reaction) await refund(req.user, charged); // keine Antwort → Punkte zurück
@@ -590,6 +642,7 @@ const BOARD_CATS = {
 };
 const boards = new Map();
 export const clearBoards = () => boards.clear();
+registerCache('boards', clearBoards);
 chat.get('/leaderboard', wrap(async (req, res) => {
   const cat = BOARD_CATS[req.query.cat] !== undefined ? req.query.cat : 'all';
   const cached = boards.get(cat);
@@ -717,6 +770,7 @@ chat.post('/announcements/read', wrap(async (req, res) => {
 const TTS_VOICES = ['nova', 'shimmer', 'alloy', 'echo', 'fable', 'onyx'];
 let ttsQueue = Promise.resolve();
 const ttsCache = new Map();
+registerCache('tts', () => ttsCache.clear());
 chat.post('/tts', wrap(async (req, res) => {
   const text = String(req.body?.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 600);
   const voice = TTS_VOICES.includes(req.body?.voice) ? req.body.voice : 'nova';
@@ -746,7 +800,7 @@ chat.post('/tts', wrap(async (req, res) => {
     ttsQueue = job.catch(() => {});
     try { buf = await job; } catch (err) { throw new HttpError(err.status ?? 503, err.message); }
     ttsCache.set(key, buf);
-    if (ttsCache.size > 60) ttsCache.delete(ttsCache.keys().next().value);
+    if (ttsCache.size > 20) ttsCache.delete(ttsCache.keys().next().value);
   }
   res.set('Cache-Control', 'private, max-age=3600').type('audio/mpeg').send(buf);
 }));
@@ -952,7 +1006,7 @@ async function loadChatData(row, { forShare = false } = {}) {
         text: m.content, status: m.status, error: m.error,
         steps: meta.steps ?? [], thinking: forShare ? '' : meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0,
         feedback: forShare ? 0 : m.feedback ?? 0, reasons: forShare || !m.feedback_reason ? [] : String(m.feedback_reason).split(','), sources: meta.sources ?? [], images: meta.images ?? [],
-        reaction: meta.reaction ?? null, fallback: meta.fallback ?? null, summarized: meta.summarized ?? null, auto: meta.auto ?? null,
+        reaction: meta.reaction ?? null, fallback: meta.fallback ?? null, summarized: meta.summarized ?? null, auto: meta.auto ?? null, cached: !!meta.cached,
       };
     }
   }

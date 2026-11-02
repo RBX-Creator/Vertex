@@ -711,7 +711,15 @@ function paintLabel(card, side) {
     note.title = t('Das gewählte Modell war gerade voll – dieses hat für dich geantwortet.', 'The chosen model was full – this one answered for you.');
     note.textContent = `⚡ ${t('Notfall', 'Backup')}: ${a.fallback.name}`;
     label.append(note);
-  } else if (a?.auto && chat.mode !== 'battle') {
+  }
+  if (a?.cached && chat.mode !== 'battle') {
+    const note = document.createElement('span');
+    note.className = 'fallback-tag';
+    note.title = t('Diese Frage wurde schon einmal genauso gestellt – die Antwort kam sofort aus dem Speicher und hat nichts verbraucht. ↻ erzeugt eine neue.', 'This exact question was asked before – the answer came instantly from storage and used nothing. ↻ creates a new one.');
+    note.textContent = t('⚡ Sofort-Antwort', '⚡ Instant answer');
+    label.append(note);
+  }
+  if (a?.auto && !a.fallback && !a.cached && chat.mode !== 'battle') {
     // Auto-Modus: zeigen, welches Modell gewählt wurde und warum
     const note = document.createElement('span');
     note.className = 'fallback-tag auto-tag';
@@ -923,10 +931,10 @@ function scheduleUpdate(turnIndex, side) {
   });
 }
 
-async function runSide(turnIndex, side) {
+async function runSide(turnIndex, side, { fresh = false } = {}) {
   const chat = state.chat;
   const a = chat.turns[turnIndex].answers[side];
-  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, images: [], reaction: null, fallback: null, auto: null, summarized: null, startedAt: Date.now(), buildMs: 0 });
+  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, images: [], reaction: null, fallback: null, auto: null, cached: false, summarized: null, startedAt: Date.now(), buildMs: 0 });
   paintReactions(turnIndex);
   updateCard(turnIndex, side);
 
@@ -938,7 +946,7 @@ async function runSide(turnIndex, side) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chatId: chat.id, side, turn: turnIndex, messages: buildMessages(turnIndex, side),
+        chatId: chat.id, side, turn: turnIndex, messages: buildMessages(turnIndex, side), fresh,
         display: { text: chat.turns[turnIndex].user, attachments: chat.turns[turnIndex].attachments ?? [] },
       }),
       signal: ctrl.signal,
@@ -981,6 +989,7 @@ async function runSide(turnIndex, side) {
         }
         if (msg.fallback) { a.fallback = msg.fallback; scheduleUpdate(turnIndex, side); }
         if (msg.auto) { a.auto = msg.auto; scheduleUpdate(turnIndex, side); }
+        if (msg.cached) { a.cached = true; scheduleUpdate(turnIndex, side); }
         if (msg.summarized) { a.summarized = msg.summarized; scheduleUpdate(turnIndex, side); }
         if (msg.done) finished = true;
       }
@@ -993,10 +1002,10 @@ async function runSide(turnIndex, side) {
   } catch (err) {
     const agentSide = chat.mode === 'agent' || (chat.labels?.[side] === 'Agent X');
     if (ctrl.signal.aborted) a.status = a.text || a.images?.length ? 'done' : 'stopped';
-    else if (agentSide && (err instanceof TypeError || /unterbrochen|interrupted/i.test(err.message))) {
-      // Verbindung weg, aber Agent X arbeitet auf dem Server weiter
+    else if (err instanceof TypeError || /unterbrochen|interrupted|network|load failed/i.test(err.message)) {
+      // Verbindung weg – der Server schreibt die Antwort trotzdem fertig, wir holen sie gleich nach
       Object.assign(a, { status: 'streaming', background: true });
-      watchBackground(chat.id);
+      watchBackground(chat.id, agentSide);
     } else {
       Object.assign(a, { status: 'error', error: err.message || t('Das Modell konnte nicht antworten.', 'The model could not answer.') });
       haptic('error');
@@ -1528,7 +1537,7 @@ el.thread.addEventListener('click', async (e) => {
     if (turnIndex !== state.chat.turns.length - 1 || a.status === 'streaming') return;
     el.vote.hidden = true;
     const chat = state.chat;
-    await runSide(turnIndex, side);
+    await runSide(turnIndex, side, { fresh: true }); // neu generieren: nie aus dem Antwort-Speicher
     if (state.chat === chat) afterTurn();
   }
 });
@@ -2798,34 +2807,36 @@ async function loadChat(id) {
   updateSend();
   afterTurn();
   requestAnimationFrame(() => { el.stage.scrollTop = el.stage.scrollHeight; });
-  if (!data.shared && data.turns.some((tn) => tn.answers.some((a) => a.status === 'streaming'))) watchBackground(data.id);
+  if (!data.shared && data.turns.some((tn) => tn.answers.some((a) => a.status === 'streaming'))) watchBackground(data.id, data.mode === 'agent');
 }
 
 // Agent X arbeitet im Hintergrund: alle paar Sekunden nachsehen, bis er fertig ist
 let bgTimer = null;
-function watchBackground(id) {
+function watchBackground(id, agent = true) {
   clearTimeout(bgTimer);
   const note = () => {
     const card = el.thread.querySelector('.turn:last-child .card');
     if (card && !$('.bg-note', card)) {
       const p = document.createElement('p');
       p.className = 'bg-note';
-      p.textContent = t('Agent X arbeitet im Hintergrund weiter. Du kannst die App schließen – mit eingeschalteten Erinnerungen bekommst du eine Benachrichtigung, wenn er fertig ist.', 'Agent X keeps working in the background. You can close the app – with notifications on, you will be notified when he is done.');
+      p.textContent = agent
+        ? t('Agent X arbeitet im Hintergrund weiter. Du kannst die App schließen – mit eingeschalteten Erinnerungen bekommst du eine Benachrichtigung, wenn er fertig ist.', 'Agent X keeps working in the background. You can close the app – with notifications on, you will be notified when he is done.')
+        : t('📶 Verbindung kurz weg – die Antwort wird trotzdem fertig geschrieben und gleich nachgeladen.', '📶 Connection dropped – the answer is still being finished and will load in a moment.');
       $('.card-body', card).before(p);
     }
   };
   note();
   bgTimer = setTimeout(async () => {
     if (state.chat?.id !== id) return;
-    if (document.hidden) return watchBackground(id);
+    if (document.hidden) return watchBackground(id, agent);
     try {
       const res = await fetch(`/api/chat/${encodeURIComponent(id)}`);
       if (!res.ok) return;
       const data = await res.json();
       const still = data.turns.some((tn) => tn.answers.some((a) => a.status === 'streaming'));
-      if (still) return watchBackground(id);
+      if (still) return watchBackground(id, agent);
       if (state.chat?.id === id && !busy()) { state.chat = null; loadChat(id); haptic('success'); }
-    } catch { watchBackground(id); }
+    } catch { watchBackground(id, agent); }
   }, 4000);
 }
 document.addEventListener('visibilitychange', () => {

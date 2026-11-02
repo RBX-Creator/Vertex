@@ -484,3 +484,56 @@ test('Auto-Modus wählt je nach Frage ein Modell und sagt warum', async () => {
   const chat = (await c.json(`/api/chat/${start.data.id}`)).data;
   assert.equal(chat.turns[0].answers[0].auto.kind, 'code'); // gespeichert
 });
+
+test('Antwort-Speicher: gleiche erste Frage kommt sofort und zählt nicht', async () => {
+  const c = await signUp('cache@example.com');
+  const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && !m.auto && m.caps.includes('text'));
+  const one = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'C1' });
+  const a = await stream(c, one.data.id, 'Was ist ein Regenbogen?');
+  assert.ok(!a.lines.some((l) => l.cached));
+  const used = (await c.json('/api/chat/usage')).data.kinds.text.used;
+  const two = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'C2' });
+  const b = await stream(c, two.data.id, 'was ist ein regenbogen');
+  assert.ok(b.lines.some((l) => l.cached), 'zweites Mal aus dem Speicher');
+  assert.equal(b.text, a.text);
+  assert.equal((await c.json('/api/chat/usage')).data.kinds.text.used, used); // zählt nicht
+  // „Neu generieren“ (fresh) fragt wieder das Modell
+  const res = await c.call('/api/chat/stream', { chatId: two.data.id, side: 0, turn: 0, fresh: true, messages: [{ role: 'user', content: 'was ist ein regenbogen' }], display: { text: 'was ist ein regenbogen' } });
+  const lines = (await res.text()).trim().split('\n').map((l) => JSON.parse(l));
+  assert.ok(!lines.some((l) => l.cached));
+  // Zeitabhängiges nie aus dem Speicher
+  const three = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'C3' });
+  await stream(c, three.data.id, 'Wie ist das Wetter heute?');
+  const four = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'C4' });
+  assert.ok(!(await stream(c, four.data.id, 'Wie ist das Wetter heute?')).lines.some((l) => l.cached));
+});
+
+test('Fehler-Tagebuch und Server-Infos im Admin', async () => {
+  const guest = client();
+  assert.equal((await guest.json('/api/log', { message: 'TypeError: x is undefined', where: '/app.js', line: '12:3' })).status, 200);
+  const a = client();
+  await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
+  const d = (await a.json('/api/admin/overview')).data;
+  assert.ok(d.server.rss > 0 && d.server.limit > 0);
+  assert.ok(Array.isArray(d.health));
+  assert.ok(d.events.some((e) => e.kind === 'client' && /x is undefined/.test(e.detail)));
+});
+
+test('Wiederaufnahme: Verbindung weg – die Antwort wird trotzdem fertig gespeichert', async () => {
+  const c = await signUp('resume@example.com');
+  const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && !m.auto && m.caps.includes('text'));
+  const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'W' });
+  const ctl = new AbortController();
+  const res = await c.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 0, messages: [{ role: 'user', content: 'Erzähl mir etwas Langes über Wale' }], display: { text: 'Wale' } }, 'POST', ctl.signal);
+  const reader = res.body.getReader();
+  await reader.read(); // erstes Stück
+  ctl.abort(); // Funkloch
+  let answer;
+  for (let i = 0; i < 40; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    answer = (await c.json(`/api/chat/${start.data.id}`)).data.turns[0]?.answers[0];
+    if (answer?.status === 'done') break;
+  }
+  assert.equal(answer.status, 'done');
+  assert.ok(answer.text.length > 20);
+});

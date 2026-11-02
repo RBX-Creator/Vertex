@@ -14,6 +14,7 @@ import { safetyOn, setSafety } from './safety.js';
 import { alarmsOn, setAlarms, alarm } from './alarm.js';
 import { maintenance, forgetMaintenance } from './maintenance.js';
 import { listReports, actOnReport, openReportCount } from './reports.js';
+import { memory, healthList, runHealthCheck } from './stability.js';
 
 export const admin = Router();
 
@@ -64,7 +65,7 @@ admin.get('/overview', wrap(async (req, res) => {
   const models = await Promise.all(used.filter((r) => r.model).map(async (r) => ({ id: r.model, ...(await describeModel(r.model)), n: n(r) })));
   const modes = await all('SELECT mode, COUNT(*) n FROM chats WHERE created_at > ? GROUP BY mode ORDER BY n DESC', now - 30 * DAY);
 
-  const events = await all("SELECT kind, model, detail, created_at FROM events WHERE kind IN ('error', 'fallback', 'admin', 'blocked', 'alarm') ORDER BY id DESC LIMIT 60");
+  const events = await all("SELECT kind, model, detail, created_at FROM events WHERE kind IN ('error', 'fallback', 'admin', 'blocked', 'alarm', 'client', 'crash', 'health', 'memory') ORDER BY id DESC LIMIT 80");
   const busy = (await listModels()).filter((m) => m.busy).map((m) => m.name);
   const resetAt = Number(await getSetting('board_reset_at', 0)) || null;
 
@@ -85,6 +86,8 @@ admin.get('/overview', wrap(async (req, res) => {
     safety: await safetyOn(),
     alarms: await alarmsOn(),
     reportsOpen: await openReportCount(),
+    server: memory(),
+    health: healthList(),
   });
 }));
 
@@ -143,6 +146,11 @@ admin.post('/maintenance', adminOnly, wrap(async (req, res) => {
   forgetMaintenance();
   await logEvent('admin', null, on ? `Wartungsmodus an${message ? `: ${message}` : ''}` : 'Wartungsmodus aus');
   res.json(await maintenance());
+}));
+
+admin.post('/health-check', adminOnly, wrap(async (req, res) => {
+  await runHealthCheck();
+  res.json({ health: healthList() });
 }));
 
 // ── Meldungen (Admins und Mods) ──────────────────────────────────────

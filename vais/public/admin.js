@@ -95,6 +95,28 @@ $('#metrics').addEventListener('click', (e) => {
   drawHistory();
 });
 
+// ── Server: Speicher, Laufzeit, Modell-Gesundheit ──────────────────────
+function paintServer(m, health) {
+  if (!m) return;
+  const pct = Math.min(100, Math.round((m.rss / 512) * 100));
+  const up = m.uptime < 3600 ? `${Math.round(m.uptime / 60)} min` : m.uptime < 86400 ? `${(m.uptime / 3600).toFixed(1).replace('.', ',')} h` : `${(m.uptime / 86400).toFixed(1).replace('.', ',')} ${t('Tage', 'days')}`;
+  $('#server-mem').innerHTML = `
+    <div class="adm-key-meter"><small>${t('Arbeitsspeicher', 'Memory')}: <b>${m.rss} MB</b> / 512 MB · ${t('Höchstwert', 'peak')} ${m.peak} MB · ${t('läuft seit', 'up for')} ${up}</small>
+      <span class="adm-bar${pct >= 80 ? ' full' : ''}"><i style="width:${pct}%"></i></span></div>
+    <small class="muted">${t(`Ab ${m.limit} MB leert VAIs automatisch Zwischenspeicher.`, `From ${m.limit} MB VAIs clears caches automatically.`)}${m.lastClear ? ` ${t('Zuletzt', 'Last')}: ${when(m.lastClear)}` : ''}</small>`;
+  const list = [...(health ?? [])].sort((a, b) => Number(a.ok) - Number(b.ok));
+  $('#server-health').innerHTML = list.length ? list.map((h) => `<li class="${h.ok ? 'ok' : 'bad'}"><span class="adm-health-dot" aria-hidden="true"></span><b>${esc(h.name ?? h.id)}</b>
+      <small>${h.ok ? (h.limited ? t('gerade voll', 'busy right now') : `${t('OK', 'OK')} · ${(h.ms / 1000).toFixed(1).replace('.', ',')} s`) : esc(h.error ?? t('Fehler', 'Error'))}${h.hiddenFor ? ` · ${t('ausgeblendet', 'hidden')} ${Math.ceil(h.hiddenFor / 60000)} min` : ''} · ${when(h.at)}</small></li>`).join('')
+    : `<li class="adm-empty">${t('Noch kein Check gelaufen (läuft stündlich; Modelle, die gerade erfolgreich geantwortet haben, werden übersprungen).', 'No check yet (runs hourly; models that answered successfully recently are skipped).')}</li>`;
+}
+$('#health-run')?.addEventListener('click', async (e) => {
+  e.target.disabled = true;
+  toast(t('Prüfe die Modelle … (dauert etwas)', 'Checking models … (takes a moment)'));
+  try { const { health } = await api('health-check', {}); paintServer(lastServer, health); toast(t('Fertig.', 'Done.')); } catch (err) { toast(err.message); }
+  e.target.disabled = false;
+});
+let lastServer = null;
+
 // ── Meldungen ───────────────────────────────────────────────────────
 let repTab = 'open';
 const REP_ACTION = { remove: t('Entfernt', 'Removed'), block: t('Entfernt + gesperrt', 'Removed + blocked'), dismiss: t('Abgelehnt', 'Dismissed'), done: t('Erledigt', 'Done') };
@@ -169,7 +191,7 @@ function models(list, modes) {
 
 function events(list, busy) {
   $('#busy').textContent = busy.length ? `${t('Gerade ausgelastet', 'Busy right now')}: ${busy.slice(0, 8).join(', ')}${busy.length > 8 ? ` +${busy.length - 8}` : ''}` : t('Alle Modelle sind gerade frei.', 'All models are available right now.');
-  const KIND = { error: t('Fehler', 'Error'), fallback: t('Ersatz', 'Fallback'), admin: 'Admin', blocked: t('Geblockt', 'Blocked'), alarm: t('Alarm', 'Alarm') };
+  const KIND = { error: t('Fehler', 'Error'), fallback: t('Ersatz', 'Fallback'), admin: 'Admin', blocked: t('Geblockt', 'Blocked'), alarm: t('Alarm', 'Alarm'), client: t('Browser', 'Browser'), crash: t('Absturz', 'Crash'), health: t('Modell-Check', 'Model check'), memory: t('Speicher', 'Memory') };
   $('#events').innerHTML = list.length ? list.map((e) => `
     <li class="${e.kind}"><span class="adm-ev-kind">${esc(KIND[e.kind] ?? e.kind)}</span>
       <span class="adm-ev-text">${e.model ? `<b>${esc(e.model)}</b> ` : ''}${esc(e.detail)}</span>
@@ -199,6 +221,8 @@ async function load() {
     models(d.models, d.modes);
     loadStats();
     loadReports();
+    lastServer = d.server;
+    paintServer(d.server, d.health);
     if (role === 'admin') api('maintenance').then(paintMaint).catch(() => {});
     events(d.events, d.busy);
     boardState(d.boardResetAt);

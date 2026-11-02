@@ -12,7 +12,8 @@ import { t } from './i18n.js';
 import { getSetting, setSetting } from './db.js';
 
 const MAX_OUTPUT_TOKENS = 8192;
-const IDLE_TIMEOUT = 90_000; // so lange darf ein Modell schweigen, bevor wir abbrechen
+const IDLE_TIMEOUT = 75_000; // so lange darf ein Modell bis zum ersten Lebenszeichen brauchen
+const GAP_TIMEOUT = 40_000; // so lange darf es mitten in der Antwort schweigen (danach: Selbstheilung)
 const SEARCH_SUFFIX = '#search'; // Variante mit eingebauter Websuche (Groq gpt-oss)
 
 // Schlüssel: pro Anbieter mehrere möglich – aus Render (z. B. GROQ_API_KEY, auch mit Komma getrennt,
@@ -450,6 +451,13 @@ export function isBusy(id) {
   return (cooldown.get(`p:${provider}`) ?? 0) > now || (cooldown.get(id) ?? 0) > now;
 }
 const isDailyLimit = (msg = '') => /per[- ]?day|daily|tageslimit|quota|TPD|RPD/i.test(msg);
+// Wann ein Modell zuletzt erfolgreich geantwortet hat (für den Gesundheits-Check)
+const lastOk = new Map();
+export const noteOk = (id) => lastOk.set(id, Date.now());
+export const lastOkOf = (id) => lastOk.get(id) ?? 0;
+// Gesundheits-Check: kaputtes Modell eine Weile ausblenden
+export function markBroken(id, ms = 30 * 60 * 1000) { cooldown.set(id, Date.now() + ms); }
+export const healthCooldown = (id) => Math.max(0, (cooldown.get(id) ?? 0) - Date.now());
 function markFailed(id, status, message) {
   const now = Date.now();
   // Tageslimit und ungültige Schlüssel merkt sich die Schlüssel-Verwaltung (withKeys) pro Schlüssel
@@ -567,10 +575,12 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
   // Abbrechen, wenn das Modell zu lange nichts liefert (hängt sonst ewig)
   const idle = new AbortController();
   let idleTimer;
-  const arm = () => { clearTimeout(idleTimer); idleTimer = setTimeout(() => idle.abort(), IDLE_TIMEOUT); };
+  let started = false;
+  const arm = () => { clearTimeout(idleTimer); idleTimer = setTimeout(() => idle.abort(), started ? GAP_TIMEOUT : IDLE_TIMEOUT); };
   arm();
   try {
     await streamFrom();
+    noteOk(model);
   } catch (err) {
     if (idle.signal.aborted && !signal?.aborted) throw fail(model, 504, 'timeout', p);
     throw err;
@@ -602,6 +612,7 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
   const decoder = new TextDecoder();
   let buffer = '';
   for await (const chunk of res.body) {
+    started = true;
     arm();
     buffer += decoder.decode(chunk, { stream: true });
     let nl;
@@ -763,6 +774,7 @@ export async function complete({ model, messages, tools, signal, maxTokens, reas
     throw fail(model, res.status, err?.message, p);
   }
   const json = await res.json();
+  noteOk(model);
   const message = json.choices?.[0]?.message ?? { content: '' };
   message.finish = json.choices?.[0]?.finish_reason ?? null; // 'length' = abgeschnitten
   message.sources = sourcesFromData({ m: { ...message, content: undefined }, citations: json.citations });

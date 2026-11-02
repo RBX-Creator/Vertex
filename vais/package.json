@@ -9,7 +9,7 @@
     "node": ">=20.12"
   },
   "scripts": {
-    "start": "node server.js",
+    "start": "node --max-old-space-size=384 --expose-gc server.js",
     "dev": "node --watch server.js",
     "strings": "node scripts/extract-strings.mjs",
     "test": "node --test --test-concurrency=1 test/*.test.js"

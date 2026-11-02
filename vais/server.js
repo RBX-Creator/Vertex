@@ -83,6 +83,8 @@ app.use('/api/auth', auth);
 app.use('/api/share', share);
 const { reports } = await import('./src/reports.js');
 app.use('/api/report', reports);
+const { clientLog } = await import('./src/stability.js');
+app.use('/api/log', clientLog);
 app.use('/api/chat', chat);
 app.use('/api/admin', admin);
 app.use('/api/groups', groups);
