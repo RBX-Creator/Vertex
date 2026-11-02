@@ -208,6 +208,11 @@ app.get('/manifest.webmanifest', (req, res) => {
   res.sendFile(page('manifest.webmanifest'));
 });
 
+// Admin-Oberfläche nur an Admins und Mods ausliefern (die Admin-API prüft zusätzlich jede Anfrage)
+app.get(['/admin.js', '/admin.css'], async (req, res, next) => {
+  if (isStaff(await currentUser(req))) { res.set('Cache-Control', 'no-store'); return next(); }
+  res.status(404).type('text').send('Not found');
+});
 app.use(express.static(new URL('./public', import.meta.url).pathname, { index: false }));
 
 // Bibliotheken für die Darstellung der Antworten (Markdown)

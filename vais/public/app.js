@@ -243,7 +243,7 @@ function modelLogo(m) {
 
 // ── Zustand ───────────────────────────────────────────────────────
 const state = {
-  mode: store.get('vais.mode', 'battle'),
+  mode: store.get('vais.mode', 'direct'),
   modality: store.get('vais.modality', 'auto'),
   picks: store.get('vais.picks', [null, null]),
   models: [],
@@ -3186,7 +3186,8 @@ async function openDrawer() {
   el.drawer.hidden = false;
   $('#open-drawer').setAttribute('aria-expanded', 'true');
   if (historyDirty || !historyItems.length) {
-    if (!historyItems.length) el.dList.innerHTML = `<p class="drawer-empty">${t('Lädt …', 'Loading …')}</p>`;
+    // Lade-Platzhalter: ruhige graue Zeilen statt Text (wird bei der Einblend-Animation nicht abgeschnitten)
+    if (!historyItems.length) el.dList.innerHTML = `<div class="drawer-skel" role="status" aria-label="${t('Lädt …', 'Loading …')}">${'<i></i>'.repeat(6)}</div>`;
     try {
       if (offline) throw new TypeError('offline');
       const res = await fetch('/api/chat/list');
@@ -3834,6 +3835,21 @@ async function showAnnouncements() {
   next();
 }
 
+// Admin-/Moderations-Links (nur für Admins und Mods)
+function addAdminLinks(mod) {
+  if ($('#open-admin')) return;
+  const shield = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>';
+  const label = mod ? t('Moderation', 'Moderation') : 'Admin';
+  const menu = Object.assign(document.createElement('a'), { className: 'menu-item', id: 'open-admin', href: '/admin' });
+  menu.innerHTML = `${shield}<span>${label}</span>`;
+  $('#logout')?.before(menu);
+  const drawer = Object.assign(document.createElement('a'), { className: 'drawer-item', id: 'd-admin', href: '/admin' });
+  drawer.innerHTML = `${shield.replace(' width="18" height="18"', '')}<span>${mod ? label : t('Admin-Bereich', 'Admin panel')}</span>`;
+  $('#d-team')?.after(drawer);
+  const set = Object.assign(document.createElement('a'), { className: 'btn ghost-btn set-admin', id: 'set-admin', href: '/admin', textContent: mod ? t('Moderation öffnen', 'Open moderation') : t('Admin-Bereich öffnen', 'Open admin panel') });
+  $('#set-email')?.after(set);
+}
+
 // ── Start ─────────────────────────────────────────────────────────
 async function init() {
   let user;
@@ -3868,11 +3884,9 @@ async function init() {
     refreshTeamBadge();
     if (location.hash.startsWith('#g/')) openTeam(decodeURIComponent(location.hash.slice(3)), { toast });
   }
-  ['#open-admin', '#d-admin', '#set-admin'].forEach((sel) => {
-    $(sel).hidden = !(user.admin || user.mod);
-    if (user.mod) $(sel).querySelector('span')?.replaceChildren(t('Moderation', 'Moderation'));
-  });
-  if (user.mod && $('#set-admin')) $('#set-admin').textContent = t('Moderation öffnen', 'Open moderation');
+  // Admin-Links gibt es im HTML gar nicht – sie werden NUR eingefügt, wenn der Server bestätigt,
+  // dass dieses Konto Admin oder Mod ist (der Admin-Bereich selbst prüft das zusätzlich auf dem Server)
+  if (user.admin === true || user.mod === true) addAdminLinks(user.mod === true);
   $('#d-avatar').textContent = user.email[0].toUpperCase();
   $('#d-email').textContent = user.email;
   $('#set-email').textContent = user.email;
@@ -3904,7 +3918,7 @@ async function init() {
   const seen = Number(store.get('vais.news', 0));
   if (user.welcome && !offline) {
     store.set('vais.news', LATEST());
-    setTimeout(() => showWelcome(user.email), 300);
+    setTimeout(() => showWelcome(), 300);
   } else if (!tourDone() && !offline && !location.hash) {
     store.set('vais.news', LATEST()); // Neue Nutzer bekommen die Tour statt der Neuigkeiten
     setTimeout(startTour, 500);
@@ -3917,10 +3931,8 @@ async function init() {
 }
 
 // ── Willkommens-Paket: nur ein einziges Mal pro Konto (der Server merkt es sich) ──
-function showWelcome(email) {
+function showWelcome() {
   post('/api/auth/welcomed', {}).catch(() => {}); // sofort merken – auch wenn man die Seite gleich schließt
-  const raw = String(email).split('@')[0].split(/[._\-+\d]/).find(Boolean) || '';
-  const name = raw ? raw[0].toUpperCase() + raw.slice(1, 20) : '';
   const ideas = [
     ['🌐', t('Bau mir eine Webseite für mein Hobby', 'Build me a website for my hobby'), t('Agent X fragt kurz nach und baut sie.', 'Agent X asks a few questions and builds it.')],
     ['🧠', t('Erklär mir schwarze Löcher, als wäre ich 12', 'Explain black holes like I am 12'), t('Verständlich, mit Beispielen.', 'Easy to follow, with examples.')],
@@ -3935,25 +3947,34 @@ function showWelcome(email) {
     <div class="welcome-sky" aria-hidden="true"></div>
     <div class="welcome-in">
       <div class="welcome-logo" aria-hidden="true">${logo}</div>
-      <h2>${name ? t(`Willkommen, ${escapeHtml(name)}!`, `Welcome, ${escapeHtml(name)}!`) : t('Willkommen bei VAIs!', 'Welcome to VAIs!')}</h2>
-      <p class="welcome-sub">${t('Die besten KI-Modelle – kostenlos, an einem Ort. Probier gleich eins davon:', 'The best AI models – free, in one place. Try one of these:')}</p>
+      <h2>${t('Willkommen bei VAIs!', 'Welcome to VAIs!')}</h2>
+      <p class="welcome-sub">${t('Die besten KI-Modelle – kostenlos, an einem Ort.', 'The best AI models – free, in one place.')}</p>
+      <label class="welcome-name"><span>${t('Wie dürfen wir dich nennen? (freiwillig)', 'What should we call you? (optional)')}</span>
+        <input type="text" maxlength="40" autocomplete="given-name" enterkeyhint="done" placeholder="${t('Dein Name', 'Your name')}"></label>
+      <p class="welcome-sub small">${t('Oder probier gleich etwas aus:', 'Or try something right away:')}</p>
       <div class="welcome-ideas">${ideas.map(([ico, q, sub], i) => `<button type="button" class="welcome-idea" style="--d:${0.35 + i * 0.12}s" data-idea="${i}"><span class="wi-ico">${ico}</span><span><b>${escapeHtml(q)}</b><small>${escapeHtml(sub)}</small></span></button>`).join('')}</div>
       <button type="button" class="btn welcome-go">${t('Los geht’s ✨', 'Let’s go ✨')}</button>
     </div>`;
   document.body.append(box);
   haptic('success');
+  const nameInput = box.querySelector('.welcome-name input');
+  const saveName = () => {
+    const name = nameInput.value.trim();
+    if (name) post('/api/chat/profile/name', { name }).then(() => toast(t(`Schön, dass du da bist, ${name}! 👋`, `Great to have you here, ${name}! 👋`))).catch((err) => toast(err.message));
+  };
   const close = (prompt) => {
+    saveName();
     box.classList.add('out');
     setTimeout(() => box.remove(), 350);
     if (prompt) { el.prompt.value = prompt; autosize(); updateSend(); el.prompt.focus(); }
     else if (!tourDone()) setTimeout(startTour, 450);
   };
+  nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); close(); } });
   box.querySelector('.welcome-go').addEventListener('click', () => close());
   box.querySelectorAll('[data-idea]').forEach((b) => b.addEventListener('click', () => {
     if (!tourDone()) try { localStorage.setItem('vais_tour_done', '1'); } catch { /* egal */ }
     close(ideas[Number(b.dataset.idea)][1]);
   }));
-  box.querySelector('.welcome-go').focus();
 }
 
 $('#set-tour').addEventListener('click', () => {

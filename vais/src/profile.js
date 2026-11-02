@@ -55,6 +55,15 @@ profile.post('/', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Name aus dem Willkommens-Dialog (freiwillig) – Agent X merkt ihn sich wie andere Fakten
+profile.post('/name', wrap(async (req, res) => {
+  const name = String(req.body?.name ?? '').replace(/\s+/g, ' ').trim();
+  if (!name) return res.json({ ok: true });
+  if (name.length > 40 || !/^[\p{L}\p{M}][\p{L}\p{M} .'’-]*$/u.test(name)) throw new HttpError(400, t('Bitte nur einen Namen (Buchstaben, höchstens 40 Zeichen).', 'Please only a name (letters, at most 40 characters).'));
+  await remember(req.user.id, `Möchte „${name}“ genannt werden`);
+  res.json({ ok: true });
+}));
+
 profile.post('/memory/delete', wrap(async (req, res) => {
   const id = Number(req.body?.id);
   await run('DELETE FROM memories WHERE id = ? AND user_id = ?', id, req.user.id);

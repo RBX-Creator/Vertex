@@ -84,7 +84,18 @@ export function enhance(root) {
     wrap.className = 'table-wrap';
     table.replaceWith(wrap);
     wrap.append(table);
-    requestAnimationFrame(() => wrap.classList.toggle('scrolls', wrap.scrollWidth > wrap.clientWidth + 4));
+    requestAnimationFrame(() => {
+      const scrolls = wrap.scrollWidth > wrap.clientWidth + 4;
+      wrap.classList.toggle('scrolls', scrolls);
+      // Hinweis, dass man seitlich wischen kann (verschwindet nach dem ersten Wischen)
+      if (scrolls && !wrap.previousElementSibling?.classList.contains('table-hint')) {
+        const hint = document.createElement('div');
+        hint.className = 'table-hint';
+        hint.textContent = t('↔ Tabelle seitlich wischen', '↔ Swipe the table sideways');
+        wrap.before(hint);
+        wrap.addEventListener('scroll', () => { hint.classList.add('gone'); wrap.classList.add('moved'); }, { once: true, passive: true });
+      }
+    });
   });
   root.querySelectorAll('pre > code').forEach((code) => {
     const pre = code.parentElement;

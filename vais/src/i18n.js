@@ -6,7 +6,9 @@ const store = new AsyncLocalStorage();
 export function langFromRequest(req) {
   const cookie = /(?:^|;\s*)vais_lang=(en|de|tr|es|fr|uk)\b/.exec(req.headers.cookie || '')?.[1];
   if (cookie) return cookie;
-  return 'en'; // Standard für neue Besucher: Englisch (Sprache wählt man in den Einstellungen)
+  // sonst die Sprache des Browsers, wenn wir sie haben – ansonsten Deutsch
+  const accept = (req.headers['accept-language'] || '').slice(0, 2).toLowerCase();
+  return ['de', 'en', ...EXTRA_LANGS].includes(accept) ? accept : 'de';
 }
 
 export function langMiddleware(req, res, next) {

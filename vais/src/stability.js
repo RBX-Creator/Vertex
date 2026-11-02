@@ -15,7 +15,7 @@ let peak = 0;
 let lastClear = 0;
 export function memory() {
   const m = process.memoryUsage();
-  return { rss: Math.round(m.rss / MB), heap: Math.round(m.heapUsed / MB), heapTotal: Math.round(m.heapTotal / MB), peak: Math.round(peak / MB), limit: Math.round(LIMIT_RSS / MB), uptime: Math.round(process.uptime()), lastClear: lastClear || null };
+  return { rss: Math.round(m.rss / MB), heap: Math.round(m.heapUsed / MB), heapTotal: Math.round(m.heapTotal / MB), peak: Math.round(peak / MB), limit: Math.round(LIMIT_RSS / MB), uptime: Math.round(process.uptime()), lastClear: lastClear || null, keepAlive: globalThis.__vaisKeepAlive ?? null };
 }
 function checkMemory() {
   const { rss } = process.memoryUsage();
@@ -93,3 +93,23 @@ if (process.env.NODE_ENV !== 'test' && !process.env.NO_HEALTH_CHECK) {
   setTimeout(() => { checkModels().catch(() => {}); setInterval(() => checkModels().catch(() => {}), HOUR).unref(); }, 3 * 60 * 1000).unref();
 }
 export const runHealthCheck = checkModels;
+
+// ── Keep-Alive: Render (kostenlos) schläft nach ~15 Minuten ohne Besucher ein ─────────
+// Alle 10 Minuten ruft sich der Server über seine öffentliche Adresse selbst auf, damit er wach bleibt.
+// Abschalten mit KEEP_ALIVE=off. (Render setzt RENDER_EXTERNAL_URL automatisch.)
+const PUBLIC_URL = (process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/$/, '');
+export const keepAlive = { on: false, last: null, ok: null };
+globalThis.__vaisKeepAlive = keepAlive;
+if (PUBLIC_URL && process.env.KEEP_ALIVE !== 'off' && process.env.NODE_ENV !== 'test') {
+  keepAlive.on = true;
+  const ping = async () => {
+    try {
+      const r = await fetch(`${PUBLIC_URL}/healthz?keepalive=1`, { signal: AbortSignal.timeout(20_000), headers: { 'User-Agent': 'VAIs-KeepAlive' } });
+      keepAlive.ok = r.ok;
+    } catch { keepAlive.ok = false; }
+    keepAlive.last = Date.now();
+  };
+  setTimeout(ping, 60_000).unref();
+  setInterval(ping, 10 * 60 * 1000).unref();
+  console.log(`Keep-Alive aktiv: ${PUBLIC_URL}/healthz alle 10 Minuten`);
+}

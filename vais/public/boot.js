@@ -28,12 +28,12 @@
   if (theme === 'light' || theme === 'dark') root.setAttribute('data-theme', theme);
 
   var LANGS = ['de', 'en', 'tr', 'es', 'fr', 'uk'];
-  // Wer zum ersten Mal kommt, sieht VAIs auf Englisch – umstellen geht jederzeit in den Einstellungen
-  // (wer schon mal da war, behält seine bisherige Sprache – sie steht im Cookie)
+  // Sprache: gewählte > bisherige (Cookie) > Browsersprache > Deutsch
   var lang = read('vais.lang');
   if (LANGS.indexOf(lang) === -1) {
     var before = (/(?:^|;\s*)vais_lang=([a-z]{2})/.exec(document.cookie || '') || [])[1];
-    lang = LANGS.indexOf(before) !== -1 ? before : 'en';
+    var nav = String(navigator.language || '').slice(0, 2).toLowerCase();
+    lang = LANGS.indexOf(before) !== -1 ? before : LANGS.indexOf(nav) !== -1 ? nav : 'de';
     try { localStorage.setItem('vais.lang', JSON.stringify(lang)); } catch (e) { /* egal */ }
   }
   root.setAttribute('lang', lang);
@@ -50,7 +50,7 @@
       meta.name = 'theme-color';
       document.head.appendChild(meta);
     }
-    meta.content = dark ? '#0b0b0d' : '#f6f5f1';
+    meta.content = dark ? '#070a14' : '#f6f5f1';
   }
   window.__vaisPaintBar = paintBar;
   paintBar();

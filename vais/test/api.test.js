@@ -599,3 +599,31 @@ test('Eigene Antworten vom Admin: sofort, ohne KI, zählt nicht; häufigste Frag
   const wal = top.questions.find((q) => /wal/i.test(q.text));
   assert.ok(wal && wal.users === 2 && wal.percent > 0);
 });
+
+test('Sicherheit: neues Konto erreicht nichts aus dem Admin-Bereich', async () => {
+  const c = await signUp('fresh-user@example.com');
+  const me = (await c.json('/api/auth/me')).data.user;
+  assert.equal(me.admin, undefined);
+  assert.equal(me.mod, undefined);
+  for (const path of ['/api/admin/overview', '/api/admin/users', '/api/admin/keys', '/api/admin/limits', '/api/admin/reports', '/api/admin/faq', '/api/admin/stats', '/api/admin/maintenance', '/api/admin/top-questions', '/api/admin/feedback', '/api/admin/sites', '/api/groups']) {
+    assert.equal((await c.call(path)).status, 404, path);
+  }
+  for (const [path, body] of [['/api/admin/limits', { limits: { text: 9999 } }], ['/api/admin/role', { userId: 1, role: 'mod' }], ['/api/admin/keys', { provider: 'groq', key: 'x' }], ['/api/admin/maintenance', { on: true }], ['/api/admin/faq', { question: 'a b', answer: 'c' }]]) {
+    assert.equal((await c.json(path, body)).status, 404, path);
+  }
+  assert.equal((await c.call('/admin.js')).status, 404);
+  assert.equal((await c.call('/admin.css')).status, 404);
+  const adminPage = await c.call('/admin');
+  assert.equal(adminPage.status, 302);
+  assert.equal(adminPage.headers.get('location'), '/');
+  // Admin bekommt die Seite
+  const a = client();
+  await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
+  assert.equal((await a.call('/admin.js')).status, 200);
+  assert.equal((await a.json('/api/auth/me')).data.user.admin, true);
+  // Name aus dem Willkommens-Dialog landet im Gedächtnis
+  assert.equal((await c.json('/api/chat/profile/name', { name: 'Mia' })).status, 200);
+  assert.equal((await c.json('/api/chat/profile/name', { name: '<script>' })).status, 400);
+  const prof = (await c.json('/api/chat/profile')).data;
+  assert.ok(JSON.stringify(prof).includes('Mia'));
+});

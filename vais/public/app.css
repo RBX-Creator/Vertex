@@ -2053,3 +2053,34 @@ body[data-view='home'] .home-stars { display: block; position: fixed; inset: 0; 
 .mode-pills::-webkit-scrollbar { display: none; }
 .pill { flex: none; height: 32px; padding: 0 12px; font-size: 13.5px; gap: 5px; }
 .pill .pill-ico { font-size: 13px; }
+/* Breite Tabellen: sichtbare Scrollleiste + Hinweis zum Wischen */
+.table-wrap { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+.table-wrap::-webkit-scrollbar { height: 6px; }
+.table-wrap::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; }
+.table-wrap::-webkit-scrollbar-track { background: transparent; }
+.table-hint { display: flex; justify-content: flex-end; margin: 0 2px 4px; font-size: 12px; color: var(--muted); transition: opacity .3s, max-height .3s; max-height: 20px; overflow: hidden; }
+.table-hint.gone { opacity: 0; max-height: 0; margin: 0; }
+.table-wrap.scrolls:not(.moved) { box-shadow: inset -18px 0 14px -14px rgba(0, 0, 0, .35); }
+/* Verlauf lädt: Platzhalter-Zeilen mit sanftem Schimmer */
+.drawer-skel { display: grid; gap: 10px; margin: 16px 10px; }
+.drawer-skel i { display: block; height: 14px; border-radius: 7px; background: linear-gradient(90deg, var(--surface-2) 0%, var(--border) 50%, var(--surface-2) 100%); background-size: 200% 100%; animation: skel 1.3s ease-in-out infinite; }
+.drawer-skel i:nth-child(3n + 1) { width: 72%; }
+.drawer-skel i:nth-child(3n + 2) { width: 88%; }
+.drawer-skel i:nth-child(3n) { width: 58%; }
+@keyframes skel { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+.drawer-empty { white-space: normal; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .drawer-skel i { animation: none; } }
+/* Willkommen: freiwillige Frage nach dem Namen */
+.welcome-name { display: grid; gap: 6px; text-align: left; animation: fadeUp .6s ease .3s both; }
+.welcome-name span { font-size: 14px; color: #c9c6e8; }
+.welcome-name input { font: inherit; font-size: 16px; padding: 12px 16px; border-radius: 14px; border: 1px solid #ffffff2a; background: #ffffff10; color: #fff; outline: none; }
+.welcome-name input::placeholder { color: #9d99c4; }
+.welcome-name input:focus { border-color: #b9aaff; box-shadow: 0 0 0 3px #8b7cff40; }
+.welcome-sub.small { font-size: 14px; margin-top: 2px; }
+/* Weltraum-Design (dunkel): ganz feine Sterne überall, auf der Startseite deutlicher */
+:root[data-theme='dark'] .home-stars { display: block; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .35; }
+:root[data-theme='dark'] body[data-view='home'] .home-stars { opacity: 1; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .home-stars { display: block; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .35; }
+  :root:not([data-theme='light']) body[data-view='home'] .home-stars { opacity: 1; }
+}
