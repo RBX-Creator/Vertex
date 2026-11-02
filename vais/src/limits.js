@@ -92,12 +92,16 @@ export async function usageOf(user) {
 }
 
 // Eine Antwort zählen – oder ablehnen, wenn für diese Art heute nichts mehr übrig ist
-export async function charge(user, kind) {
+// cost: wie viele Antworten das zählt (z. B. „Denken“ = 2)
+export async function charge(user, kind, cost = 1) {
   if (!KINDS.includes(kind)) return null;
   const [L, factor] = await Promise.all([limitSettings(), userFactor(user)]);
   const max = scaled(L[kind], factor);
   if (max !== null) {
     const used = (await countsToday(user.id))[kind];
+    if (cost > 1 && used < max && used + cost > max) {
+      throw new HttpError(429, t(`„Denken“ zählt als ${cost} Antworten – du hast heute nur noch ${max - used}. Schalte „Denken“ aus, dann geht es weiter.`, `“Think” counts as ${cost} answers – you only have ${max - used} left today. Turn “Think” off to continue.`), { usage: true });
+    }
     if (used >= max) {
       const other = kind === 'text' ? '' : t(' Normale Antworten gehen noch.', ' Normal answers still work.');
       throw new HttpError(429, max === 0
@@ -105,13 +109,13 @@ export async function charge(user, kind) {
         : t(`Du hast heute alle ${max} ${KIND_NAME[kind]()} genutzt (100 %). Um Mitternacht geht es weiter.${other}`, `You used all ${max} ${KIND_NAME[kind]()} for today (100 %). It resets at midnight.${other}`), { usage: true });
     }
   }
-  await run('INSERT INTO usage_kinds (user_id, day, kind, n) VALUES (?, ?, ?, 1) ON CONFLICT(user_id, day, kind) DO UPDATE SET n = n + 1', user.id, dayKey(), kind);
+  await run('INSERT INTO usage_kinds (user_id, day, kind, n) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, day, kind) DO UPDATE SET n = n + excluded.n', user.id, dayKey(), kind, cost);
   return kind;
 }
 // Hat das Modell gar nicht geantwortet, zählt es nicht
-export async function refund(user, kind) {
+export async function refund(user, kind, cost = 1) {
   if (!KINDS.includes(kind)) return;
-  await run('UPDATE usage_kinds SET n = MAX(0, n - 1) WHERE user_id = ? AND day = ? AND kind = ?', user.id, dayKey(), kind).catch(() => {});
+  await run('UPDATE usage_kinds SET n = MAX(0, n - ?) WHERE user_id = ? AND day = ? AND kind = ?', cost, user.id, dayKey(), kind).catch(() => {});
 }
 export async function resetUsage(userId) {
   await run('DELETE FROM usage_kinds WHERE user_id = ? AND day = ?', userId, dayKey());

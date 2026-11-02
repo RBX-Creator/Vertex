@@ -246,6 +246,7 @@ const state = {
   mode: store.get('vais.mode', 'direct'),
   modality: store.get('vais.modality', 'auto'),
   picks: store.get('vais.picks', [null, null]),
+  think: store.get('vais.think', false) === true,
   models: [],
   queue: [], // vorgemerkte Nachrichten (während die KI antwortet)
   incognito: false, // nächster Chat wird nicht gespeichert
@@ -345,7 +346,20 @@ function renderControls() {
     chip.setAttribute('aria-label', `${t('Modell', 'Model')} ${slot + 1}: ${m?.name ?? t('keins gewählt', 'none chosen')}`);
   });
   el.prompt.placeholder = state.chat ? t('Folgefrage stellen …', 'Ask a follow-up …') : t('Frag irgendwas …', 'Ask anything …');
+  // „Denken“ gibt es für normale Antworten (Agent X denkt selbst, Bilder brauchen es nicht)
+  const thinkBtn = $('#think-btn');
+  thinkBtn.hidden = state.mode === 'agent' || state.modality === 'image';
+  thinkBtn.setAttribute('aria-pressed', String(state.think));
+  thinkBtn.classList.toggle('on', state.think);
 }
+const thinkOn = () => state.think && state.mode !== 'agent' && state.chat?.modality !== 'image' && state.chat?.mode !== 'agent';
+$('#think-btn').addEventListener('click', () => {
+  state.think = !state.think;
+  store.set('vais.think', state.think);
+  haptic('tap');
+  renderControls();
+  if (state.think) toast(t('Denken an: gründlichere Antworten, zählt als 2 Antworten.', 'Think on: more thorough answers, counts as 2 answers.'));
+});
 
 function renderModeMenu() {
   el.modeMenu.innerHTML = Object.entries(MODES).map(([key, m]) => `
@@ -1102,7 +1116,7 @@ async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chatId: chat.id, side, turn: turnIndex, messages: buildMessages(turnIndex, side), fresh, boost,
+        chatId: chat.id, side, turn: turnIndex, messages: buildMessages(turnIndex, side), fresh, boost, think: thinkOn(),
         display: { text: chat.turns[turnIndex].user, attachments: chat.turns[turnIndex].attachments ?? [] },
       }),
       signal: ctrl.signal,

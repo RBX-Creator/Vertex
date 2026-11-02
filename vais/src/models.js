@@ -558,12 +558,22 @@ function thinkSplitter(onText, onReasoning) {
   };
 }
 
-export async function streamChat({ model, messages, signal, onText, onReasoning = () => {}, onSources = () => {} }) {
+// „Denken“: passende Einstellung je Anbieter/Modell (nur wenn das Modell so etwas kann)
+export function reasoningParams(provider, upstream, effort) {
+  if (!effort) return {};
+  if (/gpt-oss/i.test(upstream) && ['groq', 'cerebras'].includes(provider)) return { reasoning_effort: effort };
+  if (provider === 'groq' && /qwen3/i.test(upstream)) return effort === 'low' ? { reasoning_effort: 'none' } : { reasoning_format: 'parsed', reasoning_effort: 'default' };
+  if (provider === 'gemini' && /^gemini-/i.test(upstream)) return { reasoning_effort: effort };
+  if (provider === 'openrouter') return { reasoning: { effort } };
+  return {};
+}
+
+export async function streamChat({ model, messages, signal, think = false, onText, onReasoning = () => {}, onSources = () => {} }) {
   const [provider, ...rest] = model.split(':');
   let upstream = rest.join(':');
   const search = upstream.endsWith(SEARCH_SUFFIX);
   if (search) upstream = upstream.slice(0, -SEARCH_SUFFIX.length);
-  if (provider === 'demo') return demoStream({ name: `${upstream}-demo`, messages, signal, onText, onReasoning });
+  if (provider === 'demo') return demoStream({ name: `${upstream}-demo`, messages, signal, think, onText, onReasoning });
   const p = PROVIDERS[provider];
   if (!p?.keys.length) throw new Error(t('Dieses Modell ist gerade nicht verfügbar.', 'This model is not available right now.'));
 
@@ -589,7 +599,7 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
   }
 
   async function streamFrom() {
-  const res = await withKeys(provider, model, (key) => fetch(`${p.base}/chat/completions`, {
+  const send = (reason) => withKeys(provider, model, (key) => fetch(`${p.base}/chat/completions`, {
     method: 'POST',
     signal: signal ? AbortSignal.any([signal, idle.signal]) : idle.signal,
     headers: headersFor(key),
@@ -599,8 +609,16 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
       stream: true,
       ...tokenLimit(provider, upstream),
       ...(search ? { tools: [{ type: 'browser_search' }], tool_choice: 'auto' } : {}),
+      ...(reason ? reasoningParams(provider, upstream, 'high') : {}),
     }),
   }));
+  let res = await send(think);
+  if (!res.ok && think && res.status === 400) {
+    // Modell kennt die Denk-Einstellung nicht → ohne nochmal (statt Fehler)
+    const body = await res.clone().json().catch(() => ({}));
+    const msg = (Array.isArray(body) ? body[0]?.error : body?.error)?.message ?? '';
+    if (/reason|thinking|unsupported|unknown|not support/i.test(msg)) res = await send(false);
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -814,8 +832,8 @@ export async function complete({ model, messages, tools, signal, maxTokens, reas
       messages,
       ...(maxTokens ? { max_tokens: maxTokens } : tokenLimit(provider, upstream)),
       ...(allTools.length ? { tools: allTools, tool_choice: 'auto' } : {}),
-      // gpt-oss: wie viel das Modell vorher nachdenkt (Denken kostet Ausgabe-Tokens)
-      ...(reasoningEffort && /gpt-oss/.test(upstream) && ['groq', 'cerebras', 'openrouter'].includes(provider) ? { reasoning_effort: reasoningEffort } : {}),
+      // wie viel das Modell vorher nachdenkt (Denken kostet Ausgabe-Tokens) – nur gpt-oss, wie bisher
+      ...(reasoningEffort && /gpt-oss/.test(upstream) ? (provider === 'openrouter' ? { reasoning: { effort: reasoningEffort } } : reasoningParams(provider, upstream, reasoningEffort)) : {}),
     }),
   }));
   if (!res.ok) {
@@ -848,7 +866,7 @@ const sleep = (ms, signal) => new Promise((resolve, reject) => {
   signal?.addEventListener('abort', () => { clearTimeout(t); reject(signal.reason); }, { once: true });
 });
 
-async function demoStream({ name, messages, signal, onText, onReasoning = () => {} }) {
+async function demoStream({ name, messages, signal, think = false, onText, onReasoning = () => {} }) {
   const lastRaw = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
   const images = Array.isArray(lastRaw) ? lastRaw.filter((p) => p.type === 'image_url').length : 0;
   const last = (Array.isArray(lastRaw) ? lastRaw.filter((p) => p.type === 'text').map((p) => p.text).join(' ') : lastRaw)
@@ -863,7 +881,7 @@ async function demoStream({ name, messages, signal, onText, onReasoning = () => 
         ? `Ein Beispiel mit **Formeln** und **Code**:\n\nDie bekannteste Formel ist $E = mc^2$, und es gilt\n\n$$\\int_0^1 x^2\\,dx = \\frac{1}{3}$$\n\nIn Python:\n\n\`\`\`python\ndef quadrat(x):\n    # gibt x hoch 2 zurück\n    return x ** 2\n\nprint(quadrat(5))  # 25\n\`\`\`\n\nUnd ein Preis bleibt normal: 5 $ und 10 $.`
         : `Hallo! Ich bin **${name}**, ein Platzhalter-Modell.\n\nDu hast geschrieben: „${quote}“\n\nSobald ein API-Schlüssel eingetragen ist, antworten hier echte KI-Modelle.`;
   await sleep(300 + Math.random() * 500, signal);
-  if (name.startsWith('basalt') || code) {
+  if (name.startsWith('basalt') || code || think) {
     const plan = `Der Nutzer möchte: „${quote}“. Ich überlege kurz, wie ich das am besten beantworte: zuerst die Kernaussage, dann Details, am Ende eine kurze Zusammenfassung. Formatierung mit Markdown, freundlich und klar.`;
     for (const piece of plan.match(/\S+\s*/g)) { await sleep(25, signal); onReasoning(piece); }
   }

@@ -627,3 +627,18 @@ test('Sicherheit: neues Konto erreicht nichts aus dem Admin-Bereich', async () =
   const prof = (await c.json('/api/chat/profile')).data;
   assert.ok(JSON.stringify(prof).includes('Mia'));
 });
+
+test('„Denken“ zählt als 2 Antworten und liefert Gedanken', async () => {
+  const c = await signUp('think@example.com');
+  const first = (await c.json('/api/chat/models')).data.models.find((m) => m.id === 'demo:aurora');
+  const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'D' });
+  const res = await c.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 0, think: true, messages: [{ role: 'user', content: 'Warum ist der Himmel blau?' }], display: { text: 'Warum ist der Himmel blau?' } });
+  const lines = (await res.text()).trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  assert.ok(lines.some((l) => l.r), 'Gedanken kommen');
+  assert.equal((await c.json('/api/chat/usage')).data.kinds.text.used, 2);
+  const sum = await c.json('/api/chat/think-summary', { chatId: start.data.id, turn: 0, side: 0 });
+  assert.equal(sum.status, 200);
+  assert.ok(sum.data.summary.length > 5);
+  await stream(c, start.data.id, 'Und ohne Denken?', 1);
+  assert.equal((await c.json('/api/chat/usage')).data.kinds.text.used, 3);
+});

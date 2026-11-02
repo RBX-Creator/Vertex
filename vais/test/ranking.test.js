@@ -71,3 +71,13 @@ test('Basis-Anweisung: Datum, Du-Form, Gedächtnis – im Battle ohne Identität
   assert.doesNotMatch(b, /VAIs|x by/);
   assert.match(b, /anonymous/);
 });
+
+test('Denken: passende Einstellung je Anbieter', async () => {
+  const { reasoningParams } = await import('../src/models.js');
+  assert.deepEqual(reasoningParams('groq', 'openai/gpt-oss-120b', 'high'), { reasoning_effort: 'high' });
+  assert.deepEqual(reasoningParams('groq', 'qwen/qwen3.8-27b', 'high'), { reasoning_format: 'parsed', reasoning_effort: 'default' });
+  assert.deepEqual(reasoningParams('gemini', 'gemini-3-flash', 'high'), { reasoning_effort: 'high' });
+  assert.deepEqual(reasoningParams('gemini', 'gemma-4-31b-it', 'high'), {});
+  assert.deepEqual(reasoningParams('openrouter', 'thinkingmachines/inkling:free', 'high'), { reasoning: { effort: 'high' } });
+  assert.deepEqual(reasoningParams('groq', 'openai/gpt-oss-120b', null), {});
+});

@@ -310,7 +310,7 @@ chat.post('/stream', wrap(async (req, res) => {
   let auto = null; // Auto-Modus: welches Modell und warum
   if (model === 'auto') {
     const ask = typeof display?.text === 'string' && display.text.trim() ? display.text : plain(clean.at(-1));
-    const pick = await autoPick(ask, { images: hasImages, modality: row.modality, boost: !!req.body?.boost });
+    const pick = await autoPick(ask, { images: hasImages, modality: row.modality, boost: !!req.body?.boost || !!req.body?.think });
     if (!pick) throw new HttpError(503, t('Gerade ist kein passendes Modell frei. Versuche es gleich noch einmal.', 'No suitable model is free right now. Try again in a moment.'));
     model = pick.model.id;
     auto = { id: pick.model.id, name: pick.model.name, maker: pick.model.maker, icon: pick.model.icon, kind: pick.kind, why: pick.label };
@@ -349,9 +349,12 @@ chat.post('/stream', wrap(async (req, res) => {
   const faq = !blocked && !quick && !req.body?.fresh && ['direct', 'agent'].includes(row.mode) && row.modality !== 'image' && !hasImages ? await faqMatch(lastText).catch(() => null) : null;
   // Viele Konten aus demselben Netz (Limit-Diebstahl): großzügige Grenze pro Netz und Tag
   if (!blocked && !faq && kind && !isStaff(req.user)) ipAnswerQuota(req.ip, kind, L[kind]);
+  // „Denken“: gründlicher nachdenken lassen – zählt als 2 Antworten (nicht bei Agent X und Bildern)
+  const think = !!req.body?.think && (kind === 'text' || kind === 'web');
+  const cost = think ? 2 : 1;
   let charged;
-  try { charged = blocked || faq ? null : await charge(req.user, kind); } catch (err) { if (kind) undoIpAnswer(req.ip, kind); throw err; }
-  const giveBack = async () => { await refund(req.user, charged); if (charged) undoIpAnswer(req.ip, kind); }; // nichts geantwortet → zählt nicht
+  try { charged = blocked || faq ? null : await charge(req.user, kind, cost); } catch (err) { if (kind) undoIpAnswer(req.ip, kind); throw err; }
+  const giveBack = async () => { await refund(req.user, charged, cost); if (charged) undoIpAnswer(req.ip, kind); }; // nichts geantwortet → zählt nicht
   const personal = await personalFor(req.user.id);
   if (row.incognito) { personal.memoryOn = false; personal.memories = []; } // Inkognito: nichts merken
   const custom = row.modality === 'image' ? null : instructionsPrompt(personal.instructions);
@@ -519,6 +522,7 @@ chat.post('/stream', wrap(async (req, res) => {
               row.modality === 'code' ? CODE_PROMPT : null, custom, summaryPrompt(fitted.summary),
             ], clean),
             signal: controller.signal,
+            think,
             onText,
             onReasoning,
             onSources,
