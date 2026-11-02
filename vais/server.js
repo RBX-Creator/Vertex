@@ -94,10 +94,17 @@ app.use('/api/groups', groups);
 // Seiten: nicht eingeloggte Besucher landen beim Login
 const page = (name) => new URL(`./public/${name}`, import.meta.url).pathname;
 const noCache = (res) => res.set('Cache-Control', 'no-cache');
+// Seiten mit Link-Vorschau (Open Graph): die eigene Adresse einsetzen, damit WhatsApp & Co. das Bild finden
+const pageCache = new Map();
+async function sendPage(req, res, name) {
+  if (!pageCache.has(name)) pageCache.set(name, await readFile(page(name), 'utf8'));
+  const origin = (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  res.type('html').send(pageCache.get(name).replaceAll('__ORIGIN__', origin));
+}
 app.get('/', async (req, res) => {
   if (!(await currentUser(req))) return res.redirect('/login');
   noCache(res);
-  res.sendFile(page('app.html'));
+  await sendPage(req, res, 'app.html');
 });
 app.get('/admin', async (req, res) => {
   const user = await currentUser(req);
@@ -110,7 +117,7 @@ app.get('/admin.html', (req, res) => res.redirect('/admin'));
 app.get('/login', async (req, res) => {
   if (await currentUser(req)) return res.redirect('/');
   noCache(res);
-  res.sendFile(page('login.html'));
+  await sendPage(req, res, 'login.html');
 });
 
 // QR-Code (nur für Links zu VAIs selbst)
@@ -148,10 +155,10 @@ app.get('/melden', (req, res) => {
 });
 
 // Geteilte Chats: für alle lesbar (die Seite lädt die Daten selbst)
-app.get('/s/:id', (req, res) => {
+app.get('/s/:id', async (req, res) => {
   noCache(res);
   res.set('Referrer-Policy', 'no-referrer');
-  res.sendFile(page('share.html'));
+  await sendPage(req, res, 'share.html');
 });
 
 // Datenschutz & Impressum (mit Betreiber-Angaben aus der Konfiguration)

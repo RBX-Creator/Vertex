@@ -27,7 +27,11 @@ const tr = (en) => DICT[en] ?? en;
 export const t = (de, en) => (LANG === 'de' ? de : LANG === 'en' ? en : tr(en));
 
 export function translateDom(root = document) {
-  if (LANG === 'de') return;
+  if (LANG === 'de') {
+    const de = document.querySelector('meta[name="title-de"]')?.content;
+    if (de) document.title = de;
+    return;
+  }
   const map = (v) => (LANG === 'en' ? v : tr(v));
   root.querySelectorAll('[data-en]').forEach((el) => { el.textContent = map(el.dataset.en); });
   for (const attr of ['placeholder', 'aria-label', 'title']) {

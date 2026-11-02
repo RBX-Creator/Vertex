@@ -28,10 +28,13 @@
   if (theme === 'light' || theme === 'dark') root.setAttribute('data-theme', theme);
 
   var LANGS = ['de', 'en', 'tr', 'es', 'fr', 'uk'];
+  // Wer zum ersten Mal kommt, sieht VAIs auf Englisch – umstellen geht jederzeit in den Einstellungen
+  // (wer schon mal da war, behält seine bisherige Sprache – sie steht im Cookie)
   var lang = read('vais.lang');
   if (LANGS.indexOf(lang) === -1) {
-    var nav = String(navigator.language || '').slice(0, 2).toLowerCase();
-    lang = LANGS.indexOf(nav) !== -1 ? nav : 'en';
+    var before = (/(?:^|;\s*)vais_lang=([a-z]{2})/.exec(document.cookie || '') || [])[1];
+    lang = LANGS.indexOf(before) !== -1 ? before : 'en';
+    try { localStorage.setItem('vais.lang', JSON.stringify(lang)); } catch (e) { /* egal */ }
   }
   root.setAttribute('lang', lang);
   root.setAttribute('data-lang', lang);
