@@ -716,6 +716,37 @@ export async function pickRanked(task, opts = {}) {
   return rankModels(task, await listModels(), opts)[0] ?? null;
 }
 
+// Eine Anfrage an das beste freie Modell einer Aufgabe – bei Limit, Ausfall oder zu großer Anfrage
+// automatisch das nächste aus der Rangliste (kurze Minuten-Limits werden abgewartet). Ergebnis enthält .model
+const RETRYABLE = new Set([400, 404, 408, 413, 429, 500, 502, 503, 504]);
+export async function completeBest(task, params, { signal, exclude = [], cap = 'text', tries = 5 } = {}) {
+  const tried = new Set(exclude);
+  let lastErr = null;
+  let waits = 0;
+  for (let i = 0; i < tries; i++) {
+    const m = rankModels(task, await listModels(), { cap, exclude: [...tried] })[0];
+    if (!m) break;
+    try {
+      const msg = await complete({ ...params, model: m.id, signal });
+      if (!String(msg.content ?? '').trim() && !msg.tool_calls?.length) throw Object.assign(new Error('Leere Antwort'), { status: 502 });
+      return Object.assign(msg, { model: m });
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      lastErr = err;
+      // nur das Minuten-Limit: kurz warten und dasselbe (beste) Modell nochmal
+      if (err.status === 429 && err.retryAfter && err.retryAfter <= 10_000 && waits < 2) {
+        waits++;
+        await new Promise((ok) => setTimeout(ok, err.retryAfter + 300));
+        continue;
+      }
+      tried.add(m.id);
+      if (err.status && !RETRYABLE.has(err.status)) throw err;
+      console.log(`${task}: ${m.id} geht nicht (${err.status ?? ''} ${String(err.message).slice(0, 80)}) – nehme das nächste Modell`);
+    }
+  }
+  throw lastErr ?? new Error(t('Gerade ist kein passendes Modell frei.', 'No suitable model is free right now.'));
+}
+
 // ── Kleine Helfer-Aufgaben (Titel, Vorschläge, Zusammenfassungen) mit einem schnellen Modell ──
 export async function helperModel() {
   return pickRanked('helper', { cap: 'text' });

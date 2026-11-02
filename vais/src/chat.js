@@ -504,6 +504,7 @@ chat.post('/stream', wrap(async (req, res) => {
           onReasoning,
           onSources,
           onReact,
+          onImage: (img) => { images.push(img); out(`${JSON.stringify({ image: img })}\n`); },
           personal: { ...personal, summary: fitted.summary },
           inbox,
           onRemember: (fact) => remember(req.user.id, fact),

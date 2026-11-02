@@ -1,13 +1,13 @@
 // Agent X: arbeitet in mehreren Schritten selbstständig.
 // Werkzeuge: Websuche (mehrere Anfragen gleichzeitig), Wikipedia, Webseiten lesen, Rechnen,
 // Datum/Uhrzeit, Webseiten prüfen. Angehängte Bilder beschreibt vorher ein Bildmodell.
-import { lookup } from 'node:dns/promises';
-import net from 'node:net';
 import vm from 'node:vm';
 import { buildWebsite, editWebsite, assemble } from './sitebuilder.js';
 import { t, lang } from './i18n.js';
-import { listModels, complete, demoMode, makeSource, rankModels } from './models.js';
-import { searchWeb } from './search.js';
+import { listModels, complete, demoMode, makeSource, rankModels, generateImage } from './models.js';
+import { deepResearch, heavyAnswer, isResearch, isHard } from './deep.js';
+import { runJavaScriptText } from './sandbox.js';
+import { searchWeb, readPage } from './search.js';
 
 const MAX_STEPS = 8;
 
@@ -148,6 +148,22 @@ const TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'run_javascript',
+      description: 'Führt JavaScript sicher aus (eigene Umgebung, kein Internet, keine Dateien, höchstens 2 Sekunden) – für knifflige Rechnungen, Statistik, Simulationen, Datums-/Listen-/Textverarbeitung. Ergebnis mit console.log ausgeben oder mit return zurückgeben.',
+      parameters: { type: 'object', properties: { code: { type: 'string', description: 'JavaScript-Code, z. B. let s = 0; for (let i = 1; i <= 100; i++) s += i; console.log(s);' } }, required: ['code'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'generate_image',
+      description: 'Erstellt ein Bild aus einer Beschreibung und zeigt es dem Nutzer direkt an. Nur nutzen, wenn der Nutzer ausdrücklich ein Bild, Foto, Logo, Poster o. ä. haben möchte.',
+      parameters: { type: 'object', properties: { prompt: { type: 'string', description: 'Ausführliche Bildbeschreibung auf Englisch (Motiv, Stil, Licht, Farben, Perspektive)' } }, required: ['prompt'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'build_website',
       description: 'Baut eine komplette, große und hochwertige Webseite, Web-App oder ein Browser-Spiel in mehreren Schritten (Entwurf → Design-System → jeder Abschnitt einzeln → Prüfung). Dauert 1–3 Minuten. Die fertige Seite wird automatisch an deine Antwort angehängt. Schreibe den HTML-Code NIE selbst.',
       parameters: {
@@ -179,7 +195,7 @@ function systemPrompt(personal = {}) {
       : 'Denke auf Deutsch. Beginne deine Überlegungen mit einem kurzen Satz, was der Nutzer genau möchte, und plane dann die Schritte.',
     `Heute ist ${now} (Europe/Berlin).`,
     'WERKZEUGE SPARSAM NUTZEN (jede Suche kostet das Tageslimit): Für Tipps, Pläne, Strategien, Erklärungen, Ideen, Texte und Allgemeinwissen antwortest du DIREKT aus deinem Wissen – ohne Suche. web_search nur, wenn du wirklich aktuelle oder sehr spezielle Fakten brauchst, die du nicht sicher weißt (Nachrichten, Wetter, Preise, Termine, Ergebnisse, Neuheiten) oder der Nutzer ausdrücklich eine Recherche will. Dann reicht meist EINE Suche mit 1–2 gezielten Suchanfragen; danach antwortest du. Nie dieselbe Frage mehrfach umformuliert suchen.',
-    'wikipedia für Grundwissen, read_webpage nur für einen Link, den der Nutzer schickt oder der wirklich nötig ist, calculate für Rechnungen, current_datetime für Zeitfragen. Unabhängige Werkzeuge kannst du in einem Schritt gleichzeitig aufrufen.',
+    'wikipedia für Grundwissen, read_webpage nur für einen Link, den der Nutzer schickt oder der wirklich nötig ist, calculate für einfache Rechnungen, run_javascript für knifflige Rechnungen/Simulationen/Datenverarbeitung, generate_image nur wenn der Nutzer ausdrücklich ein Bild möchte, current_datetime für Zeitfragen. Unabhängige Werkzeuge kannst du in einem Schritt gleichzeitig aufrufen.',
     'Bevorzuge seriöse Quellen (offizielle Seiten, Wikipedia, bekannte Medien). Erfinde keine Fakten oder Links. Weißt du etwas nicht sicher und lohnt keine Suche, sag das kurz.',
     'WEBSEITEN, APPS, SPIELE: (1) Fehlen wichtige Angaben (wofür genau, echte Inhalte wie Name/Texte/Angebote/Termine, gewünschte Bereiche, Stil/Farben, bei Apps/Spielen die Funktionen bzw. Regeln) und hat der Nutzer nicht „mach einfach“ o. ä. gesagt: Benutze KEINE Werkzeuge, sondern stelle 2–4 kurze Rückfragen in einem Block ```questions – eine Frage pro Zeile im Format „Frage? | Option | Option | Option“ (2–5 kurze, passende Antwortvorschläge; die App zeigt Knöpfe zum Antippen und ein Feld für eigene Antworten). Darüber höchstens ein kurzer Satz. (2) Bei Themen-Seiten (z. B. über ein Tier, einen Ort, eine Band) recherchiere zuerst echte Fakten mit den Werkzeugen. (3) Rufe dann build_website mit einem sehr ausführlichen Auftrag auf, der ALLE echten Inhalte enthält. Schreibe HTML NIE selbst. (4) Änderungswünsche an einer bestehenden Seite → edit_website. Erfinde nie Kundenstimmen, Preise, Kontaktdaten, Personen oder Zahlen. Nach dem Bauen: 2–4 Sätze, was die Seite kann, und eine Frage, was verbessert werden soll.',
     'Präsentationen: Möchte der Nutzer eine Präsentation, Folien, ein Referat oder einen Vortrag, baue KEINE HTML-Seite, sondern schreibe einen Block ```slides. Erste Zeile optional „theme: NAME“ (nacht, hell, ozean, sonne, wald oder bonbon – passend zum Thema). Dann die Folien in Markdown, getrennt durch eine Zeile mit nur ---. Folie 1 ist die Titelfolie: „# Titel“ und darunter eine Zeile Untertitel. Danach 6–12 Folien, je mit „## Überschrift“ und 3–5 kurzen, starken Stichpunkten (höchstens ca. 12 Wörter, **wichtige Wörter fett**, gern ein passendes Emoji), oder einem Zitat (> …) oder einer kleinen Tabelle. Bilder nur mit echten https-Adressen, die du in Quellen gefunden hast (z. B. upload.wikimedia.org), sonst keine. Unter eine Folie kannst du „Notiz: …“ schreiben – das sind Sprechernotizen (was man dazu sagen kann). Letzte Folie: Zusammenfassung oder Fazit. Recherchiere Fakten vorher mit den Werkzeugen. Kein HTML im Block. Unter dem Block nur 1–2 Sätze; die App zeigt die Präsentation mit „Präsentieren“ und „Veröffentlichen“ an.',
@@ -196,7 +212,7 @@ function systemPrompt(personal = {}) {
     ] : []),
     ...(personal.summary ? [`Zusammenfassung des bisherigen Gesprächs (ältere Nachrichten werden nicht mehr mitgeschickt):\n${personal.summary}`] : []),
     ...(personal.instructions ? [`So möchte der Nutzer, dass du antwortest (aus seinen Einstellungen):\n"""\n${personal.instructions}\n"""`] : []),
-    'Antworte in der Sprache des Nutzers, Antwort zuerst, dann Details, klar gegliedert mit Markdown, Mathe mit LaTeX ($…$ bzw. $$…$$). Auf Deutsch duzt du den Nutzer IMMER (du/dich/dir), nie „Sie“ – außer er wünscht es ausdrücklich. Wenn du Quellen genutzt hast, liste sie am Ende unter „Quellen“ als Links auf.',
+    'Antworte in der Sprache des Nutzers, Antwort zuerst, dann Details, klar gegliedert mit Markdown, Mathe mit LaTeX ($…$ bzw. $$…$$). Auf Deutsch duzt du den Nutzer IMMER (du/dich/dir), nie „Sie“ – außer er wünscht es ausdrücklich. Fakten aus Werkzeug-Ergebnissen belegst du direkt hinter dem Satz mit ihrer Nummer in eckigen Klammern, z. B. [1] oder [2][3] – genau die Nummern aus den Ergebnissen, nie erfundene. Keine eigene Quellenliste am Ende (die App zeigt die Quellen).',
   ].join('\n');
 }
 
@@ -211,8 +227,8 @@ async function webSearch(queries, signal, addSources) {
   }
   return results.map((r, i) => {
     const list = r.status === 'fulfilled' ? r.value.results : [];
-    addSources(list.map(({ url, title }) => ({ url, title })));
-    return `### Suche: ${queries[i]}\n${list.length ? list.map((x) => `- ${x.title}${x.date ? ` (${x.date})` : ''}\n  ${x.url}\n  ${x.snippet}`).join('\n') : `Fehler: ${r.reason?.message ?? 'keine Ergebnisse'}`}`;
+    const nums = addSources(list.map(({ url, title }) => ({ url, title })));
+    return `### Suche: ${queries[i]}\n${list.length ? list.map((x, k) => `- ${nums[k] ? `[${nums[k]}] ` : ''}${x.title}${x.date ? ` (${x.date})` : ''}\n  ${x.url}\n  ${x.snippet}`).join('\n') : `Fehler: ${r.reason?.message ?? 'keine Ergebnisse'}`}`;
   }).join('\n\n');
 }
 
@@ -241,7 +257,7 @@ async function youtubeVideo(raw, signal, addSources) {
   const info = await res.json();
   const title = String(info.title ?? '').slice(0, 200);
   const channel = String(info.author_name ?? '').slice(0, 100);
-  addSources([makeSource(watch, `${title} – YouTube`)].filter(Boolean));
+  const [vn] = addSources([makeSource(watch, `${title} – YouTube`)].filter(Boolean));
   let found = '';
   try {
     found = await webSearch([`"${title}" ${channel} Video Inhalt Zusammenfassung`], signal, addSources);
@@ -251,7 +267,7 @@ async function youtubeVideo(raw, signal, addSources) {
   return [
     `Video: ${title}`,
     `Kanal: ${channel}`,
-    `Link: ${watch}`,
+    `Link: ${watch}${vn ? ` [${vn}]` : ''}`,
     '',
     'Hinweis: Das Transkript selbst ist nicht verfügbar. Fasse den Inhalt anhand der Suchergebnisse zusammen und sag ehrlich, wenn Informationen fehlen.',
     '',
@@ -285,85 +301,18 @@ export async function wikipedia(query, language, signal, addSources) {
     const sum = r.status === 'fulfilled' ? r.value : null;
     const url = sum?.content_urls?.desktop?.page || `${base}/wiki/${encodeURIComponent(page.key)}`;
     const text = sum?.extract || String(page.excerpt ?? '').replace(/<[^>]+>/g, '');
-    out.push(`## ${sum?.title || page.title}\n${sum?.description ? `(${sum.description})\n` : ''}${text}\nURL: ${url}`);
+    out.push({ head: sum?.title || page.title, body: `${sum?.description ? `(${sum.description})\n` : ''}${text}\nURL: ${url}` });
     srcs.push(makeSource(url, `${sum?.title || page.title} – Wikipedia`));
   });
-  addSources(srcs.filter(Boolean));
-  return out.join('\n\n');
+  const nums = addSources(srcs);
+  return out.map((o, i) => `## ${nums[i] ? `[${nums[i]}] ` : ''}${o.head}\n${o.body}`).join('\n\n');
 }
 
-function isPrivateIp(ip) {
-  if (net.isIPv4(ip)) {
-    const [a, b] = ip.split('.').map(Number);
-    return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254)
-      || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0) || (a === 198 && (b === 18 || b === 19));
-  }
-  const v6 = ip.toLowerCase();
-  if (v6.startsWith('::ffff:')) return isPrivateIp(v6.slice(7));
-  return v6 === '::' || v6 === '::1' || v6.startsWith('fc') || v6.startsWith('fd') || v6.startsWith('fe8') || v6.startsWith('fe9') || v6.startsWith('fea') || v6.startsWith('feb');
-}
-
-async function assertPublicUrl(raw) {
-  let url;
-  try { url = new URL(raw); } catch { throw new Error(t('Ungültige Adresse.', 'Invalid address.')); }
-  if (!['http:', 'https:'].includes(url.protocol)) throw new Error(t('Nur http- und https-Adressen sind erlaubt.', 'Only http and https addresses are allowed.'));
-  if (url.username || url.password) throw new Error(t('Adressen mit Zugangsdaten sind nicht erlaubt.', 'Addresses with credentials are not allowed.'));
-  const host = url.hostname.replace(/^\[|\]$/g, '');
-  if (/^localhost$|\.local$|\.internal$/i.test(host)) throw new Error(t('Diese Adresse ist nicht erlaubt.', 'This address is not allowed.'));
-  const addrs = net.isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
-  if (!addrs.length || addrs.some((a) => isPrivateIp(a.address))) throw new Error(t('Diese Adresse ist nicht erlaubt.', 'This address is not allowed.'));
-  return url;
-}
-
-function htmlToText(html) {
-  const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim() ?? '';
-  const text = html
-    .replace(/<(script|style|noscript|svg|template|iframe)[\s\S]*?<\/\1>/gi, ' ')
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<(br|\/p|\/div|\/li|\/h[1-6]|\/tr|\/section|\/article)[^>]*>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-    .replace(/[ \t\r\f\v]+/g, ' ')
-    .replace(/\n\s*\n+/g, '\n\n')
-    .trim();
-  return { title, text };
-}
-
+// Webseite lesen (direkt, bei Problemen über Jina Reader) – die Quelle bekommt eine feste Nummer
 async function readWebpage(raw, signal, addSources) {
-  let url = await assertPublicUrl(raw);
-  let res;
-  for (let hop = 0; hop < 4; hop++) {
-    res = await fetch(url, {
-      redirect: 'manual',
-      signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(12_000)]),
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VAIs-AgentX/1.0)', Accept: 'text/html,text/plain,application/json;q=0.9,*/*;q=0.5' },
-    });
-    if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
-      url = await assertPublicUrl(new URL(res.headers.get('location'), url).href);
-      continue;
-    }
-    break;
-  }
-  if (!res.ok) throw new Error(t(`Die Seite antwortet mit Fehler ${res.status}.`, `The page responded with error ${res.status}.`));
-  const type = res.headers.get('content-type') || '';
-  if (!/text\/|json|xml/i.test(type)) throw new Error(t(`Dieser Dateityp kann nicht gelesen werden (${type.split(';')[0] || 'unbekannt'}).`, `This file type cannot be read (${type.split(';')[0] || 'unknown'}).`));
-
-  // höchstens ~1,5 MB lesen
-  const reader = res.body.getReader();
-  const chunks = [];
-  let size = 0;
-  while (size < 1_500_000) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    size += value.length;
-  }
-  reader.cancel().catch(() => {});
-  const body = new TextDecoder().decode(Buffer.concat(chunks));
-  const { title, text } = /html/i.test(type) ? htmlToText(body) : { title: '', text: body };
-  addSources([makeSource(url.href, title)].filter(Boolean));
-  return `Titel: ${title || '–'}\nURL: ${url.href}\n\n${text.slice(0, 12_000)}${text.length > 12_000 ? '\n\n[… gekürzt]' : ''}`;
+  const page = await readPage(raw, { signal });
+  const [n] = addSources([makeSource(page.url, page.title)].filter(Boolean));
+  return `${n ? `[${n}] ` : ''}Titel: ${page.title || '–'}\nURL: ${page.url}\n\n${page.text.slice(0, 12_000)}${page.text.length > 12_000 ? '\n\n[… gekürzt]' : ''}`;
 }
 
 // Sicherer Rechner ohne eval: + - * / ^ %, Klammern, Funktionen und Konstanten
@@ -487,6 +436,26 @@ export function searchBudget(question = '') {
   const research = /recherch|research|such(e|en)? (mir|nach|im)|im internet|aktuell|neueste|news|nachrichten|heute|gestern|preis|kostet|wetter|ergebnis|quellen|vergleich/i.test(question);
   return research ? { search: 5, read: 3, wiki: 3 } : { search: 2, read: 1, wiki: 2 };
 }
+// Bild erstellen: bestes freies Bildmodell, bei Fehler das nächste (höchstens 3 Versuche)
+const IMAGE_PREF = [/flux/i, /gpt-?image|nano|imagen|seedream/i, /z-image|qwen|kontext/i, /./];
+async function imageWithFallback(prompt, signal, ctx) {
+  if (!ctx.onImage) return 'Bilder sind hier nicht verfügbar.';
+  const all = (await listModels()).filter((m) => m.caps.includes('image') && !m.busy && !m.paid);
+  const order = IMAGE_PREF.flatMap((re) => all.filter((m) => re.test(m.upstream))).filter((m, i, arr) => arr.indexOf(m) === i).slice(0, 3);
+  if (!order.length) return 'Gerade ist kein Bildmodell frei – beschreibe dem Nutzer stattdessen, wie das Bild aussehen würde.';
+  let lastErr = null;
+  for (const m of order) {
+    try {
+      const img = await generateImage({ model: m.id, prompt, signal });
+      if (img) { ctx.onImage(img); return `Bild mit ${m.name} erstellt und dem Nutzer angezeigt. Beschreibe es in 1–2 Sätzen, füge KEIN Bild oder Link in den Text ein.`; }
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      lastErr = err;
+    }
+  }
+  return `Bild konnte nicht erstellt werden (${lastErr?.message ?? 'unbekannt'}).`;
+}
+
 function runTool(name, args, signal, addSources, ctx) {
   switch (name) {
     case 'web_search': {
@@ -509,6 +478,12 @@ function runTool(name, args, signal, addSources, ctx) {
       return { steps: [{ kind: 'read', text: label.slice(0, 80) }], run: () => readWebpage(String(args.url ?? ''), signal, addSources) };
     }
     case 'calculate': return { steps: [{ kind: 'calc', text: String(args.expression ?? '') }], run: async () => String(calculate(args.expression)) };
+    case 'run_javascript': return { steps: [{ kind: 'calc', text: t('JavaScript ausführen', 'Running JavaScript') }], run: () => runJavaScriptText(args.code) };
+    case 'generate_image': {
+      if (ctx.images >= 2) return { steps: [], run: async () => 'Es wurden schon genug Bilder erstellt.' };
+      ctx.images = (ctx.images ?? 0) + 1;
+      return { steps: [{ kind: 'other', text: t(`Bild: ${String(args.prompt ?? '').slice(0, 60)}`, `Image: ${String(args.prompt ?? '').slice(0, 60)}`) }], run: () => imageWithFallback(String(args.prompt ?? ctx.question), signal, ctx) };
+    }
     case 'current_datetime': return { steps: [{ kind: 'time', text: t('Datum und Uhrzeit', 'Date and time') }], run: async () => currentDatetime(args.timezone) };
     case 'set_reminder': return { steps: [{ kind: 'reminder', text: String(args.text ?? '').slice(0, 80) }], run: () => (ctx.reminder ? ctx.reminder(args) : 'Erinnerungen sind nicht verfügbar.') };
     case 'remember': return { steps: [{ kind: 'memory', text: String(args.fact ?? '').slice(0, 80) }], run: () => (ctx.remember ? ctx.remember(args.fact) : 'Gedächtnis nicht verfügbar.') };
@@ -542,25 +517,40 @@ function runTool(name, args, signal, addSources, ctx) {
 // Quellen aufräumen: gleiche Seiten zusammenfassen, Such- und Weiterleitungslinks weg, seriöse zuerst
 const TRUSTED = /(^|\.)(wikipedia\.org|\.gov|\.gv\.at|admin\.ch|bund\.de|europa\.eu|who\.int|tagesschau\.de|zdf\.de|spiegel\.de|zeit\.de|faz\.net|sueddeutsche\.de|reuters\.com|apnews\.com|bbc\.(co\.uk|com)|nytimes\.com|theguardian\.com|nature\.com|github\.com|mozilla\.org|\.edu)$/i;
 const JUNK = /(^|\.)(google\.[a-z.]+|bing\.com|duckduckgo\.com|vertexaisearch\.cloud\.google\.com)$/i;
+// Gibt für jede übergebene Quelle ihre feste Nummer zurück (wie in der Quellen-Liste der App, höchstens 12),
+// damit [n] im Text genau zur angezeigten Quelle passt.
+export const MAX_SOURCES = 12;
 export function sourceCleaner(emit) {
-  const seen = new Set();
+  const order = []; // Schlüssel in Reihenfolge der Anzeige
+  const keyOf = (src) => {
+    if (!src?.url) return null;
+    let u;
+    try { u = new URL(src.url); } catch { return null; }
+    const host = u.hostname.replace(/^www\./, '').replace(/^m\./, '');
+    if (JUNK.test(host)) return null;
+    for (const k of [...u.searchParams.keys()]) if (/^(utm_|fbclid|gclid|ref$|ref_)/i.test(k)) u.searchParams.delete(k);
+    u.hash = '';
+    return { key: `${host}${u.pathname.replace(/\/$/, '')}${u.search}`.toLowerCase(), url: u.href };
+  };
   return (list) => {
     const fresh = [];
+    const seenNow = new Set();
     for (const src of list ?? []) {
-      if (!src?.url) continue;
-      let u;
-      try { u = new URL(src.url); } catch { continue; }
-      const host = u.hostname.replace(/^www\./, '').replace(/^m\./, '');
-      if (JUNK.test(host)) continue;
-      for (const k of [...u.searchParams.keys()]) if (/^(utm_|fbclid|gclid|ref$|ref_)/i.test(k)) u.searchParams.delete(k);
-      u.hash = '';
-      const key = `${host}${u.pathname.replace(/\/$/, '')}${u.search}`.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      fresh.push({ ...src, url: u.href });
+      const k = keyOf(src);
+      if (!k || order.includes(k.key) || seenNow.has(k.key)) continue;
+      seenNow.add(k.key);
+      fresh.push({ ...src, url: k.url, _key: k.key });
     }
-    fresh.sort((a, b) => Number(TRUSTED.test(new URL(b.url).hostname)) - Number(TRUSTED.test(new URL(a.url).hostname)));
-    if (fresh.length) emit(fresh);
+    fresh.sort((x, y) => Number(TRUSTED.test(new URL(y.url).hostname)) - Number(TRUSTED.test(new URL(x.url).hostname)));
+    const shown = [];
+    for (const f of fresh) {
+      if (order.length >= MAX_SOURCES) break;
+      order.push(f._key);
+      const { _key, ...src } = f;
+      shown.push(src);
+    }
+    if (shown.length) emit(shown);
+    return (list ?? []).map((src) => { const k = keyOf(src); const i = k ? order.indexOf(k.key) : -1; return i === -1 ? null : i + 1; });
   };
 }
 
@@ -675,9 +665,10 @@ function squeeze(convo, hard = false) {
 const tooBig = (err) => err?.status === 413 || (err?.status === 400 && /zu lang|zu groß|too long|too large|context/i.test(err.message)) || /zu groß für das kostenlose Limit|too large for this model/i.test(err?.message ?? '');
 // Ersatz, wenn das Hauptmodell voll ist oder die Anfrage zu groß war (größere Limits)
 
+const hasImagesIn = (messages) => (messages ?? []).some((m) => m.role === 'user' && Array.isArray(m.content) && m.content.some((p) => p.type === 'image_url'));
 const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 
-export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, personal = {}, onRemember = null, onReminder = null, inbox = null }) {
+export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, onImage = null, personal = {}, onRemember = null, onReminder = null, inbox = null }) {
   if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, planFirst: personal.planFirst, inbox });
   const model = await pickModel('agent');
   if (!model) throw new Error(t('Agent X braucht einen Groq-Schlüssel (GROQ_API_KEY), damit er Werkzeuge benutzen kann.', 'Agent X needs a Groq key (GROQ_API_KEY) to use tools.'));
@@ -685,7 +676,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   const addSources = sourceCleaner(onSources);
   const seeing = compactHistory(await describeImages(messages, signal, onStep));
   const last = seeing.at(-1)?.content;
-  const ctx = { question: typeof last === 'string' ? last : '', budget: searchBudget(typeof last === 'string' ? last : ''), lastHtml: '', pageHtml: '', onStep, remember: personal.memoryOn ? onRemember : null, reminder: onReminder };
+  const ctx = { question: typeof last === 'string' ? last : '', budget: searchBudget(typeof last === 'string' ? last : ''), lastHtml: '', pageHtml: '', onStep, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, onImage, images: 0 };
   // Die neueste Webseite aus dem Verlauf merken und im Gespräch nur kurz erwähnen (spart sehr viele Tokens);
   // geändert wird sie mit edit_website direkt auf dem Server
   for (let i = seeing.length - 1; i >= 0; i--) {
@@ -710,6 +701,25 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
     if (ctx.lastHtml && !hasHtmlBlock(text) && /<\/html>/i.test(ctx.lastHtml)) text += `\n\n\`\`\`html\n${ctx.lastHtml.trim()}\n\`\`\``;
     return emitText(text, onText, signal);
   };
+
+  // DeepSearch / Heavy: automatisch bei Recherche- bzw. schweren Fragen (nicht bei Webseiten, Links, Erinnerungen)
+  const write = (text) => finish(text);
+  const special = !ctx.pageHtml && !(inbox?.length) && ctx.question && !hasImagesIn(messages);
+  if (special && isResearch(ctx.question)) {
+    try {
+      if (await deepResearch({ question: ctx.question, history: seeing, personal, signal, onStep, onReasoning: (r) => emitText(`${r}\n\n`, onReasoning, signal, 6, 8), addSources, write })) return undefined;
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      console.error('DeepSearch fehlgeschlagen, normaler Ablauf:', err.message);
+    }
+  } else if (special && isHard(ctx.question)) {
+    try {
+      if (await heavyAnswer({ question: ctx.question, history: seeing, personal, signal, onStep, onReasoning: (r) => emitText(`${r}\n\n`, onReasoning, signal, 6, 8), write })) return undefined;
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      console.error('Heavy fehlgeschlagen, normaler Ablauf:', err.message);
+    }
+  }
 
   // Modell fragen; ist die Anfrage zu groß oder das Modell voll: kürzen, dann auf ein anderes Modell ausweichen
   let current = model;
