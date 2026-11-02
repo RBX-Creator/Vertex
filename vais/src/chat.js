@@ -10,6 +10,7 @@ import { t } from './i18n.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { runAgent, quickReaction } from './agent.js';
 import { profile, personalFor, instructionsPrompt, remember } from './profile.js';
+import { basePrompt } from './prompt.js';
 import { push, addReminder, notifyUser } from './push.js';
 import { sites } from './sites.js';
 import { checkText } from './safety.js';
@@ -64,7 +65,7 @@ const flatten = (msgs) => msgs.map((m) => (Array.isArray(m.content)
   : m));
 // Art der Anfrage → welche Modelle passen
 const MODALITY_CAP = { auto: 'text', text: 'text', code: 'code', web: 'web', image: 'image' };
-const CODE_PROMPT = 'Du bist ein erfahrener Entwickler. Antworte in der Sprache des Nutzers. Wenn eine Webseite, ein Spiel oder eine App gewünscht ist, liefere eine vollständige, lauffähige einzelne HTML-Datei (CSS und JavaScript eingebettet) in genau einem ```html-Codeblock und erkläre danach kurz, was sie macht.';
+const CODE_PROMPT = 'Code-Modus: Antworte wie ein erfahrener Entwickler. Wenn eine Webseite, ein Spiel oder eine App gewünscht ist, liefere eine vollständige, lauffähige einzelne HTML-Datei (CSS und JavaScript eingebettet) in genau einem ```html-Codeblock und erkläre danach kurz, was sie macht.';
 
 export const chat = Router();
 
@@ -426,7 +427,7 @@ chat.post('/stream', wrap(async (req, res) => {
   // Antwort-Speicher: nur erste Frage, ohne Bilder, ohne eigene Anweisungen, nichts Zeitabhängiges, nicht im Battle
   const firstQuestion = clean.length === 1 && typeof clean[0].content === 'string' ? clean[0].content : null;
   const cacheKey = model !== 'agent' && row.mode !== 'battle' && ['auto', 'text', 'code'].includes(row.modality ?? 'auto') && firstQuestion
-    && firstQuestion.length <= 400 && !custom && !fitted.summary && !TIME_WORDS.test(firstQuestion) && !row.incognito
+    && firstQuestion.length <= 400 && !custom && !fitted.summary && !(personal.memoryOn && personal.memories.length) && !TIME_WORDS.test(firstQuestion) && !row.incognito
     ? answerKey(model, row.modality ?? 'auto', firstQuestion) : null;
   const hit = cacheKey && !req.body?.fresh ? await cachedAnswer(cacheKey) : null;
   if (hit) {
@@ -513,7 +514,10 @@ chat.post('/stream', wrap(async (req, res) => {
           }
           await streamChat({
             model,
-            messages: withSystem([row.modality === 'code' ? CODE_PROMPT : null, custom, summaryPrompt(fitted.summary)], clean),
+            messages: withSystem([
+              basePrompt({ battle: row.mode === 'battle', model: row.mode === 'battle' ? null : await findModel(model), memories: personal.memoryOn ? personal.memories : [] }),
+              row.modality === 'code' ? CODE_PROMPT : null, custom, summaryPrompt(fitted.summary),
+            ], clean),
             signal: controller.signal,
             onText,
             onReasoning,

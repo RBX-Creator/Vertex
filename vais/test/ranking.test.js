@@ -57,3 +57,17 @@ test('Keine abgeschalteten Groq-Modelle mehr in der Rangliste', () => {
   const all = Object.values(RANKING).flat().map(String).join(' ');
   for (const gone of ['compound', 'kimi', 'llama-3', 'llama-4', 'maverick', 'scout']) assert.ok(!all.includes(gone), gone);
 });
+
+test('Basis-Anweisung: Datum, Du-Form, Gedächtnis – im Battle ohne Identität', async () => {
+  const { basePrompt } = await import('../src/prompt.js');
+  const p = basePrompt({ model: { name: 'gpt-oss-120b', maker: 'OpenAI' }, memories: [{ text: 'Heißt Leeam' }], date: new Date('2026-11-02T18:00:00Z') });
+  assert.match(p, /You are VAIs/);
+  assert.match(p, /2\. November 2026/);
+  assert.match(p, /19:00/);
+  assert.match(p, /"du"/);
+  assert.match(p, /LaTeX/);
+  assert.match(p, /- Heißt Leeam/);
+  const b = basePrompt({ battle: true, model: { name: 'x' } });
+  assert.doesNotMatch(b, /VAIs|x by/);
+  assert.match(b, /anonymous/);
+});

@@ -195,7 +195,7 @@ function systemPrompt(personal = {}) {
     ] : []),
     ...(personal.summary ? [`Zusammenfassung des bisherigen Gesprächs (ältere Nachrichten werden nicht mehr mitgeschickt):\n${personal.summary}`] : []),
     ...(personal.instructions ? [`So möchte der Nutzer, dass du antwortest (aus seinen Einstellungen):\n"""\n${personal.instructions}\n"""`] : []),
-    'Antworte in der Sprache des Nutzers, klar gegliedert mit Markdown. Wenn du Quellen genutzt hast, liste sie am Ende unter „Quellen“ als Links auf.',
+    'Antworte in der Sprache des Nutzers, Antwort zuerst, dann Details, klar gegliedert mit Markdown, Mathe mit LaTeX ($…$ bzw. $$…$$). Auf Deutsch duzt du den Nutzer IMMER (du/dich/dir), nie „Sie“ – außer er wünscht es ausdrücklich. Wenn du Quellen genutzt hast, liste sie am Ende unter „Quellen“ als Links auf.',
   ].join('\n');
 }
 
