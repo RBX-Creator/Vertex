@@ -1,5 +1,5 @@
 import { t, LANG, LOCALE, LANGUAGES, EXTRA_LANGS, translateDom, setLang, getTheme, setTheme } from './i18n.js';
-import { markdown, enhance, QSTATE, showQuestion } from './render.js';
+import { markdown, enhance, linkCites, QSTATE, showQuestion } from './render.js';
 import { startTour, tourDone } from './tour.js';
 import { CHANGES, LATEST } from './changelog.js';
 import { openTeam, refreshTeamBadge } from './team.js';
@@ -340,7 +340,7 @@ function renderControls() {
     if (!show) return;
     const m = modelById(state.picks[slot]);
     chip.innerHTML = m
-      ? `${modelLogo(m)}<span class="name">${escapeHtml(m.name)}</span>${ICON.chev}`
+      ? `${modelLogo(m)}<span class="name">${escapeHtml(m.auto ? 'Auto' : m.name)}</span>${ICON.chev}`
       : `<span class="name">${t('Modell wählen', 'Choose model')}</span>${ICON.chev}`;
     chip.setAttribute('aria-label', `${t('Modell', 'Model')} ${slot + 1}: ${m?.name ?? t('keins gewählt', 'none chosen')}`);
   });
@@ -902,6 +902,7 @@ function updateCard(turnIndex, side) {
     }
   }
   enhance(body);
+  linkCites(body, a.sources);
 }
 
 // Kurze Lade-Sprüche, solange die KI noch nichts geschrieben hat („Kocht …“, „Cooked …“)
@@ -918,26 +919,45 @@ setInterval(() => {
   els.forEach((e) => { e.classList.remove('swap'); void e.offsetWidth; e.textContent = loadWord(); e.classList.add('swap'); });
 }, 1500);
 
-// „Denkt nach …“: Gedanken laufen schnell durch, klappen zu, sobald die Antwort beginnt
+// „Denkt nach …“: zugeklappt, keine rohen Gedankennotizen. Nach dem Antippen eine kurze Zusammenfassung
+// (in deiner Sprache); die vollständigen Gedanken nur auf Wunsch.
 function renderThinking(card, a) {
   let box = $('.think', card);
   if (!a.thinking) { box?.remove(); return; }
   if (!box) {
     box = document.createElement('div');
     box.className = 'think';
-    box.innerHTML = `<button type="button" class="think-head" data-act="think">${ICON.brain}<span></span>${ICON.chev}</button><div class="think-body"><p></p></div>`;
+    box.innerHTML = `<button type="button" class="think-head" data-act="think">${ICON.brain}<span></span>${ICON.chev}</button><div class="think-body"><div class="think-in"></div></div>`;
     ($('.agent-steps', card) ?? $('.card-body', card)).before(box);
   }
   const live = a.status === 'streaming' && !a.text;
-  const open = live || a.thinkOpen;
+  const open = !live && !!a.thinkOpen;
   box.classList.toggle('live', live);
   box.classList.toggle('open', open);
   const secs = Math.max(1, Math.round((a.thinkMs || 0) / 1000));
   $('.think-head span', box).textContent = live ? t('Denkt nach …', 'Thinking …') : `${t('Gedacht', 'Thought')}${a.thinkMs ? ` · ${secs} s` : ''}`;
   $('.think-head', box).setAttribute('aria-expanded', String(open));
-  const body = $('.think-body', box);
-  $('p', body).textContent = a.thinking;
-  if (live) { const p = $("p", body); p.scrollTop = p.scrollHeight; } // schnell mitscrollen
+  const inner = $('.think-in', box);
+  if (!open) { inner.innerHTML = ''; return; }
+  if (a.thinkRaw) {
+    inner.innerHTML = `<p class="think-raw"></p><button type="button" class="think-more" data-act="think-raw">${t('Nur Zusammenfassung', 'Summary only')}</button>`;
+    $('.think-raw', inner).textContent = a.thinking;
+    return;
+  }
+  inner.innerHTML = `<div class="think-sum">${a.thinkSummary ? markdown(a.thinkSummary) : `<p class="shimmer">${t('Fasst zusammen …', 'Summarizing …')}</p>`}</div><button type="button" class="think-more" data-act="think-raw">${t('Alle Gedanken zeigen', 'Show all thoughts')}</button>`;
+}
+async function loadThinkSummary(card, a, turnIndex, side) {
+  if (a.thinkSummary || a.thinkLoading || !state.chat?.id || state.chat.incognito) {
+    if (!a.thinkSummary && (state.chat?.incognito || !state.chat?.id)) { a.thinkRaw = true; renderThinking(card, a); }
+    return;
+  }
+  a.thinkLoading = true;
+  try {
+    const data = await post('/api/chat/think-summary', { chatId: state.chat.id, turn: turnIndex, side });
+    if (data.summary) a.thinkSummary = data.summary;
+    else a.thinkRaw = true;
+  } catch { a.thinkRaw = true; } finally { a.thinkLoading = false; }
+  if (card.isConnected) renderThinking(card, a);
 }
 
 // „Sucht im Web …“ und danach aufklappbare Quellen
@@ -1008,18 +1028,43 @@ const smoothText = new Map();
 function feedText(a, chunk, turnIndex, side) {
   if (quietMotion?.matches || document.hidden) { a.text += chunk; return scheduleUpdate(turnIndex, side); }
   let st = smoothText.get(a);
-  if (!st) { st = { buf: '', raf: 0 }; smoothText.set(a, st); }
+  if (!st) { st = { buf: '', raf: 0, last: 0, acc: 0 }; smoothText.set(a, st); }
   st.buf += chunk;
-  const tick = () => {
+  // Zeitbasiert wie Tippen: mindestens ~60 Zeichen/s, ein Rückstau wird in ~0,7 s weich aufgeholt
+  // (schnelle Modelle liefern oft Hunderte Zeichen auf einmal – sonst sähe das wie Blöcke aus)
+  const tick = (now) => {
     st.raf = 0;
-    if (!st.buf) return;
-    const n = Math.max(2, Math.ceil(st.buf.length / 7));
-    a.text += st.buf.slice(0, n);
-    st.buf = st.buf.slice(n);
-    scheduleUpdate(turnIndex, side);
+    if (!st.buf) { st.last = 0; return; }
+    const dt = st.last ? Math.min(50, now - st.last) : 16;
+    st.last = now;
+    st.acc += Math.max(60, st.buf.length / 0.7) * dt / 1000;
+    let n = Math.floor(st.acc);
+    if (n >= 1) {
+      // lieber an einer Wortgrenze enden
+      const space = st.buf.indexOf(' ', n);
+      if (space !== -1 && space - n < 6) n = space + 1;
+      n = Math.min(n, st.buf.length);
+      st.acc = Math.max(0, st.acc - n);
+      a.text += st.buf.slice(0, n);
+      st.buf = st.buf.slice(n);
+      scheduleUpdate(turnIndex, side);
+    }
     if (st.buf) st.raf = requestAnimationFrame(tick);
+    else st.last = 0;
   };
   if (!st.raf) st.raf = requestAnimationFrame(tick);
+}
+// Am Ende den Rest weich austippen lassen (höchstens ~1,5 s), statt ihn auf einmal hinzuknallen
+function drainText(a) {
+  return new Promise((done) => {
+    const until = Date.now() + 1500;
+    const check = () => {
+      const st = smoothText.get(a);
+      if (!st?.buf || Date.now() > until || document.hidden) { flushText(a); return done(); }
+      setTimeout(check, 50);
+    };
+    check();
+  });
 }
 function flushText(a) {
   const st = smoothText.get(a);
@@ -1105,7 +1150,7 @@ async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
         if (msg.done) finished = true;
       }
     }
-    flushText(a);
+    if (finished) await drainText(a); else flushText(a);
     if (!finished) throw new Error(t('Die Verbindung wurde unterbrochen.', 'The connection was interrupted.'));
     const got = a.text || a.images?.length || a.reaction;
     a.status = got ? 'done' : 'error';
@@ -1624,7 +1669,16 @@ el.thread.addEventListener('click', async (e) => {
   if (act === 'think') {
     if (a.status === 'streaming' && !a.text) return;
     a.thinkOpen = !a.thinkOpen;
-    renderThinking(btn.closest('.card'), a);
+    const card = btn.closest('.card');
+    renderThinking(card, a);
+    if (a.thinkOpen && !a.thinkRaw && a.status !== 'streaming') loadThinkSummary(card, a, turnIndex, side);
+    return;
+  }
+  if (act === 'think-raw') {
+    a.thinkRaw = !a.thinkRaw;
+    const card = btn.closest('.card');
+    renderThinking(card, a);
+    if (!a.thinkRaw) loadThinkSummary(card, a, turnIndex, side);
     return;
   }
 
@@ -2792,6 +2846,10 @@ function updateSend() {
   el.send.classList.toggle('ready', hasText);
   el.send.innerHTML = stop ? ICON.stop : ICON.send;
   el.send.setAttribute('aria-label', stop ? t('Stoppen', 'Stop') : isBusy ? t('Vormerken', 'Queue') : t('Senden', 'Send'));
+  // Beim Tippen während der Antwort wird „Senden“ zu „Vormerken“ – Stopp bleibt trotzdem sichtbar daneben
+  const extra = $('#stop-btn');
+  extra.hidden = !(isBusy && hasText);
+  if (!extra.innerHTML) extra.innerHTML = ICON.stop;
   $('#improve-btn').hidden = el.prompt.value.trim().length < 3 || improving;
 }
 
@@ -2803,17 +2861,18 @@ el.prompt.addEventListener('keydown', (e) => {
     el.form.requestSubmit();
   }
 });
+function stopAnswers() {
+  // Agent X läuft auf dem Server weiter, wenn nur die Verbindung abbricht – „Stopp“ muss es ihm sagen
+  const chat = state.chat;
+  const ti = chat ? chat.turns.length - 1 : -1;
+  chat?.turns[ti]?.answers.forEach((a, side) => { if (a.status === 'streaming') post('/api/chat/stop', { chatId: chat.id, turn: ti, side }).catch(() => {}); });
+  for (const c of state.controllers) c.abort();
+}
+$('#stop-btn').addEventListener('click', () => { stopAnswers(); haptic('tap'); });
 el.form.addEventListener('submit', (e) => {
   e.preventDefault();
   if (busy() && (el.prompt.value.trim() || state.pending.length)) return queueMessage();
-  if (busy()) {
-    // Agent X läuft auf dem Server weiter, wenn nur die Verbindung abbricht – „Stopp“ muss es ihm sagen
-    const chat = state.chat;
-    const ti = chat ? chat.turns.length - 1 : -1;
-    chat?.turns[ti]?.answers.forEach((a, side) => { if (a.status === 'streaming') post('/api/chat/stop', { chatId: chat.id, turn: ti, side }).catch(() => {}); });
-    for (const c of state.controllers) c.abort();
-    return;
-  }
+  if (busy()) return stopAnswers();
   send();
 });
 
@@ -3182,33 +3241,46 @@ function openChatMenu(id, btn) {
 document.addEventListener('click', (e) => { if (chatMenu && !chatMenu.contains(e.target) && !e.target.closest('[data-more]')) closeChatMenu(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && chatMenu) { e.stopPropagation(); closeChatMenu(); } }, true);
 
+// Verlauf laden: mit Zeitlimit und zweitem Versuch (nach dem Aufwachen von Render dauert es manchmal)
+let historyLoading = null;
+function fetchHistory() {
+  if (historyLoading) return historyLoading;
+  historyLoading = (async () => {
+    for (let attempt = 0; attempt < 2 && !offline; attempt++) {
+      try {
+        const res = await fetch('/api/chat/list', { signal: AbortSignal.timeout(attempt ? 15_000 : 8000) });
+        if (!res.ok) throw new Error(String(res.status));
+        const listData = await res.json();
+        historyItems = listData.chats ?? [];
+        maxChats = listData.maxChats ?? 0;
+        historyDirty = false;
+        saveOffline({ list: historyItems.slice(0, 200) });
+        return true;
+      } catch { /* nochmal */ }
+    }
+    const saved = offlineData();
+    if (!saved?.order?.length) return false;
+    // Offline: nur die Chats zeigen, die auf dem Gerät gespeichert sind
+    historyItems = saved.order.filter((id) => saved.chats?.[id]).map((id) => {
+      const c = saved.chats[id];
+      return { ...(saved.list?.find((x) => x.id === id) ?? {}), id, title: c.title, mode: c.mode, updated: c.savedAt ?? saved.savedAt };
+    }).sort((x, y) => y.updated - x.updated);
+    return true;
+  })().finally(() => { historyLoading = null; });
+  return historyLoading;
+}
 async function openDrawer() {
   el.drawer.hidden = false;
   $('#open-drawer').setAttribute('aria-expanded', 'true');
-  if (historyDirty || !historyItems.length) {
-    // Lade-Platzhalter: ruhige graue Zeilen statt Text (wird bei der Einblend-Animation nicht abgeschnitten)
-    if (!historyItems.length) el.dList.innerHTML = `<div class="drawer-skel" role="status" aria-label="${t('Lädt …', 'Loading …')}">${'<i></i>'.repeat(6)}</div>`;
-    try {
-      if (offline) throw new TypeError('offline');
-      const res = await fetch('/api/chat/list');
-      const listData = await res.json();
-      historyItems = listData.chats ?? [];
-      maxChats = listData.maxChats ?? 0;
-      historyDirty = false;
-      saveOffline({ list: historyItems.slice(0, 200) });
-    } catch {
-      const saved = offlineData();
-      if (saved?.order?.length) {
-        // Offline: nur die Chats zeigen, die auf dem Gerät gespeichert sind
-        historyItems = saved.order.filter((id) => saved.chats?.[id]).map((id) => {
-          const c = saved.chats[id];
-          return { ...(saved.list?.find((x) => x.id === id) ?? {}), id, title: c.title, mode: c.mode, updated: c.savedAt ?? saved.savedAt };
-        }).sort((a, b) => b.updated - a.updated);
-      } else {
-        el.dList.innerHTML = `<p class="drawer-empty">${t('Verlauf konnte nicht geladen werden.', 'History could not be loaded.')}</p>`;
-        return;
-      }
-    }
+  // Schon geladen: sofort zeigen und still im Hintergrund auffrischen
+  if (historyItems.length) renderHistory();
+  else el.dList.innerHTML = `<div class="drawer-skel" role="status" aria-label="${t('Lädt …', 'Loading …')}">${'<i></i>'.repeat(6)}</div>`;
+  if (!historyDirty && historyItems.length) return;
+  const ok = await fetchHistory();
+  if (el.drawer.hidden) return;
+  if (!ok && !historyItems.length) {
+    el.dList.innerHTML = `<p class="drawer-empty">${t('Verlauf konnte nicht geladen werden.', 'History could not be loaded.')}<br><button type="button" class="btn small" data-retry-history>${t('Nochmal versuchen', 'Try again')}</button></p>`;
+    return;
   }
   renderHistory();
 }
@@ -3224,6 +3296,7 @@ $('#d-board').addEventListener('click', () => { closeDrawer(); go('#bestenliste'
 $('#d-stats').addEventListener('click', () => { closeDrawer(); go('#statistik'); });
 el.drawer.addEventListener('click', async (e) => {
   if (e.target.closest('[data-close-drawer]')) return closeDrawer();
+  if (e.target.closest('[data-retry-history]')) { historyDirty = true; return openDrawer(); }
   const open = e.target.closest('[data-open]');
   if (open) { closeDrawer(); return go(`#c/${open.dataset.open}`); }
   const more = e.target.closest('[data-more]');
@@ -3887,6 +3960,8 @@ async function init() {
   // Admin-Links gibt es im HTML gar nicht – sie werden NUR eingefügt, wenn der Server bestätigt,
   // dass dieses Konto Admin oder Mod ist (der Admin-Bereich selbst prüft das zusätzlich auf dem Server)
   if (user.admin === true || user.mod === true) addAdminLinks(user.mod === true);
+  // Verlauf schon im Hintergrund holen, damit die Seitenleiste sofort die Titel zeigt
+  setTimeout(() => { if (historyDirty) fetchHistory(); }, 1200);
   $('#d-avatar').textContent = user.email[0].toUpperCase();
   $('#d-email').textContent = user.email;
   $('#set-email').textContent = user.email;

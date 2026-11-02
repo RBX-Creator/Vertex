@@ -616,6 +616,33 @@ chat.post('/stop', wrap(async (req, res) => {
   res.json({ ok: true, stopped: !!job });
 }));
 
+// „Gedacht“: kurze Zusammenfassung der Gedanken in der Sprache des Nutzers (erst beim Antippen, dann gespeichert)
+chat.post('/think-summary', wrap(async (req, res) => {
+  const { chatId, turn, side } = req.body ?? {};
+  const row = await get('SELECT id FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
+  if (!row || !Number.isInteger(turn)) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
+  const msg = await get('SELECT meta FROM messages WHERE chat_id = ? AND turn = ? AND side = ?', row.id, turn, side === 1 ? 1 : 0);
+  let meta = {};
+  try { meta = JSON.parse(msg?.meta || '{}'); } catch { /* egal */ }
+  if (meta.thinkSummary) return res.json({ summary: meta.thinkSummary });
+  const thoughts = String(meta.thinking ?? '').trim();
+  if (!thoughts) return res.json({ summary: null });
+  let summary = '';
+  if (demoMode) summary = t('- Hat die Frage eingeordnet\n- Den Aufbau der Antwort geplant', '- Understood the question\n- Planned the structure of the answer');
+  else {
+    helperQuota(req, 'summary');
+    const model = await helperModel();
+    if (!model) throw new HttpError(503, t('Gerade ist kein Modell frei.', 'No model is free right now.'));
+    const out = await complete({ model: model.id, maxTokens: 300, reasoningEffort: 'low', messages: [{ role: 'user', content:
+      `Summarize these internal reasoning notes of an AI in ${t('German (use informal "du" if addressing the user)', 'English')} as 1–3 very short bullet points (max 12 words each): what it considered and decided. No preamble.\n\n${thoughts.slice(0, 8000)}` }] });
+    summary = String(out.content ?? '').trim().slice(0, 600);
+  }
+  if (summary) {
+    meta.thinkSummary = summary;
+    await run('UPDATE messages SET meta = ? WHERE chat_id = ? AND turn = ? AND side = ?', JSON.stringify(meta), row.id, turn, side === 1 ? 1 : 0);
+  }
+  res.json({ summary: summary || null });
+}));
 
 // ── Verlauf ───────────────────────────────────────────────────────
 chat.get('/list', wrap(async (req, res) => {
@@ -719,11 +746,13 @@ chat.post('/extras', wrap(async (req, res) => {
   const question = msgs.find((m) => m.side === -1)?.content ?? '';
   const answer = msgs.find((m) => m.side === 0)?.content ?? '';
   if (!question) return res.json({ suggestions: [] });
-  const wantTitle = turn === 0 && !row.renamed && !row.incognito;
+  // Titel: beim ersten Mal immer; später nur, wenn das Thema deutlich wechselt (gleiche Anfrage, keine Extrakosten)
+  const wantTitle = !row.renamed && !row.incognito;
+  const firstTurn = turn === 0;
 
   if (demoMode) {
     const s = t(['Erklär das genauer', 'Gib mir ein Beispiel', 'Fasse es kurz zusammen'], ['Explain that in more detail', 'Give me an example', 'Summarize it briefly']);
-    const title = wantTitle ? question.split(/\s+/).slice(0, 4).join(' ').slice(0, 60) : undefined;
+    const title = wantTitle && firstTurn ? question.split(/\s+/).slice(0, 4).join(' ').slice(0, 60) : undefined;
     if (title) await run('UPDATE chats SET title = ? WHERE id = ? AND renamed IS NULL', title, row.id);
     return res.json({ title, suggestions: s });
   }
@@ -733,7 +762,9 @@ chat.post('/extras', wrap(async (req, res) => {
   const imageMode = row.modality === 'image';
   const prompt = [
     'Antworte NUR mit JSON, ohne Erklärung, im Format {"title": "...", "suggestions": ["...", "...", "..."]}.',
-    wantTitle ? '"title": ein kurzer, treffender Titel für diesen Chat (2–5 Wörter, keine Anführungszeichen, kein Punkt).' : '"title": leer lassen.',
+    !wantTitle ? '"title": leer lassen.'
+      : firstTurn ? '"title": ein kurzer, treffender Titel für diesen Chat (2–5 Wörter, keine Anführungszeichen, kein Punkt).'
+        : `"title": Der Chat heißt bisher „${String(row.title ?? '').slice(0, 80)}“. NUR wenn diese neue Frage ein klar anderes Thema hat, gib einen neuen kurzen Titel für das neue Thema (2–5 Wörter). Bei Nachfragen, Details oder demselben Thema: leer lassen.`,
     imageMode
       ? '"suggestions": 3 kurze Ideen, wie man das Bild abwandeln könnte (je max. 8 Wörter), als Bildbeschreibung formuliert.'
       : '"suggestions": 3 kurze, unterschiedliche Folgefragen, die der Nutzer als Nächstes stellen könnte (je max. 10 Wörter), aus Sicht des Nutzers.',
@@ -751,6 +782,7 @@ chat.post('/extras', wrap(async (req, res) => {
     let title;
     if (wantTitle && typeof data.title === 'string') {
       title = data.title.replace(/["„“”]/g, '').replace(/[.\s]+$/, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+      if (title && title.toLowerCase() === String(row.title ?? '').toLowerCase()) title = undefined;
       if (title) await run('UPDATE chats SET title = ? WHERE id = ? AND renamed IS NULL', title, row.id);
     }
     res.json({ title: title || undefined, suggestions });
@@ -1036,7 +1068,7 @@ async function loadChatData(row, { forShare = false } = {}) {
       try { meta = JSON.parse(m.meta || '{}'); } catch { /* egal */ }
       turns[m.turn].answers[m.side] = {
         text: m.content, status: m.status, error: m.error,
-        steps: meta.steps ?? [], thinking: forShare ? '' : meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0,
+        steps: meta.steps ?? [], thinking: forShare ? '' : meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0, thinkSummary: forShare ? null : meta.thinkSummary ?? null,
         feedback: forShare ? 0 : m.feedback ?? 0, reasons: forShare || !m.feedback_reason ? [] : String(m.feedback_reason).split(','), sources: meta.sources ?? [], images: meta.images ?? [],
         reaction: meta.reaction ?? null, fallback: meta.fallback ?? null, summarized: meta.summarized ?? null, auto: meta.auto ?? null, cached: !!meta.cached, faq: !!meta.faq,
       };

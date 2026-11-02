@@ -2011,7 +2011,7 @@ body[data-sky="night"]::before {
 .send-area .model-chip:hover { color: var(--text); }
 .send-area .model-chip .logo { width: 16px; height: 16px; opacity: .9; }
 .send-area .model-chip .name { font-size: 14px; font-weight: 500; }
-@media (max-width: 420px) { .send-area .model-chip { max-width: 112px; } }
+@media (max-width: 420px) { .send-area .model-chip { max-width: 132px; } }
 
 /* 9: Modus-Pillen unter dem Feld (nur Startseite) */
 .mode-pills { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 10px 0 2px; }
@@ -2112,3 +2112,18 @@ body[data-view='home'] .home-stars { display: block; position: fixed; inset: 0; 
 .welcome-name input:focus { border-color: #ffffff55; box-shadow: 0 0 0 3px #ffffff14; }
 .welcome-go { background: #fff; color: #000; }
 .welcome-go:hover { background: #e9e9ec; }
+/* Quellen im Text: [1] → kleiner Chip mit Logo der Seite */
+.card-body a.cite, #expand-body a.cite { display: inline-flex; align-items: center; gap: 3px; min-width: 0; height: 18px; padding: 0 6px 0 3px; margin: 0 1px 0 2px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 600; line-height: 1; text-decoration: none; vertical-align: 2px; transition: color .15s, border-color .15s; }
+.card-body a.cite:hover, #expand-body a.cite:hover { color: var(--text); border-color: var(--border-strong); }
+.card-body a.cite img, #expand-body a.cite img { width: 12px; height: 12px; border-radius: 50%; }
+/* Gedacht-Block: zugeklappt; geöffnet kurze Zusammenfassung, rohe Gedanken nur auf Wunsch */
+.think-in { min-height: 0; overflow: hidden; }
+.think.open .think-in { padding: 6px 0 8px 16px; }
+.think-sum { color: var(--muted); font-size: 14px; line-height: 1.55; }
+.think-sum ul, .think-sum ol { margin: 0; padding-left: 18px; }
+.think-sum p { margin: 0 0 4px; }
+.think-in .think-raw { max-height: 320px; overflow-y: auto; padding: 0; margin: 0 0 6px; }
+.think-more { margin-top: 6px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.think-more:hover { color: var(--text); }
+.think-body .think-sum p, .think.open .think-body .think-sum p { font-family: var(--sans); font-size: 14px; white-space: normal; padding: 0; overflow: visible; max-height: none; }
+.think.open .think-body .think-in .think-raw { padding: 0; }

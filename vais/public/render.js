@@ -42,8 +42,9 @@ function renderMath(src, display) {
 
 export function markdown(text) {
   hookLinks();
-  // Quellen-Marker der Websuche („【1†L79-L83】“) als kleine Nummern anzeigen
-  let src = String(text ?? '').replace(/\s*【(\d+)[^】]*】/g, ' <span class="cite">$1</span>').replace(/\s*【[^】]*】/g, '');
+  // Interne Marker der eingebauten Groq-Suche („【2†L79-L83】“) zeigen nur den Suchschritt, nicht die Quelle → weg.
+  // Echte Quellen stehen als [1], [2] im Text und werden mit linkCites() zu Chips.
+  let src = String(text ?? '').replace(/\s*【[^】]*】/g, '');
   if (!window.marked || !window.DOMPurify) return escapeHtml(src).replace(/\n/g, '<br>');
   const maths = [];
   src = protectMath(src, maths);
@@ -55,6 +56,44 @@ export function markdown(text) {
     });
   }
   return html;
+}
+
+// Quellen-Nummern im Text ([1], [2], [1, 3]) → kleine, klickbare Chips mit Logo der Seite
+const hostName = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+export function linkCites(root, sources) {
+  if (!root || !sources?.length) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (/\[\d/.test(n.nodeValue) && !n.parentElement.closest('pre, code, a, .katex, .cite') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    const parts = node.nodeValue.split(/(\s?\[\d{1,2}(?:\s*[,;]\s*\d{1,2})*\])/);
+    if (parts.length < 2) continue;
+    const frag = document.createDocumentFragment();
+    for (const part of parts) {
+      const m = part.match(/^\s?\[([\d\s,;]+)\]$/);
+      const nums = m ? m[1].split(/[,;]/).map((x) => Number(x.trim())) : [];
+      if (!m || !nums.every((n) => sources[n - 1])) { if (part) frag.append(part); continue; }
+      for (const n of nums) {
+        const src = sources[n - 1];
+        const a = document.createElement('a');
+        a.className = 'cite';
+        a.href = /^https?:/i.test(src.url) ? src.url : '#';
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.title = `${src.title || hostName(src.url)} – ${hostName(src.url)}`;
+        const img = document.createElement('img');
+        img.alt = '';
+        img.loading = 'lazy';
+        img.src = `/favicon/${encodeURIComponent(hostName(src.url))}`;
+        img.onerror = () => img.remove();
+        a.append(img, String(n));
+        frag.append(a);
+      }
+    }
+    node.replaceWith(frag);
+  }
 }
 
 // Rückfragen: Zustand pro Fragebogen (bleibt, auch wenn die Antwort neu gezeichnet wird)
