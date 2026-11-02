@@ -295,10 +295,10 @@ const modelById = (id) => state.models.find((m) => m.id === id);
 // ── Steuerung unten (Modus + Modelle) ─────────────────────────────
 // Schnellwahl unter dem Eingabefeld (nur auf der Startseite): Websuche, Bild, Code, Agent X
 const PILLS = [
-  { key: 'web', kind: 'modality', ico: '🌐', label: () => 'Web' },
-  { key: 'image', kind: 'modality', ico: '🎨', label: () => t('Bild', 'Image') },
-  { key: 'code', kind: 'modality', ico: '</>', label: () => 'Code' },
-  { key: 'agent', kind: 'mode', ico: '🤖', label: () => 'Agent X' },
+  { key: 'web', kind: 'modality', ico: 'm-web', label: () => 'Web' },
+  { key: 'image', kind: 'modality', ico: 'm-image', label: () => t('Bild', 'Image') },
+  { key: 'code', kind: 'modality', ico: 'm-code', label: () => 'Code' },
+  { key: 'agent', kind: 'mode', ico: 'agent', label: () => 'Agent X' },
 ];
 let modeBeforeAgent = null;
 function renderPills() {
@@ -308,7 +308,7 @@ function renderPills() {
   return;
   box.innerHTML = PILLS.map((p) => {
     const on = p.kind === 'mode' ? state.mode === 'agent' : state.mode !== 'agent' && state.modality === p.key;
-    return `<button type="button" class="pill${on ? ' on' : ''}" data-pill="${p.key}" aria-pressed="${on}"><span class="pill-ico" aria-hidden="true">${escapeHtml(p.ico)}</span>${escapeHtml(p.label())}</button>`;
+    return `<button type="button" class="pill${on ? ' on' : ''}" data-pill="${p.key}" aria-pressed="${on}">${ICON[p.ico] ?? ""}${escapeHtml(p.label())}</button>`;
   }).join('');
 }
 $('#mode-pills')?.addEventListener('click', (e) => {
@@ -335,22 +335,22 @@ $('#mode-pills')?.addEventListener('click', (e) => {
 
 // Modus-Knopf: Schnell / Experte / Agent X – alles andere unter „Mehr“
 const TIERS = {
-  fast: { ico: '⚡', label: () => t('Schnell', 'Fast'), desc: () => t('Schnelle Antworten – VAIs wählt pro Frage das passende Modell', 'Quick answers – VAIs picks the right model per question') },
-  expert: { ico: '🧠', label: () => t('Experte', 'Expert'), desc: () => t('Das stärkste Modell für knifflige Fragen', 'The strongest model for tricky questions') },
-  agent: { ico: '🤖', label: () => 'Agent X', desc: () => t('Sucht, liest, rechnet und baut selbstständig', 'Searches, reads, calculates and builds on its own') },
+  fast: { icon: () => ICON['m-auto'], label: () => t('Schnell', 'Fast'), desc: () => t('Schnelle Antworten – VAIs wählt pro Frage das passende Modell', 'Quick answers – VAIs picks the right model per question') },
+  expert: { icon: () => ICON.brain, label: () => t('Experte', 'Expert'), desc: () => t('Das stärkste Modell für knifflige Fragen', 'The strongest model for tricky questions') },
+  agent: { icon: () => ICON.agent, label: () => 'Agent X', desc: () => t('Sucht, liest, rechnet und baut selbstständig', 'Searches, reads, calculates and builds on its own') },
 };
 const chatIsAuto = () => state.chat ? (state.chat.mode === 'direct' && !!state.chat.auto) : (state.mode === 'direct' && state.picks[0] === 'auto');
 function modeLabel() {
-  if (state.mode === 'agent') return { ico: TIERS.agent.ico, label: 'Agent X' };
-  if (state.mode === 'battle') return { ico: '⚔️', label: 'Battle' };
-  if (state.mode === 'sxs') return { ico: '↔', label: t('Vergleich', 'Compare') };
-  if (state.tier === 'custom') return { ico: '🎛️', label: modelById(state.picks[0])?.name ?? t('Modell', 'Model') };
-  return { ico: TIERS[state.tier].ico, label: TIERS[state.tier].label() };
+  if (state.mode === 'agent') return { icon: ICON.agent, label: 'Agent X' };
+  if (state.mode === 'battle') return { icon: ICON.battle, label: 'Battle' };
+  if (state.mode === 'sxs') return { icon: ICON.sxs, label: t('Vergleich', 'Compare') };
+  if (state.tier === 'custom') return { icon: ICON.direct, label: modelById(state.picks[0])?.name ?? t('Modell', 'Model') };
+  return { icon: TIERS[state.tier].icon(), label: TIERS[state.tier].label() };
 }
 function renderControls() {
   queueMicrotask(renderPills);
   const ml = modeLabel();
-  el.modeBtn.innerHTML = `<span class="mode-ico" aria-hidden="true">${escapeHtml(ml.ico)}</span><span class="name">${escapeHtml(ml.label)}</span>${ICON.chev}`;
+  el.modeBtn.innerHTML = `${ml.icon}<span class="name">${escapeHtml(ml.label)}</span>${ICON.chev}`;
   el.modeBtn.setAttribute('aria-label', `${t('Modus', 'Mode')}: ${ml.label}`);
   el.modalityBtn.hidden = true;
   // Chips im Eingabefeld
@@ -397,19 +397,19 @@ $('#think-btn').addEventListener('click', () => {
 let modeMore = false;
 function renderModeMenu() {
   const cur = state.mode === 'agent' ? 'agent' : state.mode === 'direct' && state.tier !== 'custom' ? state.tier : null;
-  const item = (key, ico, label, desc, on, attr) => `
+  const item = (key, icon, label, desc, on, attr) => `
     <button type="button" class="mode-item" role="menuitemradio" aria-checked="${on}" ${attr}>
-      <span class="mode-ico big" aria-hidden="true">${escapeHtml(ico)}</span><span><b>${escapeHtml(label)}</b><small>${escapeHtml(desc)}</small></span>${on ? ICON.check.replace('<svg ', '<svg class="check" ') : '<span></span>'}
+      ${icon}<span><b>${escapeHtml(label)}</b><small>${escapeHtml(desc)}</small></span>${on ? ICON.check.replace('<svg ', '<svg class="check" ') : '<span></span>'}
     </button>`;
-  let html = Object.entries(TIERS).map(([key, x]) => item(key, x.ico, x.label(), x.desc(), cur === key, `data-tier="${key}"`)).join('');
+  let html = Object.entries(TIERS).map(([key, x]) => item(key, x.icon(), x.label(), x.desc(), cur === key, `data-tier="${key}"`)).join('');
   html += `<button type="button" class="mode-more" data-mode-more aria-expanded="${modeMore}"><span>${t('Mehr', 'More')}</span>${ICON.chev}</button>`;
   if (modeMore) {
     const custom = state.mode === 'direct' && state.tier === 'custom';
     html += '<div class="mode-extra">'
-      + item('custom', '🎛️', t('Modell selbst wählen', 'Choose a model'), t('Ein bestimmtes Modell aus der vollen Liste', 'A specific model from the full list'), custom, 'data-tier="custom"')
-      + item('sxs', '↔', t('Nebeneinander', 'Side by side'), MODES.sxs.desc, state.mode === 'sxs', 'data-mode="sxs"')
-      + item('battle', '⚔️', 'Battle', MODES.battle.desc, state.mode === 'battle', 'data-mode="battle"')
-      + item('code', '</>', t('Code-Modus', 'Code mode'), MODALITIES.code.desc, state.modality === 'code', 'data-code')
+      + item('custom', ICON.direct, t('Modell selbst wählen', 'Choose a model'), t('Ein bestimmtes Modell aus der vollen Liste', 'A specific model from the full list'), custom, 'data-tier="custom"')
+      + item('sxs', ICON.sxs, t('Nebeneinander', 'Side by side'), MODES.sxs.desc, state.mode === 'sxs', 'data-mode="sxs"')
+      + item('battle', ICON.battle, 'Battle', MODES.battle.desc, state.mode === 'battle', 'data-mode="battle"')
+      + item('code', ICON['m-code'], t('Code-Modus', 'Code mode'), MODALITIES.code.desc, state.modality === 'code', 'data-code')
       + '</div>';
   }
   el.modeMenu.innerHTML = html;

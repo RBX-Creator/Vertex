@@ -2160,7 +2160,6 @@ body[data-view='home'] .home-stars { display: block; position: fixed; inset: 0; 
 .send-area { gap: 4px; }
 .mode-btn { height: 34px; padding: 0 8px 0 10px; gap: 5px; border-radius: 999px; color: var(--text); font-size: 14px; font-weight: 500; max-width: 130px; }
 .mode-btn .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mode-btn .mode-ico { font-size: 14px; line-height: 1; }
 .mode-btn .chev { width: 13px; height: 13px; flex: none; color: var(--muted); }
 .mode-btn:hover { background: var(--surface-2); }
 @media (max-width: 400px) {
@@ -2169,7 +2168,6 @@ body[data-view='home'] .home-stars { display: block; position: fixed; inset: 0; 
 }
 /* Modus-Menü öffnet rechts (dort sitzt der Knopf) */
 .dock-inner #mode-menu { left: auto; right: 0; }
-.mode-ico.big { font-size: 22px; line-height: 1; text-align: center; }
 .mode-more { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; margin-top: 2px; border: 0; border-top: 1px solid var(--border); background: none; color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; }
 .mode-more .chev { width: 14px; height: 14px; transition: transform .2s; }
 .mode-more[aria-expanded="true"] .chev { transform: rotate(180deg); }
