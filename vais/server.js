@@ -239,7 +239,7 @@ process.on('SIGTERM', () => {
   server.close();
   const started = Date.now();
   const tick = setInterval(() => {
-    if (runningCount() === 0 || Date.now() - started > 280_000) { clearInterval(tick); process.exit(0); }
+    if (runningCount() === 0 || Date.now() - started > 28_000) { clearInterval(tick); process.exit(0); }
   }, 500);
 });
 const server = app.listen(port, () => {
