@@ -3,15 +3,6 @@ import { t } from './i18n.js';
 
 export const CHANGES = () => [
   {
-    id: 16, date: '2026-11-02',
-    items: [
-      ['⚡', t('Schnell, Experte, Agent X', 'Fast, Expert, Agent X'), t('Unten rechts wählst du nur noch, wie gründlich VAIs antworten soll. Alles andere (eigenes Modell, Vergleich, Battle, Code) steht unter „Mehr“.', 'Bottom right you now just pick how thorough VAIs should be. Everything else (own model, compare, battle, code) is under “More”.')],
-      ['🧠', t('Denken', 'Think'), t('Tippe auf das Gehirn, und VAIs denkt vor der Antwort gründlich nach (zählt als 2 Antworten). Was es gedacht hat, siehst du kurz zusammengefasst.', 'Tap the brain and VAIs thinks carefully before answering (counts as 2 answers). You see a short summary of what it thought.')],
-      ['🌐', t('Echte Websuche mit Quellen', 'Real web search with sources'), t('Mit der Weltkugel sucht VAIs im Internet und zeigt nummerierte Quellen direkt im Text – einfach antippen.', 'With the globe, VAIs searches the internet and shows numbered sources right in the text – just tap them.')],
-      ['🚀', t('Stärkere Antworten', 'Stronger answers'), t('Neue, bessere kostenlose Modelle, VAIs kennt das heutige Datum, duzt dich immer und erinnert sich in allen Chats an dich.', 'New, better free models, VAIs knows today’s date and remembers you in every chat.')],
-    ],
-  },
-  {
     id: 15, date: '2026-11-02',
     items: [
       ['🍳', t('Kocht …', 'Cooking …'), t('Solange die KI nachdenkt, siehst du kurze Sprüche wie „Kocht …“, „Cooked …“ oder „Tüftelt …“.', 'While the AI is thinking you see short phrases like “Cooking …”, “Cooked …” or “Crafting …”.')],

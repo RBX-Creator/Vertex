@@ -85,8 +85,7 @@
     <div class="home-stars" aria-hidden="true"></div>
     <main class="stage" id="stage">
       <section class="home" id="home">
-        <h1 class="home-title" id="home-title">Hallo.</h1>
-        <p class="home-sub" data-en="How can I help?">Wie kann ich helfen?</p>
+        <h1 class="home-title" data-en="What would you like to do?">Was möchtest du tun?</h1>
         <p class="demo-note" id="demo-note" hidden data-en="Demo mode: placeholder models answer until an API key is configured.">Demo-Modus: Es antworten Platzhalter-Modelle, bis ein API-Schlüssel eingetragen ist.</p>
       </section>
       <section class="thread" id="thread" aria-live="polite" hidden></section>
@@ -158,13 +157,10 @@
                 <button type="button" role="menuitem" data-attach="camera"><span aria-hidden="true">📷</span><span data-en="Take photo">Foto aufnehmen</span></button>
                 <button type="button" role="menuitem" data-attach="file"><span aria-hidden="true">📎</span><span data-en="Image or file">Bild oder Datei</span></button>
               </div>
-              <button type="button" class="ctrl" id="modality-btn" aria-haspopup="true" aria-expanded="false" aria-controls="modality-menu" hidden></button>
-              <button type="button" class="ctrl think-btn" id="think-btn" aria-pressed="false" title="Gründlicher nachdenken – zählt als 2 Antworten" data-en-title="Think harder – counts as 2 answers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 3.5A3 3 0 0 0 6.6 7 3.2 3.2 0 0 0 4.5 12a3.2 3.2 0 0 0 2.2 4.6A3 3 0 0 0 12 18V5.4a2.5 2.5 0 0 0-2.5-1.9zM14.5 3.5A3 3 0 0 1 17.4 7a3.2 3.2 0 0 1 2.1 5 3.2 3.2 0 0 1-2.2 4.6A3 3 0 0 1 12 18"/></svg><span data-en="Think">Denken</span></button>
-              <button type="button" class="ctrl think-btn chip-btn" id="web-chip" aria-pressed="false" title="Mit aktueller Websuche antworten" data-en-title="Answer with a live web search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg><span data-en="Search">Websuche</span></button>
-              <button type="button" class="ctrl think-btn chip-btn" id="image-chip" aria-pressed="false" title="Bild erstellen" data-en-title="Create an image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg><span data-en="Image">Bild</span></button>
+              <button type="button" class="ctrl" id="mode-btn" aria-haspopup="true" aria-expanded="false" aria-controls="mode-menu"></button>
+              <button type="button" class="ctrl" id="modality-btn" aria-haspopup="true" aria-expanded="false" aria-controls="modality-menu"></button>
             </div>
             <div class="send-area">
-              <button type="button" class="ctrl mode-btn" id="mode-btn" aria-haspopup="true" aria-expanded="false" aria-controls="mode-menu"></button>
               <button type="button" class="ctrl model-chip" data-slot="0" hidden></button>
               <button type="button" class="ctrl model-chip" data-slot="1" hidden></button>
               <button type="button" class="mic" id="mic" aria-label="Sprechen" data-en-aria-label="Speak" title="Sprechen" data-en-title="Speak" aria-pressed="false" hidden>
