@@ -230,6 +230,7 @@ async function pickEmergency(cap, exclude) {
 }
 
 const running = new Map(); // 'chat:turn:side' → { controller, userId }
+export const runningCount = () => running.size;
 
 // Vergessene Inkognito-Chats (Seite einfach zugemacht) nach 2 Stunden ohne Aktivität löschen
 setInterval(async () => {

@@ -82,3 +82,11 @@ test('Tageslimit: der Tag wechselt um Mitternacht deutscher Zeit', () => {
   assert.ok(reset > Date.now() && reset - Date.now() <= 24 * 3600 * 1000 + 1);
   assert.notEqual(dayKey(new Date(reset)), dayKey());
 });
+
+test('Such-Budget: wenig bei Plänen/Tipps, mehr bei ausdrücklicher Recherche', () => {
+  const plan = agent.searchBudget('Plane für mich eine gute Brawl Stars-Runde mit Taktiken');
+  assert.equal(plan.search, 2);
+  assert.equal(plan.read, 1);
+  const research = agent.searchBudget('Recherchiere die aktuellen Nachrichten zu Brawl Stars');
+  assert.ok(research.search > plan.search);
+});

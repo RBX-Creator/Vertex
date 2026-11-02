@@ -105,10 +105,10 @@ const TOOLS = [
     type: 'function',
     function: {
       name: 'web_search',
-      description: 'Sucht im Internet nach aktuellen Informationen (Nachrichten, Wetter, Preise, Fakten). Gib 1–3 unterschiedliche Suchanfragen an (z. B. verschiedene Blickwinkel oder Sprachen); sie laufen gleichzeitig. Liefert Zusammenfassungen mit Quellen-Links.',
+      description: 'Sucht im Internet nach AKTUELLEN Informationen, die du nicht sicher weißt (Nachrichten, Wetter, Preise, Termine, Ergebnisse). Nicht für Tipps, Pläne oder Allgemeinwissen. Meist reicht 1 Suchanfrage, höchstens 2. Liefert Zusammenfassungen mit Quellen-Links.',
       parameters: {
         type: 'object',
-        properties: { queries: { type: 'array', items: { type: 'string' }, maxItems: 3, description: '1–3 Suchanfragen' } },
+        properties: { queries: { type: 'array', items: { type: 'string' }, maxItems: 2, description: '1–2 gezielte Suchanfragen' } },
         required: ['queries'],
       },
     },
@@ -193,9 +193,9 @@ function systemPrompt(personal = {}) {
       ? 'Think in English. Start your reasoning with one short sentence about what the user wants, then plan the steps.'
       : 'Denke auf Deutsch. Beginne deine Überlegungen mit einem kurzen Satz, was der Nutzer genau möchte, und plane dann die Schritte.',
     `Heute ist ${now} (Europe/Berlin).`,
-    'Nutze deine Werkzeuge, wann immer sie die Antwort besser machen: web_search für alles Aktuelle oder Unsichere (gerne 2–3 verschiedene Suchanfragen auf einmal), wikipedia für Grundwissen, read_webpage um Quellen oder Links zu lesen, calculate für jede Rechnung, current_datetime für Zeitfragen.',
-    'Du kannst mehrere Werkzeuge in einem Schritt gleichzeitig aufrufen – mach das, wenn die Aufrufe unabhängig sind.',
-    'Prüfe wichtige Fakten bei Bedarf mit einer zweiten Suche. Bevorzuge seriöse Quellen (offizielle Seiten, Wikipedia, bekannte Medien). Erfinde keine Fakten oder Links.',
+    'WERKZEUGE SPARSAM NUTZEN (jede Suche kostet das Tageslimit): Für Tipps, Pläne, Strategien, Erklärungen, Ideen, Texte und Allgemeinwissen antwortest du DIREKT aus deinem Wissen – ohne Suche. web_search nur, wenn du wirklich aktuelle oder sehr spezielle Fakten brauchst, die du nicht sicher weißt (Nachrichten, Wetter, Preise, Termine, Ergebnisse, Neuheiten) oder der Nutzer ausdrücklich eine Recherche will. Dann reicht meist EINE Suche mit 1–2 gezielten Suchanfragen; danach antwortest du. Nie dieselbe Frage mehrfach umformuliert suchen.',
+    'wikipedia für Grundwissen, read_webpage nur für einen Link, den der Nutzer schickt oder der wirklich nötig ist, calculate für Rechnungen, current_datetime für Zeitfragen. Unabhängige Werkzeuge kannst du in einem Schritt gleichzeitig aufrufen.',
+    'Bevorzuge seriöse Quellen (offizielle Seiten, Wikipedia, bekannte Medien). Erfinde keine Fakten oder Links. Weißt du etwas nicht sicher und lohnt keine Suche, sag das kurz.',
     'WEBSEITEN, APPS, SPIELE: (1) Fehlen wichtige Angaben (wofür genau, echte Inhalte wie Name/Texte/Angebote/Termine, gewünschte Bereiche, Stil/Farben, bei Apps/Spielen die Funktionen bzw. Regeln) und hat der Nutzer nicht „mach einfach“ o. ä. gesagt: Benutze KEINE Werkzeuge, sondern stelle 2–4 kurze Rückfragen in einem Block ```questions – eine Frage pro Zeile im Format „Frage? | Option | Option | Option“ (2–5 kurze, passende Antwortvorschläge; die App zeigt Knöpfe zum Antippen und ein Feld für eigene Antworten). Darüber höchstens ein kurzer Satz. (2) Bei Themen-Seiten (z. B. über ein Tier, einen Ort, eine Band) recherchiere zuerst echte Fakten mit den Werkzeugen. (3) Rufe dann build_website mit einem sehr ausführlichen Auftrag auf, der ALLE echten Inhalte enthält. Schreibe HTML NIE selbst. (4) Änderungswünsche an einer bestehenden Seite → edit_website. Erfinde nie Kundenstimmen, Preise, Kontaktdaten, Personen oder Zahlen. Nach dem Bauen: 2–4 Sätze, was die Seite kann, und eine Frage, was verbessert werden soll.',
     'Präsentationen: Möchte der Nutzer eine Präsentation, Folien, ein Referat oder einen Vortrag, baue KEINE HTML-Seite, sondern schreibe einen Block ```slides. Erste Zeile optional „theme: NAME“ (nacht, hell, ozean, sonne, wald oder bonbon – passend zum Thema). Dann die Folien in Markdown, getrennt durch eine Zeile mit nur ---. Folie 1 ist die Titelfolie: „# Titel“ und darunter eine Zeile Untertitel. Danach 6–12 Folien, je mit „## Überschrift“ und 3–5 kurzen, starken Stichpunkten (höchstens ca. 12 Wörter, **wichtige Wörter fett**, gern ein passendes Emoji), oder einem Zitat (> …) oder einer kleinen Tabelle. Bilder nur mit echten https-Adressen, die du in Quellen gefunden hast (z. B. upload.wikimedia.org), sonst keine. Unter eine Folie kannst du „Notiz: …“ schreiben – das sind Sprechernotizen (was man dazu sagen kann). Letzte Folie: Zusammenfassung oder Fazit. Recherchiere Fakten vorher mit den Werkzeugen. Kein HTML im Block. Unter dem Block nur 1–2 Sätze; die App zeigt die Präsentation mit „Präsentieren“ und „Veröffentlichen“ an.',
     'Diagramme: Wenn Zahlen als Diagramm helfen (Vergleiche, Entwicklungen, Anteile), füge einen Block ```chart mit JSON ein, z. B. {"type":"bar","title":"Einwohner (Mio.)","unit":"Mio.","labels":["Berlin","Hamburg"],"series":[{"name":"2024","data":[3.8,1.9]}]}. type ist bar, line (für Verläufe) oder pie (Anteile, nur eine Reihe). Höchstens 8 Reihen und 40 Werte. Die App zeichnet das Diagramm selbst.',
@@ -505,17 +505,29 @@ function currentDatetime(tz = 'Europe/Berlin') {
   return `${now.toLocaleString('de-DE', { timeZone: zone, dateStyle: 'full', timeStyle: 'long' })} (${zone}); ISO: ${now.toISOString()}`;
 }
 
+const BUDGET_DONE = 'Das Such-Budget für diese Aufgabe ist aufgebraucht. Antworte jetzt mit dem, was du schon weißt und gefunden hast – ohne weitere Suchen.';
+// Wie viel Agent X pro Auftrag suchen darf: wenig bei normalen Fragen, mehr bei ausdrücklicher Recherche
+export function searchBudget(question = '') {
+  const research = /recherch|research|such(e|en)? (mir|nach|im)|im internet|aktuell|neueste|news|nachrichten|heute|gestern|preis|kostet|wetter|ergebnis|quellen|vergleich/i.test(question);
+  return research ? { search: 5, read: 3, wiki: 3 } : { search: 2, read: 1, wiki: 2 };
+}
 function runTool(name, args, signal, addSources, ctx) {
   switch (name) {
     case 'web_search': {
-      const list = (Array.isArray(args.queries) ? args.queries : [args.query ?? args.queries])
-        .map((q) => String(q ?? '').trim()).filter(Boolean).slice(0, 3);
+      let list = (Array.isArray(args.queries) ? args.queries : [args.query ?? args.queries])
+        .map((q) => String(q ?? '').trim()).filter(Boolean).slice(0, 2);
       if (!list.length) list.push(ctx.question.slice(0, 120));
+      list = list.slice(0, Math.max(0, ctx.budget.search));
+      if (!list.length) return { steps: [], run: async () => BUDGET_DONE };
+      ctx.budget.search -= list.length;
       return { steps: list.map((q) => ({ kind: 'search', text: q })), run: () => webSearch(list, signal, addSources) };
     }
     case 'youtube_video': return { steps: [{ kind: 'video', text: String(args.url ?? '').replace(/^https?:\/\/(www\.)?/, '').slice(0, 60) }], run: () => youtubeVideo(args.url, signal, addSources) };
-    case 'wikipedia': return { steps: [{ kind: 'wiki', text: String(args.query ?? '').slice(0, 80) }], run: () => wikipedia(args.query, args.language, signal, addSources) };
+    case 'wikipedia':
+      if (ctx.budget.wiki-- <= 0) return { steps: [], run: async () => BUDGET_DONE };
+      return { steps: [{ kind: 'wiki', text: String(args.query ?? '').slice(0, 80) }], run: () => wikipedia(args.query, args.language, signal, addSources) };
     case 'read_webpage': {
+      if (ctx.budget.read-- <= 0) return { steps: [], run: async () => BUDGET_DONE };
       let label = String(args.url ?? '');
       try { const u = new URL(label); label = u.hostname + (u.pathname.length > 1 ? u.pathname : ''); } catch { /* egal */ }
       return { steps: [{ kind: 'read', text: label.slice(0, 80) }], run: () => readWebpage(String(args.url ?? ''), signal, addSources) };
@@ -701,7 +713,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   const addSources = sourceCleaner(onSources);
   const seeing = compactHistory(await describeImages(messages, signal, onStep));
   const last = seeing.at(-1)?.content;
-  const ctx = { question: typeof last === 'string' ? last : '', lastHtml: '', pageHtml: '', onStep, remember: personal.memoryOn ? onRemember : null, reminder: onReminder };
+  const ctx = { question: typeof last === 'string' ? last : '', budget: searchBudget(typeof last === 'string' ? last : ''), lastHtml: '', pageHtml: '', onStep, remember: personal.memoryOn ? onRemember : null, reminder: onReminder };
   // Die neueste Webseite aus dem Verlauf merken und im Gespräch nur kurz erwähnen (spart sehr viele Tokens);
   // geändert wird sie mit edit_website direkt auf dem Server
   for (let i = seeing.length - 1; i >= 0; i--) {
@@ -767,7 +779,9 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   };
   for (let round = 0; round < MAX_STEPS; round++) {
     takeInbox();
-    const msg = await ask({ tools: agentTools });
+    // Budget aufgebraucht → Such-Werkzeuge gar nicht mehr anbieten
+    const offered = agentTools.filter((tl) => !((tl.function.name === 'web_search' && ctx.budget.search <= 0) || (tl.function.name === 'read_webpage' && ctx.budget.read <= 0) || (tl.function.name === 'wikipedia' && ctx.budget.wiki <= 0)));
+    const msg = await ask({ tools: offered });
     const thought = msg.reasoning ?? msg.reasoning_content;
     if (thought) await emitText(`${thought.trim()}\n\n`, onReasoning, signal, 6, 8);
     const calls = msg.tool_calls ?? [];

@@ -109,8 +109,13 @@ await client.execute(`CREATE TABLE IF NOT EXISTS usage (
   PRIMARY KEY (user_id, day)
 )`);
 
-// Antworten, die beim letzten Neustart noch liefen, als unterbrochen markieren
-try { await client.execute("UPDATE messages SET status = 'error', error = 'Unterbrochen (Server-Neustart).' WHERE status = 'streaming'"); } catch { /* egal */ }
+// Antworten, die beim letzten Neustart noch liefen, als unterbrochen markieren.
+// Bei einem Update läuft der alte Server noch ein paar Minuten weiter und schreibt seine Antworten fertig –
+// deshalb nur sehr alte Einträge sofort, den Rest später nachsehen.
+const STALE = 12 * 60 * 1000;
+const markStale = () => client.execute({ sql: "UPDATE messages SET status = 'error', error = 'Unterbrochen (Server-Neustart).' WHERE status = 'streaming' AND created_at < ?", args: [Date.now() - STALE] }).catch(() => {});
+await markStale();
+setInterval(markStale, 5 * 60 * 1000).unref();
 
 // Ereignisse für die Admin-Seite (Fehler, Modell-Nutzung) – wird klein gehalten
 await client.execute(`CREATE TABLE IF NOT EXISTS events (

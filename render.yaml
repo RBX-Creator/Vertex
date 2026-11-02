@@ -8,6 +8,8 @@ services:
     rootDir: vais
     buildCommand: npm install
     startCommand: npm start
+    # Bei Updates laufende Antworten (z. B. Agent X) noch fertig schreiben lassen
+    maxShutdownDelaySeconds: 300
     envVars:
       - key: NODE_VERSION
         value: "22"

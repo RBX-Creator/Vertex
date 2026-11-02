@@ -5,7 +5,7 @@ const express = (await import('express')).default;
 const { langMiddleware, t } = await import('./src/i18n.js');
 const { auth, currentUser } = await import('./src/auth.js');
 const { mailConfigured } = await import('./src/mailer.js');
-const { chat, share } = await import('./src/chat.js');
+const { chat, share, runningCount } = await import('./src/chat.js');
 const { admin } = await import('./src/admin.js');
 const { groups } = await import('./src/groups.js');
 const { serveSite } = await import('./src/sites.js');
@@ -230,7 +230,19 @@ app.use((err, req, res, _next) => {
 });
 
 const port = Number(process.env.PORT) || 3000;
-app.listen(port, () => {
+// Update/Neustart (Render schickt SIGTERM): keine neuen Anfragen mehr, laufende Antworten aber fertig schreiben
+let stopping = false;
+process.on('SIGTERM', () => {
+  if (stopping) return;
+  stopping = true;
+  console.log(`SIGTERM – warte auf ${runningCount()} laufende Antwort(en) …`);
+  server.close();
+  const started = Date.now();
+  const tick = setInterval(() => {
+    if (runningCount() === 0 || Date.now() - started > 280_000) { clearInterval(tick); process.exit(0); }
+  }, 500);
+});
+const server = app.listen(port, () => {
   console.log(`\n  VAIs läuft auf http://localhost:${port}`);
   if (demoMode) console.log('  (Demo-Modus: kein API-Schlüssel – Platzhalter-Modelle antworten)');
   if (!mailConfigured) console.log('  (Entwicklungsmodus: Codes werden hier in der Konsole angezeigt, kein E-Mail-Versand eingerichtet)');
