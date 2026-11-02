@@ -4,9 +4,8 @@ import { t } from './i18n.js';
 const KEY = 'vais_tour_done';
 const STEPS = () => [
   { title: t('Willkommen bei VAIs 👋', 'Welcome to VAIs 👋'), text: t('Hier nutzt du die besten KI-Modelle kostenlos – und vergleichst sie miteinander. Eine kurze Tour?', 'Use the best AI models for free – and compare them. A quick tour?') },
-  { target: '#mode-btn', title: t('Modus', 'Mode'), text: t('Agent X erledigt Aufgaben selbstständig. Im Battle antworten zwei geheime Modelle und du stimmst ab. Oder nutze zwei Modelle nebeneinander bzw. eins direkt.', 'Agent X does tasks on its own. In Battle two hidden models answer and you vote. Or use two models side by side, or one directly.') },
-  { target: '#modality-btn', title: t('Was soll entstehen?', 'What do you want?'), text: t('Text, Code und Webseiten, Websuche mit Quellen oder Bilder.', 'Text, code and websites, web search with sources, or images.') },
-  { target: '.composer', title: t('Frag irgendwas', 'Ask anything'), text: t('Mit + hängst du Bilder und PDFs an, mit dem Mikrofon sprichst du deine Frage.', 'Use + to attach images and PDFs, or tap the microphone to speak.') },
+  { target: '#mode-btn', title: t('Schnell, Experte oder Agent X', 'Fast, Expert or Agent X'), text: t('Hier wählst du, wie gründlich VAIs antwortet. Agent X erledigt ganze Aufgaben selbstständig. Unter „Mehr“: eigenes Modell, Vergleich und Battle.', 'Choose how thorough VAIs answers. Agent X does whole tasks on its own. Under “More”: your own model, compare and battle.') },
+  { target: '.composer', title: t('Frag irgendwas', 'Ask anything'), text: t('Mit + hängst du Bilder und PDFs an. 🧠 lässt VAIs gründlich nachdenken, 🌐 sucht im Internet mit Quellen, 🖼️ erstellt Bilder.', 'Use + to attach images and PDFs. 🧠 makes VAIs think carefully, 🌐 searches the internet with sources, 🖼️ creates images.') },
   { target: '#open-drawer', title: t('Verlauf & Bestenliste', 'History & leaderboard'), text: t('Hier findest du deine Chats, die Bestenliste der Modelle, deine Statistik und die Einstellungen.', 'Here you find your chats, the model leaderboard, your stats and settings.') },
 ];
 

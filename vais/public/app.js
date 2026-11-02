@@ -247,6 +247,8 @@ const state = {
   modality: store.get('vais.modality', 'auto'),
   picks: store.get('vais.picks', [null, null]),
   think: store.get('vais.think', false) === true,
+  web: store.get('vais.web', false) === true, // Websuche für die nächsten Nachrichten
+  tier: store.get('vais.tier', 'fast'), // fast | expert | custom (eigenes Modell / Vergleich)
   models: [],
   queue: [], // vorgemerkte Nachrichten (während die KI antwortet)
   incognito: false, // nächster Chat wird nicht gespeichert
@@ -254,7 +256,10 @@ const state = {
   chat: null, // { id, mode, labels, names, winner, turns: [{ user, answers: [{ text, status, error }] }] }
   controllers: new Set(),
 };
-if (!MODES[state.mode]) state.mode = 'battle';
+if (!MODES[state.mode]) state.mode = 'direct';
+if (!['fast', 'expert', 'custom'].includes(state.tier)) state.tier = 'fast';
+// Schnell / Experte = Direkt mit „Auto“ (VAIs wählt pro Frage das passende Modell)
+if (state.mode === 'direct' && state.tier !== 'custom') state.picks[0] = 'auto';
 if (!MODALITIES[state.modality] || MODALITIES[state.modality].soon) state.modality = 'auto';
 
 const el = {
@@ -299,8 +304,8 @@ let modeBeforeAgent = null;
 function renderPills() {
   const box = $('#mode-pills');
   if (!box) return;
-  box.hidden = !!state.chat;
-  if (state.chat) return;
+  box.hidden = true; // ersetzt durch die Chips im Eingabefeld
+  return;
   box.innerHTML = PILLS.map((p) => {
     const on = p.kind === 'mode' ? state.mode === 'agent' : state.mode !== 'agent' && state.modality === p.key;
     return `<button type="button" class="pill${on ? ' on' : ''}" data-pill="${p.key}" aria-pressed="${on}"><span class="pill-ico" aria-hidden="true">${escapeHtml(p.ico)}</span>${escapeHtml(p.label())}</button>`;
@@ -328,15 +333,43 @@ $('#mode-pills')?.addEventListener('click', (e) => {
   el.prompt.focus();
 });
 
+// Modus-Knopf: Schnell / Experte / Agent X – alles andere unter „Mehr“
+const TIERS = {
+  fast: { ico: '⚡', label: () => t('Schnell', 'Fast'), desc: () => t('Schnelle Antworten – VAIs wählt pro Frage das passende Modell', 'Quick answers – VAIs picks the right model per question') },
+  expert: { ico: '🧠', label: () => t('Experte', 'Expert'), desc: () => t('Das stärkste Modell für knifflige Fragen', 'The strongest model for tricky questions') },
+  agent: { ico: '🤖', label: () => 'Agent X', desc: () => t('Sucht, liest, rechnet und baut selbstständig', 'Searches, reads, calculates and builds on its own') },
+};
+const chatIsAuto = () => state.chat ? (state.chat.mode === 'direct' && !!state.chat.auto) : (state.mode === 'direct' && state.picks[0] === 'auto');
+function modeLabel() {
+  if (state.mode === 'agent') return { ico: TIERS.agent.ico, label: 'Agent X' };
+  if (state.mode === 'battle') return { ico: '⚔️', label: 'Battle' };
+  if (state.mode === 'sxs') return { ico: '↔', label: t('Vergleich', 'Compare') };
+  if (state.tier === 'custom') return { ico: '🎛️', label: modelById(state.picks[0])?.name ?? t('Modell', 'Model') };
+  return { ico: TIERS[state.tier].ico, label: TIERS[state.tier].label() };
+}
 function renderControls() {
   queueMicrotask(renderPills);
-  el.modeBtn.innerHTML = ICON[state.mode] + ICON.chev;
-  el.modeBtn.setAttribute('aria-label', `${t('Modus', 'Mode')}: ${MODES[state.mode].label}`);
-  el.modalityBtn.hidden = state.mode === 'agent';
+  const ml = modeLabel();
+  el.modeBtn.innerHTML = `<span class="mode-ico" aria-hidden="true">${escapeHtml(ml.ico)}</span><span class="name">${escapeHtml(ml.label)}</span>${ICON.chev}`;
+  el.modeBtn.setAttribute('aria-label', `${t('Modus', 'Mode')}: ${ml.label}`);
+  el.modalityBtn.hidden = true;
+  // Chips im Eingabefeld
+  const chatModality = state.chat?.modality ?? state.modality;
+  const webChip = $('#web-chip');
+  webChip.hidden = state.mode === 'agent' || chatModality === 'image' || chatModality === 'web';
+  webChip.classList.toggle('on', state.web);
+  webChip.setAttribute('aria-pressed', String(state.web));
+  const imgChip = $('#image-chip');
+  imgChip.classList.toggle('on', chatModality === 'image');
+  imgChip.setAttribute('aria-pressed', String(chatModality === 'image'));
+  // Home: Begrüßung je nach Tageszeit
+  const h = new Date().getHours();
+  $('#home-title').textContent = h < 5 ? t('Gute Nacht.', 'Good night.') : h < 11 ? t('Guten Morgen.', 'Good morning.') : h < 17 ? t('Guten Tag.', 'Good afternoon.') : h < 22 ? t('Guten Abend.', 'Good evening.') : t('Gute Nacht.', 'Good night.');
   el.modalityBtn.innerHTML = ICON[`m-${state.modality}`] + ICON.chev;
   el.modalityBtn.setAttribute('aria-label', `${t('Art', 'Type')}: ${MODALITIES[state.modality].label}`);
   el.chips.forEach((chip, slot) => {
-    const show = state.mode === 'sxs' || (state.mode === 'direct' && slot === 0);
+    // Modell-Chips nur beim Vergleich (bei „eigenes Modell“ steht der Name schon im Modus-Knopf)
+    const show = state.mode === 'sxs';
     chip.hidden = !show;
     if (!show) return;
     const m = modelById(state.picks[slot]);
@@ -361,11 +394,25 @@ $('#think-btn').addEventListener('click', () => {
   if (state.think) toast(t('Denken an: gründlichere Antworten, zählt als 2 Antworten.', 'Think on: more thorough answers, counts as 2 answers.'));
 });
 
+let modeMore = false;
 function renderModeMenu() {
-  el.modeMenu.innerHTML = Object.entries(MODES).map(([key, m]) => `
-    <button type="button" class="mode-item" role="menuitemradio" aria-checked="${key === state.mode}" data-mode="${key}">
-      ${ICON[key]}<span><b>${m.label}</b><small>${m.desc}</small></span>${key === state.mode ? ICON.check.replace('<svg ', '<svg class="check" ') : '<span></span>'}
-    </button>`).join('');
+  const cur = state.mode === 'agent' ? 'agent' : state.mode === 'direct' && state.tier !== 'custom' ? state.tier : null;
+  const item = (key, ico, label, desc, on, attr) => `
+    <button type="button" class="mode-item" role="menuitemradio" aria-checked="${on}" ${attr}>
+      <span class="mode-ico big" aria-hidden="true">${escapeHtml(ico)}</span><span><b>${escapeHtml(label)}</b><small>${escapeHtml(desc)}</small></span>${on ? ICON.check.replace('<svg ', '<svg class="check" ') : '<span></span>'}
+    </button>`;
+  let html = Object.entries(TIERS).map(([key, x]) => item(key, x.ico, x.label(), x.desc(), cur === key, `data-tier="${key}"`)).join('');
+  html += `<button type="button" class="mode-more" data-mode-more aria-expanded="${modeMore}"><span>${t('Mehr', 'More')}</span>${ICON.chev}</button>`;
+  if (modeMore) {
+    const custom = state.mode === 'direct' && state.tier === 'custom';
+    html += '<div class="mode-extra">'
+      + item('custom', '🎛️', t('Modell selbst wählen', 'Choose a model'), t('Ein bestimmtes Modell aus der vollen Liste', 'A specific model from the full list'), custom, 'data-tier="custom"')
+      + item('sxs', '↔', t('Nebeneinander', 'Side by side'), MODES.sxs.desc, state.mode === 'sxs', 'data-mode="sxs"')
+      + item('battle', '⚔️', 'Battle', MODES.battle.desc, state.mode === 'battle', 'data-mode="battle"')
+      + item('code', '</>', t('Code-Modus', 'Code mode'), MODALITIES.code.desc, state.modality === 'code', 'data-code')
+      + '</div>';
+  }
+  el.modeMenu.innerHTML = html;
 }
 
 function toggleModeMenu(open = el.modeMenu.hidden) {
@@ -377,14 +424,74 @@ function toggleModeMenu(open = el.modeMenu.hidden) {
 
 el.modeBtn.addEventListener('click', (e) => { e.stopPropagation(); el.modalityMenu.hidden = true; toggleModeMenu(); });
 el.modeMenu.addEventListener('click', (e) => {
-  const item = e.target.closest('[data-mode]');
-  if (!item) return;
+  if (e.target.closest('[data-mode-more]')) { e.stopPropagation(); modeMore = !modeMore; renderModeMenu(); return; }
+  const tierBtn = e.target.closest('[data-tier]');
+  const modeBtn = e.target.closest('[data-mode]');
+  const codeBtn = e.target.closest('[data-code]');
+  if (!tierBtn && !modeBtn && !codeBtn) return;
   toggleModeMenu(false);
-  const mode = item.dataset.mode;
-  if (mode === state.mode) return;
+  haptic('tap');
+  if (codeBtn) {
+    const next = state.modality === 'code' ? 'auto' : 'code';
+    state.modality = next;
+    store.set('vais.modality', next);
+    fitPicks();
+    if (state.chat) { resetChat(); toast(`${t('Neuer Chat', 'New chat')}: ${MODALITIES[next].label}`); }
+    renderControls();
+    return el.prompt.focus();
+  }
+  if (modeBtn) return switchMode(modeBtn.dataset.mode);
+  const tier = tierBtn.dataset.tier;
+  if (tier === 'agent') return switchMode('agent');
+  const wasAuto = chatIsAuto();
+  state.tier = tier;
+  store.set('vais.tier', tier);
+  if (tier === 'custom') {
+    if (state.picks[0] === 'auto') state.picks[0] = state.models.find((m) => !m.agent && !m.auto && m.caps.includes(currentCap()))?.id ?? null;
+    store.set('vais.picks', state.picks);
+    switchMode('direct');
+    return openSheet(0);
+  }
+  state.picks[0] = 'auto';
+  store.set('vais.picks', state.picks);
+  // Schnell ↔ Experte im laufenden Auto-Chat: gilt einfach ab der nächsten Nachricht
+  if (state.chat && wasAuto && state.mode === 'direct') {
+    toast(tier === 'expert' ? t('Experte: ab jetzt das stärkste Modell', 'Expert: the strongest model from now on') : t('Schnell: ab jetzt schnelle Antworten', 'Fast: quick answers from now on'));
+    renderControls();
+    return el.prompt.focus();
+  }
+  switchMode('direct');
+});
+function switchMode(mode) {
+  const changed = mode !== state.mode || (state.chat && !(mode === 'direct' && chatIsAuto() && state.picks[0] === 'auto'));
   state.mode = mode;
   store.set('vais.mode', mode);
-  if (state.chat) { resetChat(); toast(`${t('Neuer Chat', 'New chat')}: ${MODES[mode].label}`); }
+  if (mode === 'agent' && state.modality === 'image') { state.modality = 'auto'; store.set('vais.modality', 'auto'); }
+  fitPicks();
+  if (state.chat && changed) { resetChat(); toast(`${t('Neuer Chat', 'New chat')}: ${modeLabel().label}`); }
+  renderControls();
+  el.prompt.focus();
+}
+
+// Chips im Eingabefeld: Websuche (für die nächsten Nachrichten) und Bild (eigener Bild-Chat)
+$('#web-chip').addEventListener('click', () => {
+  state.web = !state.web;
+  store.set('vais.web', state.web);
+  haptic('tap');
+  toast(state.web ? t('Websuche an: Antworten mit aktuellen Quellen (zählt als Websuche).', 'Web search on: answers with current sources (counts as a web search).') : t('Websuche aus.', 'Web search off.'));
+  renderControls();
+  el.prompt.focus();
+});
+$('#image-chip').addEventListener('click', () => {
+  haptic('tap');
+  const on = (state.chat?.modality ?? state.modality) === 'image';
+  const next = on ? 'auto' : 'image';
+  if (state.mode === 'agent' || state.mode === 'battle' || state.mode === 'sxs') { state.mode = 'direct'; store.set('vais.mode', 'direct'); }
+  state.modality = next;
+  store.set('vais.modality', next);
+  fitPicks();
+  if (next === 'image' && state.mode === 'direct' && state.tier !== 'custom') state.picks[0] = 'auto';
+  if (state.chat) { resetChat(); toast(`${t('Neuer Chat', 'New chat')}: ${MODALITIES[next].label}`); }
   renderControls();
   el.prompt.focus();
 });
@@ -484,6 +591,8 @@ el.sheet.addEventListener('click', (e) => {
   const changed = state.picks[sheetSlot] !== id;
   state.picks[sheetSlot] = id;
   store.set('vais.picks', state.picks);
+  // „Automatisch“ gewählt → Schnell; ein bestimmtes Modell → eigenes Modell
+  if (state.mode === 'direct' && sheetSlot === 0) { state.tier = id === 'auto' ? 'fast' : 'custom'; store.set('vais.tier', state.tier); }
   closeSheet();
   if (changed && state.chat) { resetChat(); toast(t('Neuer Chat mit anderem Modell', 'New chat with another model')); }
   renderControls();
@@ -594,6 +703,14 @@ function resetChat() {
   for (const c of state.controllers) c.abort();
   state.controllers.clear();
   state.chat = null;
+  // Neuer Chat: wieder die eigene Wahl (Schnell/Experte/eigenes Modell, Modus, Art)
+  state.tier = store.get('vais.tier', 'fast');
+  if (!['fast', 'expert', 'custom'].includes(state.tier)) state.tier = 'fast';
+  state.mode = MODES[store.get('vais.mode', 'direct')] ? store.get('vais.mode', 'direct') : 'direct';
+  const savedModality = store.get('vais.modality', 'auto');
+  state.modality = MODALITIES[savedModality] && !MODALITIES[savedModality].soon ? savedModality : 'auto';
+  state.picks = store.get('vais.picks', [null, null]);
+  if (state.mode === 'direct' && state.tier !== 'custom') state.picks[0] = 'auto';
   el.thread.innerHTML = '';
   $('#queue')?.remove();
   el.title.textContent = '';
@@ -1120,6 +1237,7 @@ async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chatId: chat.id, side, turn: turnIndex, messages: buildMessages(turnIndex, side), fresh, boost, think: thinkOn(),
+        web: state.web && chat.mode !== 'agent' && chat.modality !== 'image', expert: state.tier === 'expert' && !!chat.auto,
         display: { text: chat.turns[turnIndex].user, attachments: chat.turns[turnIndex].attachments ?? [] },
       }),
       signal: ctrl.signal,
@@ -1237,7 +1355,7 @@ async function send() {
     el.send.disabled = true;
     try {
       const data = await post('/api/chat/start', body);
-      state.chat = { id: data.id, mode: state.mode, modality: state.modality, labels: data.models, names: null, winner: null, turns: [], incognito: state.incognito };
+      state.chat = { id: data.id, mode: state.mode, modality: state.modality, labels: data.models, names: null, winner: null, turns: [], incognito: state.incognito, auto: state.mode === 'direct' && body.models?.[0] === 'auto' };
     } catch (err) {
       if (err.data?.chatLimit) return openChatLimit(err.data.chatLimit);
       return toast(err.message);
@@ -3019,10 +3137,13 @@ async function loadChat(id) {
     shared: data.shared,
     incognito: data.incognito,
     turns: data.turns,
+    auto: data.mode === 'direct' && data.models?.[0] === 'auto',
   };
   state.mode = data.mode;
   if (MODALITIES[data.modality] && !MODALITIES[data.modality].soon) state.modality = data.modality;
   if (data.models?.every((m) => modelById(m))) data.models.forEach((m, i) => { state.picks[i] = m; });
+  // Modus-Knopf passend zum geöffneten Chat (nur für diesen Chat, die eigene Wahl bleibt gespeichert)
+  if (data.mode === 'direct') state.tier = state.chat.auto ? (store.get('vais.tier', 'fast') === 'expert' ? 'expert' : 'fast') : 'custom';
   el.thread.innerHTML = '';
   el.vote.hidden = true;
   el.voteResult.hidden = true;

@@ -323,10 +323,12 @@ chat.post('/stream', wrap(async (req, res) => {
   let clean = limitImages(messages.slice(-MAX_MESSAGES).map(cleanMessage));
   if (clean.at(-1).role !== 'user') throw new HttpError(400, t('Die letzte Nachricht muss von dir sein.', 'The last message must be yours.'));
   const hasImages = imageCount(clean) > 0;
+  // Websuche pro Nachricht (Schalter im Eingabefeld) – ohne neuen Chat; nicht bei Bildern und Agent X
+  const webAsk = !!req.body?.web && row.modality !== 'image' && model !== 'agent';
   let auto = null; // Auto-Modus: welches Modell und warum
   if (model === 'auto') {
     const ask = typeof display?.text === 'string' && display.text.trim() ? display.text : plain(clean.at(-1));
-    const pick = await autoPick(ask, { images: hasImages, modality: row.modality, boost: !!req.body?.boost || !!req.body?.think });
+    const pick = await autoPick(ask, { images: hasImages, modality: webAsk ? 'web' : row.modality, boost: !!req.body?.boost || !!req.body?.think || !!req.body?.expert });
     if (!pick) throw new HttpError(503, t('Gerade ist kein passendes Modell frei. Versuche es gleich noch einmal.', 'No suitable model is free right now. Try again in a moment.'));
     model = pick.model.id;
     auto = { id: pick.model.id, name: pick.model.name, maker: pick.model.maker, icon: pick.model.icon, kind: pick.kind, why: pick.label };
@@ -356,7 +358,7 @@ chat.post('/stream', wrap(async (req, res) => {
   const quick = model === 'agent' ? quickReaction(clean) : null; // „ok“, „danke“ … → nur Emoji, zählt nicht
   const kind = quick ? null : model === 'agent' ? 'agent'
     : row.modality === 'image' ? 'image'
-      : row.modality === 'web' || info?.caps.includes('web') ? 'web'
+      : row.modality === 'web' || webAsk || info?.caps.includes('web') ? 'web'
         : 'text';
   // Jugendschutz: die neue Nachricht prüfen, bevor ein Modell sie bekommt (nicht bei „ok“ usw.)
   const lastText = typeof display?.text === 'string' && display.text.trim() ? display.text : plain(clean.at(-1));
@@ -513,7 +515,7 @@ chat.post('/stream', wrap(async (req, res) => {
       // Websuche: erst selbst suchen (Tavily → Exa → Groq → Wikipedia), dann antwortet ein starkes
       // Text-Modell mit den nummerierten Ergebnissen und zitiert sie als [1], [2] …
       let webResults = null;
-      if (row.modality !== 'image' && (row.modality === 'web' || auto?.kind === 'web' || model.endsWith('#search'))) {
+      if (row.modality !== 'image' && (row.modality === 'web' || webAsk || auto?.kind === 'web' || model.endsWith('#search'))) {
         const query = await searchQuery(clean, typeof display?.text === 'string' ? display.text : plain(clean.at(-1)), controller.signal);
         out(`${JSON.stringify({ searching: query })}\n`);
         const found = await searchWeb(query, { signal: controller.signal, max: 6 }).catch(() => null);
