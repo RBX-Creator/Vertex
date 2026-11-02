@@ -424,3 +424,63 @@ test('Höchstens N gespeicherte Chats – Inkognito zählt nicht', async () => {
     await a.json('/api/admin/limits', { limits: { maxChats: 10 } });
   }
 });
+
+test('Geräte: Liste, anderes Gerät abmelden', async () => {
+  const phone = await signUp('dev@example.com');
+  const laptop = client();
+  assert.equal((await laptop.json('/api/auth/login', { email: 'dev@example.com', password: 'geheim1234' })).status, 200);
+  const list = (await phone.json('/api/auth/sessions')).data.sessions;
+  assert.equal(list.length, 2);
+  assert.equal(list.filter((s) => s.current).length, 1);
+  const other = list.find((s) => !s.current);
+  assert.match(other.id, /^[0-9a-f]{16}$/);
+  assert.equal((await phone.json('/api/auth/sessions/revoke', { id: list.find((s) => s.current).id })).status, 400); // nicht sich selbst
+  assert.equal((await phone.json('/api/auth/sessions/revoke', { id: other.id })).status, 200);
+  assert.equal((await laptop.json('/api/auth/me')).status, 401); // Laptop ist abgemeldet
+  assert.equal((await phone.json('/api/auth/sessions')).data.sessions.length, 1);
+});
+
+test('Meldungen: Gast meldet Webseite, Mod entfernt sie', async () => {
+  const c = await signUp('rep-owner@example.com');
+  const start = await c.json('/api/chat/start', { mode: 'agent', modality: 'auto', title: 'R' });
+  const q = await stream(c, start.data.id, 'Bau mir eine Webseite');
+  const answers = 'Meine Antworten:\n- Wofür? → Test';
+  const r = await c.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 1, messages: [{ role: 'user', content: 'Bau mir eine Webseite' }, { role: 'assistant', content: q.text }, { role: 'user', content: answers }], display: { text: answers } });
+  await r.text();
+  const pub = await c.json('/api/chat/sites/publish', { chatId: start.data.id, turn: 1, side: 0 });
+  assert.equal(pub.status, 200);
+  const html = await (await fetch(BASE + pub.data.path)).text();
+  assert.match(html, /\/melden\?site=/);
+  const guest = client();
+  assert.equal((await guest.json('/api/report', { kind: 'site', target: pub.data.id, reason: 'nope' })).status, 400);
+  assert.equal((await guest.json('/api/report', { kind: 'site', target: pub.data.id, reason: 'hate', note: 'gemein' })).status, 200);
+  assert.equal((await guest.json('/api/report', { kind: 'site', target: pub.data.id, reason: 'hate' })).status, 200); // doppelt → nur einmal
+  assert.equal((await c.json('/api/admin/reports')).status, 404); // normale Nutzer sehen nichts
+  const a = client();
+  await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
+  const list = (await a.json('/api/admin/reports')).data;
+  assert.equal(list.open, 1);
+  assert.equal(list.reports[0].reasonLabel.length > 2, true);
+  assert.equal(list.reports[0].owner, 'rep-owner@example.com');
+  assert.equal((await a.json('/api/admin/reports/act', { id: list.reports[0].id, action: 'remove' })).status, 200);
+  assert.equal((await fetch(BASE + pub.data.path)).status, 404);
+  assert.equal((await a.json('/api/admin/reports')).data.open, 0);
+  assert.equal((await a.json('/api/admin/reports?status=closed')).data.reports[0].action, 'remove');
+});
+
+test('Auto-Modus wählt je nach Frage ein Modell und sagt warum', async () => {
+  const c = await signUp('auto@example.com');
+  const models = (await c.json('/api/chat/models')).data.models;
+  assert.equal(models[1].id, 'auto');
+  const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'auto', models: ['auto'], title: 'A' });
+  assert.equal(start.status, 200);
+  const code = await stream(c, start.data.id, 'Schreib mir eine Python-Funktion, die Primzahlen findet', 0);
+  const pick = code.lines.find((l) => l.auto)?.auto;
+  assert.ok(pick && pick.id && pick.id !== 'auto');
+  assert.equal(pick.kind, 'code');
+  assert.ok(code.text.length > 5);
+  const quick = await stream(c, start.data.id, 'Hi', 1);
+  assert.ok(['quick', 'general'].includes(quick.lines.find((l) => l.auto)?.auto.kind));
+  const chat = (await c.json(`/api/chat/${start.data.id}`)).data;
+  assert.equal(chat.turns[0].answers[0].auto.kind, 'code'); // gespeichert
+});

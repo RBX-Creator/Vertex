@@ -6,7 +6,6 @@ import { randomBytes } from 'node:crypto';
 import { get, run, all } from './db.js';
 import { t } from './i18n.js';
 import { HttpError, wrap } from './auth.js';
-import { OWNER } from './config.js';
 import { checkText } from './safety.js';
 import { Marked } from 'marked';
 import { buildDeck, parseSlides } from '../public/deck.js';
@@ -50,7 +49,7 @@ const SITE_CSP = [
 
 const badge = (id) => `
 <a href="/" target="_blank" rel="noopener" style="position:fixed;right:10px;bottom:10px;z-index:2147483647;font:500 12px/1 system-ui,sans-serif;padding:7px 10px;border-radius:999px;background:rgba(20,20,18,.78);color:#fff;text-decoration:none;backdrop-filter:blur(6px)">Erstellt mit VAIs</a>
-<a href="mailto:${OWNER.email}?subject=${encodeURIComponent(`Webseite melden: /w/${id}`)}" style="position:fixed;left:10px;bottom:10px;z-index:2147483647;font:500 11px/1 system-ui,sans-serif;padding:6px 9px;border-radius:999px;background:rgba(20,20,18,.55);color:#fff;text-decoration:none">Melden</a>`;
+<a href="/melden?site=${encodeURIComponent(id)}" target="_blank" rel="noopener" style="position:fixed;left:10px;bottom:10px;z-index:2147483647;font:500 11px/1 system-ui,sans-serif;padding:6px 9px;border-radius:999px;background:rgba(20,20,18,.55);color:#fff;text-decoration:none">🚩 Melden</a>`;
 
 // Öffentliche Seite
 export async function serveSite(req, res) {

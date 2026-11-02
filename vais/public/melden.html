@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Inhalt melden – VAIs</title>
+  <meta name="title-en" content="Report content – VAIs">
+  <meta name="robots" content="noindex">
+  <script src="/boot.js"></script>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/fonts.css">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/melden.css">
+</head>
+<body class="report-page">
+  <main class="rp-main">
+    <a class="brand rp-brand" href="/" aria-label="VAIs"><span>VAIs</span></a>
+    <h1 data-en="Report content">Inhalt melden</h1>
+    <p class="rp-sub" id="rp-target" data-en="Loading …">Lädt …</p>
+    <form class="rp-form" id="rp-form" novalidate hidden>
+      <fieldset>
+        <legend data-en="What is the problem?">Was ist das Problem?</legend>
+        <div class="rp-reasons" id="rp-reasons"></div>
+      </fieldset>
+      <label class="rp-note"><span data-en="More details (optional)">Genauer (freiwillig)</span>
+        <textarea id="rp-note" rows="3" maxlength="1000" placeholder="Was genau ist falsch?" data-en-placeholder="What exactly is wrong?"></textarea></label>
+      <p class="rp-msg" id="rp-msg" role="status"></p>
+      <button class="btn" type="submit" data-en="Send report">Meldung senden</button>
+      <p class="rp-hint" data-en="Our team checks every report. Your report is anonymous for the creator.">Unser Team prüft jede Meldung. Für den Ersteller bleibt deine Meldung anonym.</p>
+    </form>
+    <div class="rp-done" id="rp-done" hidden>
+      <p class="rp-check" aria-hidden="true">✓</p>
+      <h2 data-en="Thanks for your report!">Danke für deine Meldung!</h2>
+      <p data-en="Our team will look at it as soon as possible.">Unser Team schaut sich das so schnell wie möglich an.</p>
+      <a class="btn ghost-btn" href="/" data-en="To VAIs">Zu VAIs</a>
+    </div>
+  </main>
+  <script src="/melden.js" type="module"></script>
+</body>
+</html>

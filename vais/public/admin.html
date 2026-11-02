@@ -26,6 +26,18 @@
 
     <section class="adm-tiles" id="tiles" aria-label="Kennzahlen" data-en-aria-label="Key figures"></section>
 
+    <section class="adm-card" id="meldungen">
+      <div class="adm-card-head">
+        <h2><span data-en="Reports">Meldungen</span> <span class="adm-count" id="rep-count" hidden></span></h2>
+        <div class="adm-seg" id="rep-tabs" role="group" aria-label="Meldungen" data-en-aria-label="Reports">
+          <button type="button" data-rep="open" aria-pressed="true" data-en="Open">Offen</button>
+          <button type="button" data-rep="closed" data-en="Done">Erledigt</button>
+        </div>
+      </div>
+      <p class="adm-sub" data-en="Reported websites and shared chats – oldest first. Removing or blocking also closes all other reports about the same content.">Gemeldete Webseiten und geteilte Chats – die ältesten zuerst. Entfernen oder Sperren erledigt auch alle anderen Meldungen zum selben Inhalt.</p>
+      <ol class="adm-reports" id="reports"></ol>
+    </section>
+
     <section class="adm-card">
       <div class="adm-card-head">
         <h2 data-en="History">Verlauf</h2>
@@ -106,7 +118,7 @@
 
     <section class="adm-card" data-admin-only>
       <h2 data-en="API keys">API-Schlüssel</h2>
-      <p class="adm-sub" data-en="The main key is used first. If it is full, the backup keys take over one after another. If a whole provider is full, a model from another provider answers (marked “⚡ Backup”). Keys are only shown shortened.">Zuerst wird der Haupt-Schlüssel benutzt. Ist er voll, springen die Notfall-Schlüssel der Reihe nach ein. Ist ein ganzer Anbieter voll, antwortet ein Modell von einem anderen Anbieter (markiert mit „⚡ Notfall“). Schlüssel werden nur gekürzt angezeigt.</p>
+      <p class="adm-sub" data-en="All keys are used in turn, so the limits are spread evenly. A full key is skipped until it is free again. If a whole provider is full, a model from another provider answers (marked “⚡ Backup”). For each key you see today’s requests and the limits the provider reports. Keys are only shown shortened.">Alle Schlüssel werden reihum benutzt – so verteilen sich die Limits gleichmäßig. Ein voller Schlüssel wird übersprungen, bis er wieder frei ist. Ist ein ganzer Anbieter voll, antwortet ein Modell von einem anderen Anbieter (markiert mit „⚡ Notfall“). Pro Schlüssel siehst du die Anfragen von heute und die Limits, die der Anbieter meldet. Schlüssel werden nur gekürzt angezeigt.</p>
       <div id="keys"></div>
       <form class="adm-form adm-keyform" id="key-form" novalidate>
         <select class="adm-input" id="key-provider" aria-label="Anbieter" data-en-aria-label="Provider"></select>

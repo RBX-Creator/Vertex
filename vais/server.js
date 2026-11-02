@@ -81,6 +81,8 @@ app.use((req, res, next) => (req.path === '/api/chat/stream' ? bigJson : smallJs
 
 app.use('/api/auth', auth);
 app.use('/api/share', share);
+const { reports } = await import('./src/reports.js');
+app.use('/api/report', reports);
 app.use('/api/chat', chat);
 app.use('/api/admin', admin);
 app.use('/api/groups', groups);
@@ -132,6 +134,13 @@ app.get('/tmpimg/:token', (req, res) => {
   const img = tempImage(req.params.token);
   if (!img) return res.status(404).end();
   res.set({ 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }).type(img.type).send(img.buf);
+});
+
+// Melden-Seite für Webseiten und geteilte Chats (auch ohne Konto)
+app.get('/melden', (req, res) => {
+  noCache(res);
+  res.set('Referrer-Policy', 'no-referrer');
+  res.sendFile(page('melden.html'));
 });
 
 // Geteilte Chats: für alle lesbar (die Seite lädt die Daten selbst)

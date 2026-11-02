@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { randomBytes, randomInt, scrypt, timingSafeEqual, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
-import { get, run, purgeChats } from './db.js';
-import { t } from './i18n.js';
+import { get, run, all, purgeChats } from './db.js';
+import { t, lang } from './i18n.js';
 import { isAdmin, isMod } from './config.js';
 import { sendCode } from './mailer.js';
 
@@ -86,12 +86,24 @@ async function consumeCode(email, purpose, code) {
 }
 
 // ── Sessions ──────────────────────────────────────────────────────
-async function startSession(res, userId) {
+// Gerät grob aus dem User-Agent erkennen – nur für die Geräte-Liste (keine IP, kein Fingerabdruck)
+export function describeDevice(ua = '') {
+  const os = /iPad/.test(ua) ? 'iPad' : /iPhone|iPod/.test(ua) ? 'iPhone' : /Android/.test(ua) ? (/Mobile/.test(ua) ? 'Android-Handy' : 'Android-Tablet')
+    : /Macintosh|Mac OS X/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows-PC' : /CrOS/.test(ua) ? 'Chromebook' : /Linux/.test(ua) ? 'Linux-PC' : t('Unbekanntes Gerät', 'Unknown device');
+  const browser = /EdgA?\//.test(ua) ? 'Edge' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /OPR\/|Opera/.test(ua) ? 'Opera' : /Firefox|FxiOS/.test(ua) ? 'Firefox'
+    : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '';
+  return browser ? `${os} · ${browser}` : os;
+}
+
+async function startSession(res, userId, req = null, { notify = false } = {}) {
   if ((await get('SELECT blocked FROM users WHERE id = ?', userId))?.blocked) {
     throw new HttpError(403, t('Dieses Konto wurde gesperrt. Schreib uns, wenn du denkst, dass das ein Fehler ist.', 'This account has been blocked. Contact us if you think this is a mistake.'));
   }
   const token = randomBytes(32).toString('base64url');
-  await run('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)', sha256(token), userId, Date.now() + SESSION_TTL);
+  const device = describeDevice(String(req?.headers?.['user-agent'] ?? '')).slice(0, 80);
+  const now = Date.now();
+  await run('INSERT INTO sessions (token_hash, user_id, expires_at, created_at, last_seen, device) VALUES (?, ?, ?, ?, ?, ?)', sha256(token), userId, now + SESSION_TTL, now, now, device);
+  if (notify) loginNotice(userId, device).catch(() => {});
   res.cookie(COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
@@ -113,11 +125,31 @@ function readCookie(req) {
 export async function currentUser(req) {
   const token = readCookie(req);
   if (!token) return null;
-  return (await get(`
-    SELECT u.id, u.email, u.created_at, u.role FROM sessions s
+  const hash = sha256(token);
+  const row = await get(`
+    SELECT u.id, u.email, u.created_at, u.role, s.last_seen FROM sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.token_hash = ? AND s.expires_at > ? AND (u.blocked IS NULL OR u.blocked = 0)
-  `, sha256(token), Date.now())) ?? null;
+  `, hash, Date.now());
+  if (!row) return null;
+  // „Zuletzt aktiv“ für die Geräte-Liste (höchstens alle 5 Minuten schreiben)
+  if (!row.last_seen || Date.now() - Number(row.last_seen) > 5 * 60 * 1000) run('UPDATE sessions SET last_seen = ? WHERE token_hash = ?', Date.now(), hash).catch(() => {});
+  const { last_seen: _, ...user } = row;
+  return user;
+}
+
+// Push „Neue Anmeldung“ an die anderen Geräte (nicht beim allerersten Gerät)
+async function loginNotice(userId, device) {
+  const others = await get('SELECT COUNT(*) n FROM sessions WHERE user_id = ? AND expires_at > ?', userId, Date.now());
+  if (Number(others?.n ?? 0) <= 1) return;
+  const { notifyUser } = await import('./push.js');
+  const time = new Date().toLocaleTimeString(lang() === 'de' ? 'de-DE' : 'en-GB', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
+  await notifyUser(userId, {
+    title: t('Neue Anmeldung bei VAIs', 'New sign-in to VAIs'),
+    body: t(`${device} um ${time} Uhr. Warst du das nicht? Tippe hier und melde das Gerät ab.`, `${device} at ${time}. Not you? Tap here to sign that device out.`),
+    url: '/#geraete',
+    tag: 'login',
+  });
 }
 
 // ── Einfaches Rate-Limit pro IP ───────────────────────────────────
@@ -179,7 +211,7 @@ auth.post('/verify', wrap(async (req, res) => {
   if (!user) throw new HttpError(400, t('Kein Konto zu dieser E-Mail gefunden.', 'No account found for this email.'));
   await consumeCode(email, 'verify', req.body?.code);
   await run('UPDATE users SET verified = 1 WHERE id = ?', user.id);
-  await startSession(res, user.id);
+  await startSession(res, user.id, req, { notify: true });
   res.json({ ok: true });
 }));
 
@@ -225,7 +257,7 @@ auth.post('/login', wrap(async (req, res) => {
     await issueCode(email, 'verify').catch((e) => { if (e.status !== 429) throw e; });
     return res.json({ next: 'verify' });
   }
-  await startSession(res, user.id);
+  await startSession(res, user.id, req, { notify: true });
   res.json({ ok: true });
 }));
 
@@ -248,7 +280,7 @@ auth.post('/reset', wrap(async (req, res) => {
   await consumeCode(email, 'reset', code);
   await run('UPDATE users SET password_hash = ? WHERE id = ?', await hashPassword(password), user.id);
   await run('DELETE FROM sessions WHERE user_id = ?', user.id); // überall abmelden
-  await startSession(res, user.id);
+  await startSession(res, user.id, req);
   res.json({ ok: true });
 }));
 
@@ -273,6 +305,35 @@ auth.post('/password', wrap(async (req, res) => {
   if (!validPassword(password)) throw new HttpError(400, t('Das neue Passwort muss mindestens 8 Zeichen lang sein.', 'The new password must be at least 8 characters long.'));
   await run('UPDATE users SET password_hash = ? WHERE id = ?', await hashPassword(password), me.id);
   await run('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?', me.id, sha256(readCookie(req)));
+  res.json({ ok: true });
+}));
+
+// Angemeldete Geräte: Liste und abmelden
+const sid = (hash) => String(hash).slice(0, 16); // kurze Kennung (verrät den Schlüssel nicht)
+auth.get('/sessions', wrap(async (req, res) => {
+  const me = await currentUser(req);
+  if (!me) throw new HttpError(401, t('Nicht angemeldet.', 'Not signed in.'));
+  const mine = sha256(readCookie(req));
+  const rows = await all('SELECT token_hash, created_at, last_seen, device FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY COALESCE(last_seen, created_at, 0) DESC', me.id, Date.now());
+  res.json({
+    sessions: rows.map((r) => ({
+      id: sid(r.token_hash), device: r.device || t('Unbekanntes Gerät', 'Unknown device'),
+      created: r.created_at ? Number(r.created_at) : null, lastSeen: r.last_seen ? Number(r.last_seen) : null, current: r.token_hash === mine,
+    })),
+  });
+}));
+auth.post('/sessions/revoke', wrap(async (req, res) => {
+  const me = await currentUser(req);
+  if (!me) throw new HttpError(401, t('Nicht angemeldet.', 'Not signed in.'));
+  const mine = sha256(readCookie(req));
+  if (req.body?.others) {
+    await run('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?', me.id, mine);
+    return res.json({ ok: true });
+  }
+  const id = String(req.body?.id ?? '');
+  if (!/^[0-9a-f]{16}$/.test(id)) throw new HttpError(400, t('Ungültiges Gerät.', 'Invalid device.'));
+  if (sid(mine) === id) throw new HttpError(400, t('Das ist dieses Gerät – nutze „Abmelden“.', 'That is this device – use “Sign out”.'));
+  await run("DELETE FROM sessions WHERE user_id = ? AND substr(token_hash, 1, 16) = ?", me.id, id);
   res.json({ ok: true });
 }));
 
@@ -357,7 +418,7 @@ auth.get('/google/callback', async (req, res) => {
     } else if (!user.verified) {
       await run('UPDATE users SET verified = 1 WHERE id = ?', user.id); // Google hat die Adresse bestätigt
     }
-    await startSession(res, user.id);
+    await startSession(res, user.id, req, { notify: true });
     res.redirect('/');
   } catch (err) {
     if (err instanceof HttpError && err.status === 403) return fail('blocked');

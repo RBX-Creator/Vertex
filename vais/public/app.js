@@ -160,8 +160,34 @@ function setOffline(on) {
 
 // Kurzes Vibrieren als Rückmeldung (nur Geräte, die das können; nie bei „weniger Bewegung“)
 const quietMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+// Haptisches Feedback (in den Einstellungen abschaltbar).
+// Android: Vibration. iPhone (iOS 18+): kennt keine Vibration im Browser – aber das Umschalten eines
+// versteckten Schalters (<input switch>) löst ein kurzes Tippen der Taptic Engine aus.
+const hapticsOn = () => { try { return localStorage.getItem('vais.haptics') !== 'off'; } catch { return true; } };
+let hapticLabel = null;
+function iosTick() {
+  if (!hapticLabel) {
+    hapticLabel = document.createElement('label');
+    hapticLabel.setAttribute('aria-hidden', 'true');
+    hapticLabel.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+    const sw = document.createElement('input');
+    sw.type = 'checkbox';
+    sw.setAttribute('switch', '');
+    sw.tabIndex = -1;
+    hapticLabel.append(sw);
+    document.body.append(hapticLabel);
+  }
+  try { hapticLabel.click(); } catch { /* egal */ }
+}
+const iosHaptics = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 function haptic(kind = 'tap') {
-  if (!navigator.vibrate || quietMotion?.matches) return;
+  if (!hapticsOn()) return;
+  if (iosHaptics) {
+    iosTick();
+    if (kind === 'success' || kind === 'error') setTimeout(iosTick, kind === 'error' ? 90 : 120);
+    return;
+  }
+  if (!navigator.vibrate) return;
   try { navigator.vibrate({ tap: 8, send: 12, success: [10, 40, 14], error: [30, 50, 30] }[kind] ?? 8); } catch { /* egal */ }
 }
 
@@ -367,10 +393,10 @@ function renderModelList() {
   el.list.innerHTML = items.length
     ? items.map((m) => {
         const selected = m.id === state.picks[sheetSlot];
-        return `<li><button type="button" class="model-opt${selected ? ' selected' : ''}${m.id === other ? ' taken' : ''}${m.busy ? ' busy' : ''}${m.agent ? ' is-agent' : ''}" data-id="${escapeHtml(m.id)}">
-          ${modelLogo(m)}<span class="name">${escapeHtml(m.name)}</span>${m.agent ? `<span class="agent-tag">${t('Agent', 'Agent')}</span>` : ''}${m.caps.includes('vision') ? `<span class="vis" title="${t('Kann Bilder ansehen', 'Can see images')}">${ICON.preview}</span>` : ''}
+        return `<li><button type="button" class="model-opt${selected ? ' selected' : ''}${m.id === other ? ' taken' : ''}${m.busy ? ' busy' : ''}${m.agent || m.auto ? ' is-agent' : ''}" data-id="${escapeHtml(m.id)}">
+          ${modelLogo(m)}<span class="name">${m.auto ? '✨ ' : ''}${escapeHtml(m.name)}</span>${m.agent ? `<span class="agent-tag">${t('Agent', 'Agent')}</span>` : m.auto ? `<span class="agent-tag">${t('Auto', 'Auto')}</span>` : ''}${m.caps.includes('vision') ? `<span class="vis" title="${t('Kann Bilder ansehen', 'Can see images')}">${ICON.preview}</span>` : ''}
           ${selected ? ICON.check.replace('<svg ', '<svg width="18" height="18" ') : ''}
-          <span class="prov">${m.agent ? t('VAIs · der Stärkste', 'VAIs · the strongest') : m.busy ? t('ausgelastet', 'busy') : `${m.paid ? '<span class="premium">Premium</span> ' : ''}${escapeHtml(m.maker)}`}</span></button></li>`;
+          <span class="prov">${m.agent ? t('VAIs · der Stärkste', 'VAIs · the strongest') : m.auto ? t('VAIs wählt pro Frage das beste Modell', 'VAIs picks the best model for each question') : m.busy ? t('ausgelastet', 'busy') : `${m.paid ? '<span class="premium">Premium</span> ' : ''}${escapeHtml(m.maker)}`}</span></button></li>`;
       }).join('')
     : `<li class="model-empty">${q ? t('Kein Modell gefunden.', 'No model found.') : CAP_EMPTY[sheetCap] ?? t('Keine Modelle in dieser Kategorie.', 'No models in this category.')}</li>`;
 }
@@ -522,6 +548,39 @@ function resetChat() {
 
 el.newChat.addEventListener('click', () => { go(''); el.prompt.focus(); });
 
+// ── Wischgesten im Chat: nach rechts = Menü, nach links = neuer Chat (abschaltbar) ──
+const swipeOn = () => { try { return localStorage.getItem('vais.swipe') !== 'off'; } catch { return true; } };
+const SWIPE_SKIP = '.table-wrap, pre, .codeblock, .chart, .q-chips, .code-chip, .agent-steps, input, textarea, select, .composer, [contenteditable], .gen-img, .followups, .queue';
+let swipe = null;
+el.stage.addEventListener('touchstart', (e) => {
+  swipe = null;
+  if (!swipeOn() || e.touches.length !== 1 || !el.drawer.hidden || !$('#preview').hidden) return;
+  const tch = e.touches[0];
+  // ganz am Rand nicht (dort ist auf dem iPhone die „Zurück“-Geste von Safari)
+  if (tch.clientX < 28 || tch.clientX > innerWidth - 16) return;
+  if (e.target.closest(SWIPE_SKIP)) return;
+  // nur wenn darunter nichts waagerecht scrollen kann
+  for (let n = e.target; n && n !== el.stage; n = n.parentElement) if (n.scrollWidth > n.clientWidth + 2 && getComputedStyle(n).overflowX !== 'visible') return;
+  swipe = { x: tch.clientX, y: tch.clientY, at: Date.now() };
+}, { passive: true });
+el.stage.addEventListener('touchend', (e) => {
+  if (!swipe) return;
+  const tch = e.changedTouches[0];
+  const dx = tch.clientX - swipe.x;
+  const dy = tch.clientY - swipe.y;
+  const fast = Date.now() - swipe.at < 700;
+  swipe = null;
+  if (!fast || Math.abs(dx) < 80 || Math.abs(dx) < Math.abs(dy) * 2.2) return;
+  if (window.getSelection && String(window.getSelection())) return; // Text markieren, nicht wischen
+  if (dx > 0) { haptic('tap'); openDrawer(); } else if (state.chat) { // links: neuer Chat (auf der Startseite nichts)
+    haptic('tap');
+    go('');
+    toast(t('Neuer Chat', 'New chat'));
+  }
+}, { passive: true });
+$('#set-haptics').addEventListener('change', (e) => { try { localStorage.setItem('vais.haptics', e.target.checked ? 'on' : 'off'); } catch { /* egal */ } if (e.target.checked) haptic('success'); });
+$('#set-swipe').addEventListener('change', (e) => { try { localStorage.setItem('vais.swipe', e.target.checked ? 'on' : 'off'); } catch { /* egal */ } haptic('tap'); });
+
 // Deine Nachricht fürs Modell: Text + Dateiinhalte, Bilder als eigene Teile
 function userContent(turn) {
   const att = turn.attachments ?? [];
@@ -651,6 +710,13 @@ function paintLabel(card, side) {
     note.className = 'fallback-tag';
     note.title = t('Das gewählte Modell war gerade voll – dieses hat für dich geantwortet.', 'The chosen model was full – this one answered for you.');
     note.textContent = `⚡ ${t('Notfall', 'Backup')}: ${a.fallback.name}`;
+    label.append(note);
+  } else if (a?.auto && chat.mode !== 'battle') {
+    // Auto-Modus: zeigen, welches Modell gewählt wurde und warum
+    const note = document.createElement('span');
+    note.className = 'fallback-tag auto-tag';
+    note.title = t('Automatisch passend zur Frage gewählt', 'Picked automatically to fit the question');
+    note.textContent = `✨ ${a.auto.why} → ${a.auto.name}`;
     label.append(note);
   }
 }
@@ -860,7 +926,7 @@ function scheduleUpdate(turnIndex, side) {
 async function runSide(turnIndex, side) {
   const chat = state.chat;
   const a = chat.turns[turnIndex].answers[side];
-  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, images: [], reaction: null, fallback: null, summarized: null, startedAt: Date.now(), buildMs: 0 });
+  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, images: [], reaction: null, fallback: null, auto: null, summarized: null, startedAt: Date.now(), buildMs: 0 });
   paintReactions(turnIndex);
   updateCard(turnIndex, side);
 
@@ -914,6 +980,7 @@ async function runSide(turnIndex, side) {
           if (a.reaction && a.reaction !== '👀') haptic('tap');
         }
         if (msg.fallback) { a.fallback = msg.fallback; scheduleUpdate(turnIndex, side); }
+        if (msg.auto) { a.auto = msg.auto; scheduleUpdate(turnIndex, side); }
         if (msg.summarized) { a.summarized = msg.summarized; scheduleUpdate(turnIndex, side); }
         if (msg.done) finished = true;
       }
@@ -922,6 +989,7 @@ async function runSide(turnIndex, side) {
     const got = a.text || a.images?.length || a.reaction;
     a.status = got ? 'done' : 'error';
     if (!got) a.error = t('Das Modell hat keine Antwort geliefert.', 'The model returned no answer.');
+    if (document.visibilityState === 'visible') haptic(got ? 'success' : 'error'); // Antwort fertig
   } catch (err) {
     const agentSide = chat.mode === 'agent' || (chat.labels?.[side] === 'Agent X');
     if (ctrl.signal.aborted) a.status = a.text || a.images?.length ? 'done' : 'stopped';
@@ -929,7 +997,10 @@ async function runSide(turnIndex, side) {
       // Verbindung weg, aber Agent X arbeitet auf dem Server weiter
       Object.assign(a, { status: 'streaming', background: true });
       watchBackground(chat.id);
-    } else Object.assign(a, { status: 'error', error: err.message || t('Das Modell konnte nicht antworten.', 'The model could not answer.') });
+    } else {
+      Object.assign(a, { status: 'error', error: err.message || t('Das Modell konnte nicht antworten.', 'The model could not answer.') });
+      haptic('error');
+    }
   } finally {
     a.buildMs = Date.now() - a.startedAt;
     state.controllers.delete(ctrl);
@@ -951,7 +1022,7 @@ async function send() {
   const attachments = state.pending;
   if (!text && !attachments.length) return;
   if (busy()) return queueMessage();
-  if (offline) return toast(t('Du bist offline – Chats kannst du nur lesen.', 'You are offline – chats are read-only.'));
+  if (offline || navigator.onLine === false) return queueOffline();
   if (pendingReads) return toast(t('Anhänge werden noch geladen …', 'Attachments are still loading …'));
   if (!state.models.length) return toast(t('Modelle konnten nicht geladen werden. Lade die Seite neu.', 'Models could not be loaded. Reload the page.'));
   const hasImages = attachments.some((a) => a.kind === 'image');
@@ -1040,9 +1111,56 @@ function queueMessage() {
   haptic('tap');
   renderQueue();
 }
+// Ohne Internet geschrieben: merken (auch über Neuladen hinweg) und senden, sobald wieder online
+const OUTBOX_KEY = 'vais.outbox';
+function saveOutbox() {
+  try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(state.queue.filter((q) => q.offline).map(({ id, chatId, text }) => ({ id, chatId, text })))); } catch { /* egal */ }
+}
+function loadOutbox() {
+  try {
+    for (const q of JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]')) {
+      if (q?.text && !state.queue.some((x) => x.offline && x.text === q.text && x.chatId === q.chatId)) state.queue.push({ id: ++queueId, chatId: q.chatId ?? null, text: String(q.text).slice(0, 20000), attachments: [], offline: true });
+    }
+  } catch { /* egal */ }
+}
+function queueOffline() {
+  const text = el.prompt.value.trim();
+  if (!text) return toast(t('Ohne Internet kann ich nur Text vormerken (keine Anhänge).', 'Offline I can only queue text (no attachments).'));
+  if (state.pending.length) toast(t('Anhänge gehen offline nicht – nur der Text wird vorgemerkt.', 'Attachments don’t work offline – only the text is queued.'));
+  state.queue.push({ id: ++queueId, chatId: state.chat?.id ?? null, text, attachments: [], offline: true });
+  saveOutbox();
+  el.prompt.value = '';
+  state.pending = [];
+  renderTray();
+  autosize();
+  updateSend();
+  haptic('tap');
+  renderQueue();
+  toast(t('📴 Kein Internet – wird gesendet, sobald du wieder online bist.', '📴 No internet – will be sent as soon as you are back online.'));
+}
+// Wieder online: vorgemerkte Nachrichten des offenen Chats (bzw. der Startseite) der Reihe nach senden
+function flushOutbox() {
+  if (offline || navigator.onLine === false) return;
+  let changed = false;
+  for (const q of state.queue) if (q.offline && (q.chatId === (state.chat?.id ?? null))) { q.offline = false; changed = true; }
+  if (!changed) return;
+  saveOutbox();
+  if (!state.chat) {
+    const i = state.queue.findIndex((q) => q.chatId === null);
+    if (i === -1) return;
+    const [item] = state.queue.splice(i, 1);
+    renderQueue();
+    el.prompt.value = item.text;
+    autosize();
+    toast(t('Wieder online – sende …', 'Back online – sending …'));
+    return send();
+  }
+  toast(t('Wieder online – sende …', 'Back online – sending …'));
+  processQueue(state.chat);
+}
 function renderQueue() {
   let box = $('#queue');
-  const items = state.queue.filter((q) => q.chatId === state.chat?.id);
+  const items = state.queue.filter((q) => q.chatId === (state.chat?.id ?? null));
   if (!items.length) { box?.remove(); return; }
   if (!box) {
     box = document.createElement('div');
@@ -1055,8 +1173,8 @@ function renderQueue() {
     <div class="queued" data-q="${q.id}">
       <div class="bubble"><span></span>${q.attachments.length ? `<small>📎 ${q.attachments.length}</small>` : ''}</div>
       <div class="queued-bar">
-        <small>${t('Wartet – kommt dran, sobald die Antwort fertig ist', 'Waiting – sent when the answer is done')}</small>
-        <button type="button" data-q-now="${q.id}">${agentRunning ? t('↑ Jetzt einbringen', '↑ Add now') : t('↑ Jetzt senden', '↑ Send now')}</button>
+        <small>${q.offline ? t('📴 Wartet auf Internet – wird dann automatisch gesendet', '📴 Waiting for internet – sent automatically') : t('Wartet – kommt dran, sobald die Antwort fertig ist', 'Waiting – sent when the answer is done')}</small>
+        ${q.offline ? '' : `<button type="button" data-q-now="${q.id}">${agentRunning ? t('↑ Jetzt einbringen', '↑ Add now') : t('↑ Jetzt senden', '↑ Send now')}</button>`}
         <button type="button" data-q-del="${q.id}" aria-label="${t('Entfernen', 'Remove')}">✕</button>
       </div>
     </div>`).join('');
@@ -1065,7 +1183,7 @@ function renderQueue() {
 }
 function processQueue(chat) {
   if (state.chat !== chat || busy()) return;
-  const i = state.queue.findIndex((q) => q.chatId === chat.id);
+  const i = state.queue.findIndex((q) => q.chatId === chat.id && !q.offline);
   if (i === -1) return renderQueue();
   const [item] = state.queue.splice(i, 1);
   renderQueue();
@@ -1078,6 +1196,7 @@ document.addEventListener('click', async (e) => {
   const del = e.target.closest('[data-q-del]');
   if (del) {
     state.queue = state.queue.filter((q) => q.id !== Number(del.dataset.qDel));
+    saveOutbox();
     return renderQueue();
   }
   const now = e.target.closest('[data-q-now]');
@@ -2615,6 +2734,13 @@ async function route() {
   if (h.startsWith('#g/')) return; // Team-Chat (öffnet sich als eigenes Fenster)
   if (h === '#bestenliste') return showBoard();
   if (h === '#statistik') return showStats();
+  if (h === '#geraete') {
+    // aus der Benachrichtigung „Neue Anmeldung“: Einstellungen bei den Geräten öffnen
+    history.replaceState(null, '', location.pathname);
+    openSettings();
+    setTimeout(() => $('#set-devices-group')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+    return;
+  }
   if (h.startsWith('#c/')) {
     const id = decodeURIComponent(h.slice(3));
     if (state.chat?.id === id) return showView('thread');
@@ -2665,6 +2791,7 @@ async function loadChat(id) {
   el.voteResult.hidden = true;
   state.chat.turns.forEach((_, i) => renderTurn(i));
   renderQueue();
+  setTimeout(flushOutbox, 300); // offline Vorgemerktes für diesen Chat jetzt senden
   el.title.textContent = data.title.length > 40 ? `${data.title.slice(0, 40)}…` : data.title;
   showView('thread');
   renderControls();
@@ -3186,6 +3313,8 @@ window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); inst
 window.addEventListener('appinstalled', () => { installPrompt = null; toast(t('VAIs wurde installiert 🎉', 'VAIs was installed 🎉')); });
 
 function paintSettings() {
+  $('#set-haptics').checked = hapticsOn();
+  $('#set-swipe').checked = swipeOn();
   const theme = getTheme();
   document.querySelectorAll('[data-theme-opt]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.themeOpt === theme)));
   const langSel = $('#set-lang-select');
@@ -3382,6 +3511,32 @@ $('#set-sites').addEventListener('click', async (e) => {
   try { await post('/api/chat/sites/unpublish', { id: btn.dataset.siteOff }); loadSites(); } catch (err) { toast(err.message); }
 });
 
+// Angemeldete Geräte (Liste, einzeln oder alle anderen abmelden)
+const DEV_ICON = (d) => (/iPhone|Android-Handy/.test(d) ? '📱' : /iPad|Tablet/.test(d) ? '📲' : /Mac|PC|Chromebook/.test(d) ? '💻' : '🔑');
+async function loadDevices() {
+  try {
+    const res = await fetch('/api/auth/sessions');
+    if (!res.ok) return;
+    const { sessions } = await res.json();
+    const ago = (ts) => (ts ? new Date(ts).toLocaleString(LOCALE, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '–');
+    $('#set-devices').innerHTML = sessions.map((x) => `<li class="${x.current ? 'dev-current' : ''}">
+      <span class="dev-ico" aria-hidden="true">${DEV_ICON(x.device)}</span>
+      <span><b></b><small>${x.current ? t('Dieses Gerät', 'This device') : `${t('zuletzt aktiv', 'last active')} ${ago(x.lastSeen ?? x.created)}`}${x.created ? ` · ${t('angemeldet', 'signed in')} ${ago(x.created)}` : ''}</small></span>
+      ${x.current ? '' : `<button type="button" class="dev-out" data-dev-out="${escapeHtml(x.id)}">${t('Abmelden', 'Sign out')}</button>`}</li>`).join('');
+    $('#set-devices').querySelectorAll('li b').forEach((b, i) => { b.textContent = sessions[i].device; });
+    $('#set-devices-out').hidden = sessions.filter((x) => !x.current).length < 1;
+  } catch { /* offline */ }
+}
+$('#set-devices').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-dev-out]');
+  if (!btn || !confirm(t('Dieses Gerät abmelden?', 'Sign this device out?'))) return;
+  try { await post('/api/auth/sessions/revoke', { id: btn.dataset.devOut }); haptic('success'); toast(t('Gerät abgemeldet.', 'Device signed out.')); loadDevices(); } catch (err) { toast(err.message); }
+});
+$('#set-devices-out').addEventListener('click', async () => {
+  if (!confirm(t('Alle anderen Geräte abmelden? Dieses Gerät bleibt angemeldet.', 'Sign out all other devices? This device stays signed in.'))) return;
+  try { await post('/api/auth/sessions/revoke', { others: true }); haptic('success'); toast(t('Alle anderen Geräte sind abgemeldet.', 'All other devices are signed out.')); loadDevices(); } catch (err) { toast(err.message); }
+});
+
 function openSettings() {
   toggleAccount(false);
   closeDrawer();
@@ -3392,6 +3547,7 @@ function openSettings() {
   loadProfile();
   loadPush();
   loadSites();
+  loadDevices();
   settingsEl.querySelectorAll('.msg').forEach((m) => { m.textContent = ''; m.className = m.className.replace(/ (ok|error)$/, ''); });
   settingsEl.hidden = false;
   $('.settings-head [data-close]', settingsEl).focus();
@@ -3524,7 +3680,15 @@ async function init() {
     user = { email: saved.email };
     setOffline(true);
   }
-  window.addEventListener('online', () => { if (offline) location.reload(); });
+  const bootedOffline = offline;
+  loadOutbox();
+  window.addEventListener('online', () => {
+    if (bootedOffline) return location.reload(); // App kam aus dem Speicher → einmal richtig laden
+    setOffline(false);
+    flushOutbox();
+  });
+  window.addEventListener('offline', () => setOffline(true));
+  setTimeout(() => { renderQueue(); flushOutbox(); }, 800);
   avatar.textContent = user.email[0].toUpperCase();
   avatar.setAttribute('aria-label', `${t('Konto', 'Account')}: ${user.email}`);
   $('#menu-email').textContent = user.email;

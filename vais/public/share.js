@@ -86,6 +86,8 @@ function renderTurn(chat, turn) {
 
 async function init() {
   const id = decodeURIComponent(location.pathname.split('/').pop() || '');
+  const rep = document.getElementById('share-report');
+  if (rep) rep.href = `/melden?chat=${encodeURIComponent(id)}`;
   try {
     const res = await fetch(`/api/share/${encodeURIComponent(id)}`);
     const data = await res.json();

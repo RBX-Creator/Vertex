@@ -1894,3 +1894,11 @@ body.incognito .composer { border-style: dashed; border-color: var(--border-stro
 /* Präsentationen */
 .code-chip.deck-chip { font-family: var(--sans); font-weight: 600; max-width: 100%; }
 .build-icon .deck-icon { font-size: 22px; line-height: 1; }
+/* Angemeldete Geräte */
+.dev-list li { gap: 10px; }
+.dev-list .dev-ico { flex: none; font-size: 20px; }
+.dev-list li > span:nth-child(2) { display: grid; gap: 1px; }
+.dev-list small { color: var(--muted); font-size: 12px; }
+.dev-list .dev-current { box-shadow: inset 0 0 0 1px var(--border-strong); }
+.dev-out { flex: none; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--danger); font: inherit; font-size: 13px; cursor: pointer; }
+.auto-tag { display: inline-block; max-width: 72%; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }

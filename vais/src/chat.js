@@ -115,9 +115,46 @@ setInterval(() => {
 
 // Agent X steht als eigenes „Modell“ ganz oben in der Liste
 const AGENT_MODEL = { id: 'agent', provider: 'vais', name: 'Agent X', maker: 'VAIs', icon: 'vais', caps: ['text', 'code', 'web', 'vision'], agent: true };
+const AUTO_MODEL = { id: 'auto', provider: 'vais', name: 'Automatisch', maker: 'VAIs', icon: 'vais', caps: ['text', 'code', 'web', 'vision', 'image'], auto: true };
 chat.get('/models', wrap(async (req, res) => {
-  res.json({ models: [AGENT_MODEL, ...(await listModels())], demo: demoMode });
+  res.json({ models: [AGENT_MODEL, { ...AUTO_MODEL, name: t('Automatisch', 'Automatic') }, ...(await listModels())], demo: demoMode });
 }));
+
+// ── Auto-Modus: für jede Nachricht das passende Modell (ohne extra KI-Anfrage, nur nach dem Inhalt) ──
+const AUTO_RULES = [
+  { kind: 'code', label: () => t('Code', 'Code'), cap: 'code', test: /```|\b(code|programm\w*|funktion|function|javascript|typescript|python|html|css|sql|java|c\+\+|c#|rust|golang|php|bug|stack ?trace|regex|json|api|react|node|skript|script|compiler|debug)\b/i,
+    prefer: [/^groq:qwen\/qwen3/, /^groq:moonshotai\/kimi-k2/, /^groq:openai\/gpt-oss-120b$/, /^cerebras:.*(qwen|gpt-oss)/, /^gemini:/, /^mistral:.*(codestral|devstral)/] },
+  { kind: 'math', label: () => t('Mathe & Logik', 'Maths & logic'), cap: 'text', test: /\d\s*[+\-*/^×÷=]\s*\d|\b(rechne|berechne|gleichung|integral|ableitung|beweis\w*|wahrscheinlichkeit|prozent\w*|mathe\w*|logik|rätsel|knobel\w*|physik|chemie|formel)\b/i,
+    prefer: [/^groq:openai\/gpt-oss-120b$/, /^cerebras:gpt-oss-120b$/, /^groq:qwen\/qwen3/, /deepseek-r1/, /^gemini:/] },
+  { kind: 'web', label: () => t('Aktuelles (Websuche)', 'Current info (web search)'), cap: 'web', test: /\b(heute|gestern|morgen|aktuell\w*|gerade|news|nachrichten|wetter|preis\w*|kostet|kurs|ergebnis\w*|neueste\w*|neu erschienen|termin\w*|wann spielt|tabelle)\b|\b20(2[5-9]|3\d)\b/i,
+    prefer: [/^groq:groq\/compound$/, /^groq:openai\/gpt-oss-120b#search$/, /compound/, /#search$/] },
+  { kind: 'creative', label: () => t('Kreativ', 'Creative'), cap: 'text', test: /\b(geschichte|gedicht|story|witz|lied|songtext|reim\w*|märchen|fantasie|rollenspiel|kreativ|slogan|brief)\b/i,
+    prefer: [/^groq:moonshotai\/kimi-k2/, /^groq:.*llama-3\.3-70b/, /^groq:openai\/gpt-oss-120b$/, /^mistral:/, /^gemini:/] },
+];
+const AUTO_QUICK = [/^groq:.*llama-3\.1-8b/, /^groq:openai\/gpt-oss-20b$/, /^groq:meta-llama\/llama-4-scout/, /^cerebras:/];
+const AUTO_GENERAL = [/^groq:openai\/gpt-oss-120b$/, /^groq:moonshotai\/kimi-k2/, /^cerebras:gpt-oss-120b$/, /^groq:.*llama-3\.3-70b/, /^gemini:gemini-2\.5-flash$/, /^groq:qwen\/qwen3/, /^groq:openai\/gpt-oss-20b$/];
+export async function autoPick(text = '', { images = false, modality = 'auto' } = {}) {
+  const all = (await listModels()).filter((m) => !m.paid);
+  const free = all.filter((m) => !m.busy);
+  const find = (prefs, cap) => prefs.map((re) => free.find((m) => re.test(m.id) && m.caps.includes(cap))).find(Boolean);
+  const any = (cap) => free.find((m) => m.caps.includes(cap)) ?? all.find((m) => m.caps.includes(cap));
+  if (modality === 'image') { const m = any('image'); return m && { model: m, kind: 'image', label: t('Bild', 'Image') }; }
+  if (images) { const m = find([/llama-4-maverick/, /llama-4-scout/, /^gemini:/], 'vision') ?? any('vision'); return m && { model: m, kind: 'vision', label: t('Bild ansehen', 'Looking at an image') }; }
+  if (modality === 'web') { const r = AUTO_RULES.find((x) => x.kind === 'web'); const m = find(r.prefer, 'web') ?? any('web'); return m && { model: m, kind: 'web', label: r.label() }; }
+  const q = String(text).slice(0, 4000);
+  for (const r of AUTO_RULES) {
+    if (r.kind === 'web' && modality === 'code') continue;
+    if (!r.test.test(q)) continue;
+    const m = find(r.prefer, r.cap) ?? (r.cap !== 'text' ? any(r.cap) : null);
+    if (m) return { model: m, kind: r.kind, label: r.label() };
+  }
+  if (q.length < 50 && !/\?.*\?/.test(q)) {
+    const m = find(AUTO_QUICK, 'text');
+    if (m) return { model: m, kind: 'quick', label: t('Kurze Frage – schnell', 'Short question – fast') };
+  }
+  const m = find(AUTO_GENERAL, modality === 'code' ? 'code' : 'text') ?? any(modality === 'code' ? 'code' : 'text');
+  return m && { model: m, kind: 'general', label: t('Allgemein', 'General') };
+}
 
 // Neuen Chat anlegen. Im Battle wählt der Server zwei zufällige Modelle und verrät sie erst nach der Abstimmung.
 chat.post('/start', wrap(async (req, res) => {
@@ -136,10 +173,10 @@ chat.post('/start', wrap(async (req, res) => {
   } else if (mode === 'sxs' || mode === 'direct') {
     const need = mode === 'sxs' ? 2 : 1;
     if (!Array.isArray(models) || models.length !== need) throw new HttpError(400, t('Bitte wähle die Modelle aus.', 'Please choose the models.'));
-    for (const id of models) if (id !== 'agent' && !(await findModel(id))) throw new HttpError(400, t('Dieses Modell ist nicht verfügbar.', 'This model is not available.'));
+    for (const id of models) if (id !== 'agent' && id !== 'auto' && !(await findModel(id))) throw new HttpError(400, t('Dieses Modell ist nicht verfügbar.', 'This model is not available.'));
     if (mode === 'sxs' && models[0] === models[1]) throw new HttpError(400, t('Bitte wähle zwei verschiedene Modelle.', 'Please choose two different models.'));
     if (modality === 'image') {
-      for (const id of models) if (id === 'agent' || !(await findModel(id))?.caps.includes('image')) throw new HttpError(400, t('Bitte wähle ein Bild-Modell.', 'Please choose an image model.'));
+      for (const id of models) if (id === 'agent' || (id !== 'auto' && !(await findModel(id))?.caps.includes('image'))) throw new HttpError(400, t('Bitte wähle ein Bild-Modell.', 'Please choose an image model.'));
     }
     picked = models;
   } else {
@@ -252,6 +289,14 @@ chat.post('/stream', wrap(async (req, res) => {
   let clean = limitImages(messages.slice(-MAX_MESSAGES).map(cleanMessage));
   if (clean.at(-1).role !== 'user') throw new HttpError(400, t('Die letzte Nachricht muss von dir sein.', 'The last message must be yours.'));
   const hasImages = imageCount(clean) > 0;
+  let auto = null; // Auto-Modus: welches Modell und warum
+  if (model === 'auto') {
+    const ask = typeof display?.text === 'string' && display.text.trim() ? display.text : plain(clean.at(-1));
+    const pick = await autoPick(ask, { images: hasImages, modality: row.modality });
+    if (!pick) throw new HttpError(503, t('Gerade ist kein passendes Modell frei. Versuche es gleich noch einmal.', 'No suitable model is free right now. Try again in a moment.'));
+    model = pick.model.id;
+    auto = { id: pick.model.id, name: pick.model.name, maker: pick.model.maker, icon: pick.model.icon, kind: pick.kind, why: pick.label };
+  }
   if (hasImages && model !== 'agent' && row.modality !== 'image' && !(await findModel(model))?.caps.includes('vision')) {
     if (row.mode === 'battle') {
       // Im Battle still ein Modell nehmen, das Bilder sehen kann
@@ -305,14 +350,15 @@ chat.post('/stream', wrap(async (req, res) => {
   let thinkMs = 0;
   let reaction = null; // Emoji-Reaktion von Agent X auf deine Nachricht
   let fallback = null; // Notfall-Modell, falls das gewählte voll war
+  // (auto steht weiter oben: Auto-Modus-Wahl)
   const summarized = fitted.summarized || null;
   const save = (s, content, status = 'done', error = null, attachments = null) => (turnNo === null ? null : run(
     `INSERT INTO messages (chat_id, turn, side, content, status, error, meta, attachments, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(chat_id, turn, side) DO UPDATE SET content = excluded.content, status = excluded.status, error = excluded.error,
        meta = excluded.meta, attachments = COALESCE(excluded.attachments, messages.attachments)`,
     row.id, turnNo, s, content, status, error,
-    s >= 0 && (steps.length || thinking || sources.size || images.length || reaction || fallback || summarized)
-      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, sources: [...sources.values()], images, reaction, fallback, summarized }) : null,
+    s >= 0 && (steps.length || thinking || sources.size || images.length || reaction || fallback || summarized || auto)
+      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, sources: [...sources.values()], images, reaction, fallback, summarized, auto }) : null,
     attachments, Date.now(),
   ).catch((e) => console.error('Verlauf speichern fehlgeschlagen:', e.message)));
   // Deine Frage so speichern, wie sie angezeigt wird (Text + Anhänge), nicht als Modell-Format
@@ -332,6 +378,7 @@ chat.post('/stream', wrap(async (req, res) => {
   // Schreiben nur, solange die Verbindung offen ist (Agent X arbeitet notfalls ohne weiter)
   function out(line) { if (!res.destroyed && !res.writableEnded) res.write(line); }
   if (summarized) out(`${JSON.stringify({ summarized })}\n`);
+  if (auto) out(`${JSON.stringify({ auto })}\n`);
 
   if (blocked) {
     // Freundlich ablehnen, ohne ein Modell zu fragen
@@ -905,7 +952,7 @@ async function loadChatData(row, { forShare = false } = {}) {
         text: m.content, status: m.status, error: m.error,
         steps: meta.steps ?? [], thinking: forShare ? '' : meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0,
         feedback: forShare ? 0 : m.feedback ?? 0, reasons: forShare || !m.feedback_reason ? [] : String(m.feedback_reason).split(','), sources: meta.sources ?? [], images: meta.images ?? [],
-        reaction: meta.reaction ?? null, fallback: meta.fallback ?? null, summarized: meta.summarized ?? null,
+        reaction: meta.reaction ?? null, fallback: meta.fallback ?? null, summarized: meta.summarized ?? null, auto: meta.auto ?? null,
       };
     }
   }

@@ -68,7 +68,7 @@
     <p class="offline-banner maint-banner" id="maint-banner" role="status" hidden><span aria-hidden="true">🛠️</span><span id="maint-text"></span></p>
     <p class="offline-banner" id="offline-banner" role="status" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8.8a15 15 0 0 1 4.2-2.6M9.8 5.2A15 15 0 0 1 22 8.8M5 12.5a10 10 0 0 1 3.5-2.1M15.4 10.6A10 10 0 0 1 19 12.5M8.5 16a5 5 0 0 1 7 0M12 20h.01M3 3l18 18"/></svg>
-      <span data-en="Offline – read only">Offline – nur Lesen</span>
+      <span data-en="Offline – new messages are sent when you are back online">Offline – neue Nachrichten werden gesendet, sobald du wieder online bist</span>
     </p>
 
     <p class="incognito-banner" id="incognito-banner" hidden><span aria-hidden="true">🕶️</span> <span data-en="Incognito – this chat will not be saved and disappears when you leave it.">Inkognito – dieser Chat wird nicht gespeichert und verschwindet, wenn du ihn verlässt.</span></p>
@@ -395,6 +395,14 @@
             <button type="button" role="radio" data-theme-opt="light" data-en="Light">Hell</button>
             <button type="button" role="radio" data-theme-opt="dark" data-en="Dark">Dunkel</button>
           </div>
+          <label class="set-switch">
+            <span><b data-en="Haptic feedback">Vibration (Haptik)</b><small data-en="A short tap feel when sending, when an answer is ready and on errors. iPhone: from iOS 18.">Kurzes Tippen beim Senden, wenn eine Antwort fertig ist und bei Fehlern. iPhone: ab iOS 18.</small></span>
+            <input type="checkbox" id="set-haptics" role="switch">
+          </label>
+          <label class="set-switch">
+            <span><b data-en="Swipe gestures">Wischgesten</b><small data-en="In a chat: swipe right opens the menu, swipe left starts a new chat.">Im Chat: nach rechts wischen öffnet das Menü, nach links wischen startet einen neuen Chat.</small></span>
+            <input type="checkbox" id="set-swipe" role="switch">
+          </label>
         </section>
 
         <section class="set-group">
@@ -459,6 +467,13 @@
           <h3 data-en="App">App</h3>
           <p class="set-hint" id="set-install-text"></p>
           <button type="button" class="btn" id="set-install" hidden data-en="Install VAIs">VAIs installieren</button>
+        </section>
+
+        <section class="set-group" id="set-devices-group">
+          <h3 data-en="Signed-in devices">Angemeldete Geräte</h3>
+          <p class="set-hint" data-en="If you see a device you don’t know, sign it out and change your password. On a new sign-in your other devices get a notification.">Siehst du ein Gerät, das du nicht kennst, melde es ab und ändere dein Passwort. Bei einer neuen Anmeldung bekommen deine anderen Geräte eine Benachrichtigung.</p>
+          <ul class="mem-list dev-list" id="set-devices"></ul>
+          <button type="button" class="btn ghost-btn" id="set-devices-out" hidden data-en="Sign out all other devices">Alle anderen Geräte abmelden</button>
         </section>
 
         <section class="set-group">

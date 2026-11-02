@@ -13,6 +13,7 @@ import { listAllSites, removeSite } from './sites.js';
 import { safetyOn, setSafety } from './safety.js';
 import { alarmsOn, setAlarms, alarm } from './alarm.js';
 import { maintenance, forgetMaintenance } from './maintenance.js';
+import { listReports, actOnReport, openReportCount } from './reports.js';
 
 export const admin = Router();
 
@@ -83,6 +84,7 @@ admin.get('/overview', wrap(async (req, res) => {
     role: req.isAdmin ? 'admin' : 'mod',
     safety: await safetyOn(),
     alarms: await alarmsOn(),
+    reportsOpen: await openReportCount(),
   });
 }));
 
@@ -141,6 +143,16 @@ admin.post('/maintenance', adminOnly, wrap(async (req, res) => {
   forgetMaintenance();
   await logEvent('admin', null, on ? `Wartungsmodus an${message ? `: ${message}` : ''}` : 'Wartungsmodus aus');
   res.json(await maintenance());
+}));
+
+// ── Meldungen (Admins und Mods) ──────────────────────────────────────
+admin.get('/reports', wrap(async (req, res) => {
+  res.json({ reports: await listReports(req.query.status === 'closed' ? 'closed' : 'open'), open: await openReportCount() });
+}));
+admin.post('/reports/act', wrap(async (req, res) => {
+  const id = Number(req.body?.id);
+  if (!Number.isInteger(id)) throw new HttpError(400, t('Ungültige Meldung.', 'Invalid report.'));
+  res.json(await actOnReport(id, String(req.body?.action ?? ''), req.user));
 }));
 
 admin.get('/users', wrap(async (req, res) => {

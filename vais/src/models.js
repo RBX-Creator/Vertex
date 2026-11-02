@@ -71,14 +71,70 @@ export function retryAfterMs(msg = '') {
 }
 
 // Anfrage schicken; bei „voll“ (429) oder „ungültig“ (401/403) sofort mit dem nächsten Schlüssel nochmal
+// ── Verbrauch pro Schlüssel (für den Admin) ──────────────────────
+// Eigene Zähler pro Tag (UTC) + was der Anbieter in den Antwort-Kopfzeilen über die Limits sagt
+const keyUsage = new Map(); // 'anbieter:schlüssel' → { day, requests, limited, last, limits }
+const utcDay = () => new Date().toISOString().slice(0, 10);
+let usageLoaded = false;
+async function loadKeyUsage() {
+  if (usageLoaded) return;
+  usageLoaded = true;
+  try {
+    const saved = JSON.parse(await getSetting('key_usage', '{}') || '{}');
+    for (const [id, u] of Object.entries(saved)) if (u.day === utcDay()) keyUsage.set(id, u);
+  } catch { /* egal */ }
+}
+let saveTimer = null;
+function saveKeyUsageSoon() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    setSetting('key_usage', JSON.stringify(Object.fromEntries(keyUsage))).catch(() => {});
+  }, 30_000);
+  saveTimer.unref?.();
+}
+const hdrNum = (h, name) => { const v = h.get(name); return v === null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v); };
+function durationMs(v) {
+  if (!v) return null;
+  let ms = 0;
+  for (const [, n, unit] of String(v).matchAll(/([\d.]+)(ms|h|m|s)/g)) ms += Number(n) * ({ ms: 1, s: 1000, m: 60_000, h: 3_600_000 }[unit]);
+  return ms || null;
+}
+function recordKey(provider, key, res) {
+  const id = `${provider}:${key}`;
+  let u = keyUsage.get(id);
+  if (!u || u.day !== utcDay()) { u = { day: utcDay(), requests: 0, limited: 0, last: null, limits: null }; keyUsage.set(id, u); }
+  u.requests++;
+  if (res.status === 429) u.limited++;
+  u.last = Date.now();
+  const h = res.headers;
+  const limits = {
+    reqLimit: hdrNum(h, 'x-ratelimit-limit-requests'), reqLeft: hdrNum(h, 'x-ratelimit-remaining-requests'), reqReset: durationMs(h.get('x-ratelimit-reset-requests')),
+    tokLimit: hdrNum(h, 'x-ratelimit-limit-tokens'), tokLeft: hdrNum(h, 'x-ratelimit-remaining-tokens'), tokReset: durationMs(h.get('x-ratelimit-reset-tokens')),
+  };
+  if (limits.reqLimit !== null || limits.tokLimit !== null) u.limits = { ...limits, at: Date.now() };
+  saveKeyUsageSoon();
+}
+export function keyUsageOf(provider, key) {
+  const u = keyUsage.get(`${provider}:${key}`);
+  return u && u.day === utcDay() ? u : null;
+}
+
+// Schlüssel reihum benutzen (verteilt die Limits gleichmäßig), volle überspringen
+const turnOf = new Map();
 async function withKeys(provider, model, send) {
   const p = PROVIDERS[provider];
+  await loadKeyUsage();
   const tried = new Set();
+  const start = turnOf.get(provider) ?? 0;
+  turnOf.set(provider, start + 1);
   for (;;) {
-    const key = freeKeys(provider, model).find((k) => !tried.has(k)) ?? (tried.size ? null : p.keys[0]);
+    const free = freeKeys(provider, model).filter((k) => !tried.has(k));
+    const key = free.length ? free[start % free.length] : (tried.size ? null : p.keys[0]);
     if (!key) throw new Error(t('Dieses Modell ist gerade nicht verfügbar.', 'This model is not available right now.'));
     tried.add(key);
     const res = await send(key);
+    recordKey(provider, key, res);
     if (res.ok || ![401, 403, 429].includes(res.status)) return res;
     const body = await res.clone().json().catch(() => ({}));
     const err = Array.isArray(body) ? body[0]?.error : body?.error;
@@ -98,7 +154,9 @@ export function keyStatus() {
     keys: p.keys.map((k) => {
       const until = keyCooldown.get(`k:${p.name}:${k}`) ?? 0;
       const limited = [...keyCooldown.entries()].some(([id, ts]) => id.startsWith('m:') && id.endsWith(`:${k}`) && ts > now);
-      return { id: maskKey(k), source: p.fromEnv.includes(k) ? 'render' : 'admin', until: until > now ? until : null, state: until > now ? 'full' : limited ? 'partly' : 'ok' };
+      const u = keyUsageOf(p.name, k);
+      return { id: maskKey(k), source: p.fromEnv.includes(k) ? 'render' : 'admin', until: until > now ? until : null, state: until > now ? 'full' : limited ? 'partly' : 'ok',
+        usage: u ? { requests: u.requests, limited: u.limited, last: u.last, limits: u.limits } : null };
     }),
   }));
 }
@@ -425,6 +483,7 @@ export function modelKey(id) {
 }
 export async function describeModel(id) {
   if (id === 'agent') return { name: 'Agent X', maker: 'VAIs', icon: 'vais' };
+  if (id === 'auto') return { name: t('Automatisch', 'Automatic'), maker: 'VAIs', icon: 'vais' };
   const live = await findModel(id) ?? await findModel(`openrouter:${id}`);
   if (live) return { name: live.name, maker: live.maker, icon: live.icon };
   const upstream = modelKey(id).replace(/^(gemini|groq|demo):/, '');
@@ -433,6 +492,7 @@ export async function describeModel(id) {
 
 export async function displayName(id) {
   if (id === 'agent') return 'Agent X';
+  if (id === 'auto') return t('Automatisch', 'Automatic');
   return (await findModel(id))?.name ?? id.split(/[:/]/).pop().replace(/:free$/, '');
 }
 

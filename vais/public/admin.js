@@ -95,6 +95,52 @@ $('#metrics').addEventListener('click', (e) => {
   drawHistory();
 });
 
+// ── Meldungen ───────────────────────────────────────────────────────
+let repTab = 'open';
+const REP_ACTION = { remove: t('Entfernt', 'Removed'), block: t('Entfernt + gesperrt', 'Removed + blocked'), dismiss: t('Abgelehnt', 'Dismissed'), done: t('Erledigt', 'Done') };
+async function loadReports() {
+  try {
+    const { reports, open } = await api(`reports?status=${repTab}`);
+    $('#rep-count').hidden = !open;
+    $('#rep-count').textContent = String(open);
+    $('#reports').innerHTML = reports.length ? reports.map((r) => `
+      <li data-rep-id="${r.id}">
+        <div class="adm-rep-top">
+          <span class="adm-pill ${r.kind}">${r.kind === 'site' ? t('🌐 Webseite', '🌐 Website') : t('💬 Chat', '💬 Chat')}</span>
+          <b class="adm-rep-reason">${esc(r.reasonLabel)}</b>
+          ${r.sameOpen > 1 && repTab === 'open' ? `<span class="adm-pill warn">${r.sameOpen}× ${t('gemeldet', 'reported')}</span>` : ''}
+          <time>${when(r.created)}</time>
+        </div>
+        <p class="adm-rep-title">${r.exists ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title)} ↗</a>` : `<span class="muted">${t('Schon entfernt', 'Already removed')} (${esc(r.url)})</span>`}</p>
+        ${r.note ? `<p class="adm-rep-note">„${esc(r.note)}“</p>` : ''}
+        <small class="muted">${t('Von', 'By')} ${esc(r.owner ?? '?')} · ${t('gemeldet von', 'reported by')} ${esc(r.reporter ?? t('Gast', 'guest'))}${r.handled ? ` · ${REP_ACTION[r.action] ?? r.status} ${t('von', 'by')} ${esc(r.handledBy ?? '')} ${when(r.handled)}` : ''}</small>
+        ${repTab === 'open' ? `<div class="adm-row">
+          ${r.exists ? `<button class="adm-btn small danger" data-rep-act="remove">${t('Entfernen', 'Remove')}</button>` : ''}
+          ${r.ownerId ? `<button class="adm-btn small danger" data-rep-act="block">${t('Entfernen + Ersteller sperren', 'Remove + block creator')}</button>` : ''}
+          <button class="adm-btn small" data-rep-act="dismiss">${t('Ist okay', 'It’s fine')}</button>
+          ${r.exists ? '' : `<button class="adm-btn small" data-rep-act="done">${t('Erledigt', 'Done')}</button>`}
+        </div>` : ''}
+      </li>`).join('') : `<li class="adm-empty">${repTab === 'open' ? t('Keine offenen Meldungen. 🎉', 'No open reports. 🎉') : t('Noch nichts erledigt.', 'Nothing handled yet.')}</li>`;
+  } catch (err) { toast(err.message); }
+}
+$('#rep-tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-rep]');
+  if (!b) return;
+  repTab = b.dataset.rep;
+  document.querySelectorAll('#rep-tabs [data-rep]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  loadReports();
+});
+$('#reports').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-rep-act]');
+  if (!b) return;
+  const id = Number(b.closest('[data-rep-id]').dataset.repId);
+  const action = b.dataset.repAct;
+  if (action === 'block' && !confirm(t('Inhalt entfernen UND den Ersteller sperren?', 'Remove the content AND block the creator?'))) return;
+  if (action === 'remove' && !confirm(t('Inhalt wirklich entfernen?', 'Really remove the content?'))) return;
+  b.disabled = true;
+  try { await api('reports/act', { id, action }); toast(REP_ACTION[action] ?? 'OK'); loadReports(); load(); } catch (err) { toast(err.message); b.disabled = false; }
+});
+
 // ── Wartungsmodus ──────────────────────────────────────────────────
 function paintMaint(m) {
   $('#maint-on').checked = !!m.on;
@@ -152,6 +198,7 @@ async function load() {
     tiles(d.counts);
     models(d.models, d.modes);
     loadStats();
+    loadReports();
     if (role === 'admin') api('maintenance').then(paintMaint).catch(() => {});
     events(d.events, d.busy);
     boardState(d.boardResetAt);
@@ -298,16 +345,33 @@ $('#limits-form').addEventListener('submit', async (e) => {
 });
 
 // ── API-Schlüssel ────────────────────────────────────────────────
+// Verbrauch eines Schlüssels: eigene Zähler + Limits, die der Anbieter meldet
+const kfmt = (n) => (n >= 10000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1).replace('.', ',')}k` : num(n));
+const soon = (ms) => (ms === null || ms === undefined ? '' : ms < 60_000 ? `${Math.ceil(ms / 1000)} s` : ms < 3_600_000 ? `${Math.round(ms / 60_000)} min` : `${(ms / 3_600_000).toFixed(1).replace('.', ',')} h`);
+function keyUsageHtml(u) {
+  if (!u) return `<div class="adm-key-use"><small class="muted">${t('Heute noch nicht benutzt', 'Not used today')}</small></div>`;
+  const L = u.limits;
+  const bar = (left, limit, label, reset) => {
+    if (left === null || limit === null || !limit) return '';
+    const pct = Math.max(0, Math.min(100, Math.round((1 - left / limit) * 100)));
+    return `<span class="adm-key-meter"><small>${label}: ${kfmt(left)} / ${kfmt(limit)} ${t('übrig', 'left')}${reset ? ` · ${t('voll frei in', 'fully free in')} ${soon(reset)}` : ''}</small><span class="adm-bar${pct >= 90 ? ' full' : ''}"><i style="width:${pct}%"></i></span></span>`;
+  };
+  return `<div class="adm-key-use">
+    <small>${t('Heute', 'Today')}: <b>${num(u.requests)}</b> ${t('Anfragen', 'requests')}${u.limited ? ` · ${num(u.limited)}× ${t('voll', 'full')}` : ''}${u.last ? ` · ${t('zuletzt', 'last')} ${when(u.last)}` : ''}</small>
+    ${L ? bar(L.reqLeft, L.reqLimit, t('Anfragen pro Tag', 'Requests per day'), L.reqReset) + bar(L.tokLeft, L.tokLimit, t('Tokens pro Minute', 'Tokens per minute'), L.tokReset) : ''}
+  </div>`;
+}
 function renderKeys(providers) {
   const STATE = { ok: t('frei', 'free'), partly: t('teilweise voll', 'partly full'), full: t('voll', 'full') };
   $('#keys').innerHTML = providers.map((p) => `
     <div class="adm-keys">
       <p class="adm-keys-head"><b>${esc(p.label)}</b><small>${p.keys.length ? `${p.keys.length} ${p.keys.length === 1 ? t('Schlüssel', 'key') : t('Schlüssel', 'keys')}` : t('kein Schlüssel', 'no key')}</small></p>
       ${p.keys.length ? `<ul>${p.keys.map((k, i) => `
-        <li><span class="adm-key-role">${i === 0 ? t('Haupt', 'Main') : `${t('Notfall', 'Backup')} ${i}`}</span><code>${esc(k.id)}</code>
+        <li><span class="adm-key-role">${t('Nr.', 'No.')} ${i + 1}</span><code>${esc(k.id)}</code>
           <span class="adm-key-state ${k.state}">${STATE[k.state]}${k.until ? ` ${t('bis', 'until')} ${when(k.until)}` : ''}</span>
           <small>${k.source === 'render' ? 'Render' : 'Admin'}</small>
           ${k.source === 'admin' ? `<button class="adm-link danger" data-rm-key="${esc(k.id)}" data-provider="${p.provider}">${t('Entfernen', 'Remove')}</button>` : ''}
+          ${keyUsageHtml(k.usage)}
         </li>`).join('')}</ul>` : ''}
     </div>`).join('');
   const sel = $('#key-provider');

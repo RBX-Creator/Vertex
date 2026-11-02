@@ -179,3 +179,21 @@ textarea.adm-input { resize: vertical; min-height: 80px; line-height: 1.45; }
 .chart-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 .chart-table th, .chart-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; }
 .chart-table th:first-child, .chart-table td:first-child { text-align: left; }
+
+/* Schlüssel-Verbrauch */
+.adm-key-use { flex-basis: 100%; display: grid; gap: 6px; margin-top: 4px; }
+.adm-key-meter { display: grid; gap: 3px; }
+.adm-key-meter .adm-bar { height: 6px; }
+
+/* Meldungen */
+.adm-count { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; margin-left: 6px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 12px; font-weight: 700; vertical-align: 2px; }
+.adm-count[hidden] { display: none; }
+.adm-reports { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.adm-reports > li { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.adm-reports > li.adm-empty { border: 0; background: none; padding: 4px 0; color: var(--muted); }
+.adm-rep-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.adm-rep-top time { margin-left: auto; color: var(--muted); font-size: 12px; }
+.adm-rep-reason { font-weight: 600; }
+.adm-rep-title { margin: 0; overflow-wrap: anywhere; }
+.adm-rep-note { margin: 0; color: var(--text); font-style: italic; font-size: 14px; }
+.adm-pill.warn { color: var(--danger); }
