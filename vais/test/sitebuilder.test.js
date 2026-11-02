@@ -90,3 +90,21 @@ test('Fake-Erkennung findet typische Platzhalter', () => {
 test('Seiten ohne Markierungen lassen sich nicht zerlegen', () => {
   assert.equal(sb.disassemble('<!doctype html><html><body>Hi</body></html>'), null);
 });
+
+test('Baukasten: Abschnitt, der einmal am Limit scheitert, wird nachgebaut; echte Nutzerdaten bleiben', async () => {
+  const base = fakeModel([]);
+  let failed = 0;
+  sb.__setAsk(async (messages) => {
+    const user = messages.at(-1).content;
+    if (/DEIN ABSCHNITT: id "hero"/.test(user) && failed++ < 1) throw Object.assign(new Error('ausgelastet'), { status: 429 });
+    if (/DEIN ABSCHNITT: id "footer"/.test(user)) return { text: section('footer', '<p>Ruf an: 01234 567890</p>') };
+    return base(messages);
+  });
+  const steps = [];
+  const out = await sb.buildWebsite({ brief: 'Verein, Telefon 01234 567890', onStep: (s) => steps.push(s), validate: validateHtml });
+  assert.ok(steps.some((s) => /2\. Versuch/.test(s.text)));
+  assert.match(out.html, /<!--vx:hero-->/);
+  assert.match(out.html, /01234 567890/); // vom Nutzer angegeben → nicht als Fake entfernt
+  assert.ok(!steps.some((s) => s.kind === 'check' && /footer/.test(s.text)));
+  sb.__setAsk(null);
+});

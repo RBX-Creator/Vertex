@@ -62,7 +62,12 @@ const AGENT_PREFERENCE = [
 async function pickModel(preferences) {
   const all = await listModels();
   for (const re of preferences) {
-    const hit = all.find((m) => re.test(m.id) && !m.busy) ;
+    const hit = all.find((m) => re.test(m.id) && !m.busy);
+    if (hit) return hit;
+  }
+  // Alle gerade „voll“ (meist nur das Minuten-Limit): trotzdem das beste nehmen – ask() wartet notfalls kurz
+  for (const re of preferences) {
+    const hit = all.find((m) => re.test(m.id));
     if (hit) return hit;
   }
   return null;
@@ -725,12 +730,19 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   // Modell fragen; ist die Anfrage zu groß oder das Modell voll: kürzen, dann auf ein anderes Modell ausweichen
   let current = model;
   const tried = new Set([model.id]);
+  let waited = 0;
   async function ask(extra = {}) {
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 9; attempt++) {
       try {
         return await complete({ model: current.id, messages: convo, signal, ...extra });
       } catch (err) {
         if (signal?.aborted) throw err;
+        // Nur das Minuten-Limit: kurz warten statt aufgeben (z. B. nach dem Bau einer großen Webseite)
+        if (err.status === 429 && err.retryAfter && err.retryAfter <= 30_000 && waited < 75_000) {
+          waited += err.retryAfter + 400;
+          await new Promise((ok) => setTimeout(ok, err.retryAfter + 400));
+          continue;
+        }
         const big = tooBig(err);
         if (!big && ![429, 500, 502, 503, 504].includes(err.status)) throw err;
         if (big && attempt < 2) { squeeze(convo, attempt === 1); continue; } // erst kürzen, dann stärker kürzen

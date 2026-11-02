@@ -1739,6 +1739,19 @@ a.site-open { display: flex; justify-content: center; text-decoration: none; box
 /* Rückfragen von Agent X */
 .q-card { margin: 10px 0; padding: 14px 16px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); display: grid; gap: 14px; }
 .q-card .plan-head { margin: 0; }
+.q-head { display: flex; justify-content: space-between; align-items: baseline; }
+.q-count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.q-bar { height: 4px; border-radius: 4px; background: var(--surface-2); overflow: hidden; margin-top: -6px; }
+.q-bar i { display: block; height: 100%; border-radius: 4px; background: var(--primary); transition: width .3s ease; }
+.q-item[hidden] { display: none; }
+.q-item { animation: fadeUp .25s ease both; }
+.q-text { font-size: 17px; }
+.q-acts { display: flex; gap: 8px; align-items: center; }
+.q-acts button { white-space: nowrap; padding: 10px 16px; border-radius: 999px; font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); }
+.q-acts button[hidden] { display: none; }
+.q-acts .q-next { margin-left: auto; background: var(--primary); border-color: var(--primary); color: var(--primary-text); min-width: 110px; }
+.q-acts .q-skip { border-color: transparent; background: none; color: var(--muted); padding-inline: 8px; }
+.q-acts button:active { transform: scale(.97); }
 .q-item { display: grid; gap: 8px; }
 .q-text { margin: 0; font-weight: 600; color: var(--heading); line-height: 1.4; }
 .q-chips { display: flex; flex-wrap: wrap; gap: 6px; }

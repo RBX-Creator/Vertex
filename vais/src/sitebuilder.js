@@ -24,17 +24,23 @@ const sleep = (ms, signal) => new Promise((ok, no) => {
   signal?.addEventListener('abort', () => { clearTimeout(tm); no(signal.reason ?? new Error('abgebrochen')); }, { once: true });
 });
 
-// Ein Modell fragen; ist es voll oder zu klein: anderes Modell, weniger Tokens, kurz warten
+// Ein Modell fragen. Minuten-Limit erreicht → genau so lange warten, wie der Anbieter sagt (statt aufzugeben);
+// anderes Problem → anderes Modell; Anfrage zu groß → weniger Tokens.
 async function realAsk(messages, { maxTokens = 4000, signal, effort = 'medium' } = {}) {
   const tried = new Set();
   let budget = maxTokens;
   let lastErr = null;
-  for (let attempt = 0; attempt < 7; attempt++) {
+  let waited = 0;
+  let stay = null; // nach dem Warten dasselbe (beste) Modell nochmal
+  for (let attempt = 0; attempt < 14; attempt++) {
     const all = await listModels();
-    let model = PREF.map((re) => all.find((m) => re.test(m.id) && !m.busy && !tried.has(m.id))).find(Boolean);
+    let model = stay ?? PREF.map((re) => all.find((m) => re.test(m.id) && !m.busy && !tried.has(m.id))).find(Boolean);
+    stay = null;
     if (!model) {
       // alle gerade voll: kurz warten und dann wieder von vorne (Limits pro Minute)
-      await sleep(7000, signal);
+      if (waited > 150_000) break;
+      await sleep(8000, signal);
+      waited += 8000;
       tried.clear();
       model = PREF.map((re) => all.find((m) => re.test(m.id))).find(Boolean);
       if (!model) break;
@@ -47,18 +53,34 @@ async function realAsk(messages, { maxTokens = 4000, signal, effort = 'medium' }
     } catch (err) {
       if (signal?.aborted) throw err;
       lastErr = err;
-      if (err.status === 413 || /zu groß|too large/i.test(err.message)) budget = Math.max(1500, Math.round(budget * 0.65));
-      else tried.add(model.id); // voll, kaputt oder nicht verfügbar → anderes Modell
       if (err.status === 401) throw err;
-      await sleep(1200, signal);
+      if (err.status === 413 || /zu groß|too large/i.test(err.message)) { budget = Math.max(1500, Math.round(budget * 0.65)); stay = model; continue; }
+      if (err.status === 429 && err.retryAfter && err.retryAfter <= 30_000 && waited < 150_000) {
+        await sleep(err.retryAfter + 500, signal);
+        waited += err.retryAfter + 500;
+        stay = model;
+        continue;
+      }
+      tried.add(model.id); // voll für länger, kaputt oder nicht verfügbar → anderes Modell
+      await sleep(1000, signal);
     }
   }
   throw lastErr ?? new Error('Kein Modell verfügbar.');
 }
 
+// Höchstens 2 große Anfragen gleichzeitig (sonst ist das Minuten-Limit sofort voll)
+let running = 0;
+const waiting = [];
+async function limited(fn) {
+  if (running >= 2) await new Promise((ok) => waiting.push(ok));
+  running++;
+  try { return await fn(); } finally { running--; waiting.shift()?.(); }
+}
+const askLimited = (messages, opts) => limited(() => realAsk(messages, opts));
+
 // Für Tests austauschbar
-let ask = realAsk;
-export function __setAsk(fn) { ask = fn ?? realAsk; }
+let ask = askLimited;
+export function __setAsk(fn) { ask = fn ?? askLimited; }
 
 // ── Gemeinsame Regeln für Inhalt und Gestaltung ───────────────────────
 const QUALITY = `QUALITÄT (sehr wichtig):
@@ -192,18 +214,22 @@ const FAKE = [
   [/(\+49|0)\s?\(?(123|1234|30\s?123)\)?[\s\-/]?\d{3,}/, 'ausgedachte Telefonnummer'],
   [/(info|kontakt|hello|mail)@(deine|ihre|your|meine|domain|firma)[\w-]*\./i, 'ausgedachte E-Mail-Adresse'],
 ];
-export function fakeCheck(text) {
-  return FAKE.filter(([re]) => re.test(text)).map(([, label]) => label);
+export function fakeCheck(text, allowed = '') {
+  const ok = String(allowed).toLowerCase();
+  return FAKE.filter(([re]) => {
+    const hit = String(text).match(re)?.[0];
+    return hit && !(ok && ok.includes(hit.toLowerCase())); // vom Nutzer selbst angegeben → ist echt
+  }).map(([, label]) => label);
 }
 
 // HTML/JS eines Teils prüfen (Tags, Syntax, Fakes)
-function checkPart(part, validate) {
+function checkPart(part, validate, allowed = '') {
   const problems = [];
   const mini = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>x</title></head><body>${part.html}</body></html>`;
   const v = validate(mini);
   if (!/^OK/.test(v)) problems.push(...v.split('\n').slice(1).map((l) => l.replace(/^- /, '')));
   if (part.js) { try { new vm.Script(part.js); } catch (err) { problems.push(`JavaScript-Fehler: ${err.message}`); } }
-  for (const f of fakeCheck(part.html + part.js)) problems.push(`Enthält ${f} – ersetze das durch echte Inhalte aus dem Auftrag oder lass es weg.`);
+  for (const f of fakeCheck(part.html + part.js, allowed)) problems.push(`Enthält ${f} – ersetze das durch echte Inhalte aus dem Auftrag oder lass es weg.`);
   return problems.filter((p) => !/doctype|<title>|viewport|charset/i.test(p));
 }
 
@@ -270,14 +296,15 @@ async function pool(items, limit, fn) {
 }
 
 async function repair(spec, parts, ids, { signal, onStep, validate }) {
-  const broken = ids.map((id) => [id, checkPart(parts[id], validate)]).filter(([, p]) => p.length);
-  await pool(broken, 3, async ([id, problems]) => {
+  const allowed = `${spec.brief ?? ''} ${spec.sections.map((s) => s.content).join(' ')}`;
+  const broken = ids.filter((id) => parts[id]).map((id) => [id, checkPart(parts[id], validate, allowed)]).filter(([, p]) => p.length);
+  await pool(broken, 2, async ([id, problems]) => {
     onStep({ kind: 'check', text: `${id}: ${problems.length} ${problems.length === 1 ? 'Problem' : 'Probleme'} beheben` });
     const s = spec.sections.find((x) => x.id === id);
     const current = `Aktuelle Fassung:\n\`\`\`html\n${parts[id].html}\n\`\`\`\n\`\`\`css\n${parts[id].css}\n\`\`\`\n\`\`\`js\n${parts[id].js}\n\`\`\``;
     try {
       const fixed = await buildSection(spec, s, { signal, extra: `${current}\n\nBehebe diese Probleme und gib den kompletten, verbesserten Abschnitt zurück:\n- ${problems.join('\n- ')}` });
-      if (fixed.html && checkPart(fixed, validate).length <= problems.length) parts[id] = fixed;
+      if (fixed.html && checkPart(fixed, validate, allowed).length <= problems.length) parts[id] = fixed;
     } catch (err) { if (signal?.aborted) throw err; }
   });
 }
@@ -287,27 +314,81 @@ const lineCount = (s) => s.split('\n').length;
 // ── Öffentlich: neue Seite bauen ─────────────────────────────────────
 export async function buildWebsite({ brief, kind = 'website', signal, onStep = () => {}, validate }) {
   const k = ['website', 'app', 'game'].includes(kind) ? kind : 'website';
+  const text = String(brief ?? '').slice(0, 9000);
   onStep({ kind: 'draft', text: 'Aufbau, Farben und Schriften' });
-  const spec = await architect(String(brief ?? '').slice(0, 9000), k, { signal });
+  const spec = await architect(text, k, { signal });
+  spec.brief = text;
   onStep({ kind: 'draft', text: `${spec.sections.length} Abschnitte: ${spec.sections.map((s) => s.id).join(', ')}` });
-  // Basis und Abschnitte gleichzeitig (die Abschnitte kennen den Design-Vertrag)
-  const basePromise = (async () => { onStep({ kind: 'section', text: 'Design-System' }); return buildBase(spec, { signal }); })();
+  // Basis und Abschnitte gleichzeitig (die Abschnitte kennen den Design-Vertrag); höchstens 2 Anfragen auf einmal
+  const basePromise = (async () => { onStep({ kind: 'section', text: 'Design-System' }); return buildBase(spec, { signal }); })().catch((err) => { if (signal?.aborted) throw err; return null; });
   const parts = {};
-  const built = await pool(spec.sections, 3, async (s) => {
+  const tryBuild = async (s) => {
+    try { return await buildSection(spec, s, { signal }); } catch (err) { if (signal?.aborted) throw err; return null; }
+  };
+  const built = await pool(spec.sections, 2, async (s) => {
     onStep({ kind: 'section', text: `Abschnitt „${s.id}“` });
-    return buildSection(spec, s, { signal });
+    return tryBuild(s);
   });
-  spec.sections.forEach((s, i) => { parts[s.id] = built[i]; });
-  const base = await basePromise.catch(() => ({ css: '', js: '' }));
+  spec.sections.forEach((s, i) => { if (built[i]) parts[s.id] = built[i]; });
+  // Was nicht geklappt hat (meist Limit): einzeln noch einmal
+  for (const s of spec.sections.filter((x) => !parts[x.id])) {
+    onStep({ kind: 'section', text: `Abschnitt „${s.id}“ (2. Versuch)` });
+    const again = await tryBuild(s);
+    if (again) parts[s.id] = again;
+  }
+  const missing = spec.sections.filter((s) => !parts[s.id]).map((s) => s.id);
+  if (missing.length > spec.sections.length / 2) throw new Error('Die kostenlosen Modelle sind gerade zu ausgelastet, um die Seite fertig zu bauen. Bitte in ein paar Minuten nochmal versuchen.');
+  for (const id of missing) {
+    if (id === 'nav') parts.nav = { html: `<header id="nav"><div class="container row" style="justify-content:space-between;padding:16px 0"><b>${esc(spec.title)}</b></div></header>`, css: '', js: '' };
+    else if (id === 'footer') parts.footer = { html: `<footer id="footer"><div class="container muted" style="padding:32px 0">© <span data-year></span> ${esc(spec.title)}</div></footer>`, css: '', js: '' };
+  }
+  spec.sections = spec.sections.filter((s) => parts[s.id]);
+  let base = await basePromise;
+  if (!base?.css) {
+    onStep({ kind: 'section', text: 'Design-System (2. Versuch)' });
+    base = await buildBase(spec, { signal }).catch((err) => { if (signal?.aborted) throw err; return null; });
+  }
+  if (!base?.css) base = DEFAULT_BASE;
   onStep({ kind: 'check', text: 'Webseite prüfen' });
   await repair(spec, parts, spec.sections.map((s) => s.id), { signal, onStep, validate });
   const html = assemble(spec, base, parts);
-  return { html, report: summary(spec, html, validate) };
+  return { html, report: summary(spec, html, validate) + (missing.length ? `\nNicht fertig geworden (Limit): ${missing.join(', ')} – biete an, sie mit edit_website nachzubauen.` : '') };
 }
+
+// Eingebautes Design-System, falls das Modell keins liefern konnte
+const DEFAULT_BASE = {
+  css: `*,*::before,*::after{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-body);line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+img,svg{max-width:100%;display:block}h1,h2,h3,h4{font-family:var(--font-head);line-height:1.15;margin:0 0 .5em;letter-spacing:-.01em}h1{font-size:clamp(2.2rem,6vw,4.2rem)}h2{font-size:clamp(1.7rem,4vw,2.8rem)}h3{font-size:clamp(1.15rem,2.2vw,1.45rem)}p{margin:0 0 1em}
+a{color:var(--primary)}::selection{background:var(--primary);color:var(--primary-contrast)}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.container{width:100%;max-width:var(--max);margin:0 auto;padding:0 var(--space)}.vx-section{padding:clamp(56px,9vw,120px) 0}
+.eyebrow{display:inline-block;font-size:.8rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary);margin-bottom:.8em}.lead{font-size:clamp(1.05rem,2vw,1.3rem);color:var(--muted);max-width:60ch}.muted{color:var(--muted)}
+.btn{display:inline-flex;align-items:center;gap:.5em;padding:.85em 1.4em;border-radius:999px;border:1px solid transparent;font:600 1rem/1 var(--font-body);cursor:pointer;text-decoration:none;transition:transform .15s,box-shadow .2s,background .2s}.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--primary);color:var(--primary-contrast);box-shadow:var(--shadow)}.btn-primary:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px)}.btn-ghost{background:transparent;color:var(--text);border-color:var(--border)}.btn-ghost:hover{background:var(--surface-2)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:clamp(18px,3vw,28px);box-shadow:var(--shadow);transition:transform .2s,box-shadow .2s}.card:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}
+.grid{display:grid;gap:var(--space);grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))}.grid-2{grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr))}.grid-3{grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))}.grid-4{grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr))}
+.stack>*+*{margin-top:var(--space)}.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}.badge{display:inline-flex;align-items:center;gap:.4em;padding:.3em .8em;border-radius:999px;background:var(--surface-2);color:var(--text);font-size:.85rem;font-weight:600}.icon{width:24px;height:24px;flex:none}
+.reveal{opacity:0;transform:translateY(24px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.8,.2,1)}.reveal.visible{opacity:1;transform:none}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.reveal{opacity:1;transform:none;transition:none}*{animation:none!important}}`,
+  js: `(() => {
+  const items = document.querySelectorAll('.reveal');
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => entries.forEach((e) => { if (e.isIntersecting) { setTimeout(() => e.target.classList.add('visible'), Number(e.target.dataset.delay || 0)); io.unobserve(e.target); } }), { threshold: 0.12 });
+    items.forEach((n) => io.observe(n));
+  } else items.forEach((n) => n.classList.add('visible'));
+  const toggle = document.querySelector('[data-nav-toggle]');
+  const nav = document.querySelector('[data-nav]');
+  if (toggle && nav) {
+    toggle.addEventListener('click', () => { const open = nav.classList.toggle('open'); toggle.setAttribute('aria-expanded', String(open)); });
+    nav.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => { nav.classList.remove('open'); toggle.setAttribute('aria-expanded', 'false'); }));
+  }
+  document.querySelectorAll('[data-year]').forEach((n) => { n.textContent = new Date().getFullYear(); });
+})();`,
+};
 
 function summary(spec, html, validate) {
   const v = validate(html);
-  const fakes = fakeCheck(html);
+  const fakes = fakeCheck(html, spec.brief ?? '');
   return `Webseite „${spec.title}“ gebaut: ${lineCount(html)} Zeilen, Abschnitte: ${spec.sections.map((s) => s.id).join(', ')}. Farben: ${spec.palette.primary}/${spec.palette.accent}, Schriften: ${spec.fonts.heading}/${spec.fonts.body}.\nPrüfung: ${v}${fakes.length ? `\nHinweis – möglicherweise Platzhalter: ${fakes.join(', ')}` : ''}\nDie Seite wird automatisch an deine Antwort angehängt. Schreibe den Code NICHT selbst, sondern nur kurz (2–4 Sätze), was die Seite kann, und frage, was du ändern oder ergänzen sollst.`;
 }
 
@@ -316,6 +397,7 @@ export async function editWebsite({ html, change, signal, onStep = () => {}, val
   const page = disassemble(String(html ?? ''));
   if (!page) return editWhole({ html, change, signal, onStep, validate });
   const { spec, base, parts } = page;
+  spec.brief = `${change}\n${html}`; // was schon auf der Seite stand oder der Nutzer angibt, gilt als echt
   onStep({ kind: 'draft', text: 'Welche Teile sich ändern' });
   const outline = spec.sections.map((s) => {
     const txt = parts[s.id].html.replace(/<svg[\s\S]*?<\/svg>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220);

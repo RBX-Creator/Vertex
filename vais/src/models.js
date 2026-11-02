@@ -60,9 +60,15 @@ function markKey(provider, model, key, status, message) {
   const info = { provider, label: PROVIDERS[provider]?.label ?? provider, id: maskKey(key) };
   if (status === 429 && isDailyLimit(message)) { keyCooldown.set(`k:${provider}:${key}`, nextMidnightUtc()); queueMicrotask(() => alarmHandler('key-full', info)); }
   else if (status === 401 || status === 403) { keyCooldown.set(`k:${provider}:${key}`, now + 60 * 60 * 1000); queueMicrotask(() => alarmHandler('key-invalid', info)); }
-  else if (status === 429) keyCooldown.set(`m:${model}:${key}`, now + 90 * 1000);
+  else if (status === 429) keyCooldown.set(`m:${model}:${key}`, now + Math.min(90_000, (retryAfterMs(message) ?? 90_000) + 500));
 }
 const maskKey = (k) => `${k.slice(0, 4)}…${k.slice(-4)}`;
+// „Please try again in 7.9s“ / „in 1m3.5s“ / „in 450ms“ → Millisekunden
+export function retryAfterMs(msg = '') {
+  const m = String(msg).match(/try again in (?:(\d+)m)?([\d.]+)(ms|s)\b/i);
+  if (!m) return null;
+  return Math.round(Number(m[1] || 0) * 60_000 + Number(m[2]) * (m[3].toLowerCase() === 'ms' ? 1 : 1000));
+}
 
 // Anfrage schicken; bei „voll“ (429) oder „ungültig“ (401/403) sofort mit dem nächsten Schlüssel nochmal
 async function withKeys(provider, model, send) {
@@ -391,13 +397,13 @@ function markFailed(id, status, message) {
   // Tageslimit und ungültige Schlüssel merkt sich die Schlüssel-Verwaltung (withKeys) pro Schlüssel
   if ((status === 429 && isDailyLimit(message)) || status === 401 || status === 403) return;
   if (status === 413) return; // nur diese eine Anfrage war zu groß – das Modell ist nicht kaputt
-  if (status === 429) cooldown.set(id, now + 90 * 1000);
+  if (status === 429) cooldown.set(id, now + Math.min(90_000, (retryAfterMs(message) ?? 90_000) + 500)); // Minuten-Limit: nur so lange wie nötig
   else if (status === 404) cooldown.set(id, now + 60 * 60 * 1000);
   else cooldown.set(id, now + 60 * 1000);
 }
 function fail(model, status, message, p) {
   markFailed(model, status, message);
-  return Object.assign(new Error(friendlyError(status, message, p)), { status });
+  return Object.assign(new Error(friendlyError(status, message, p)), { status, retryAfter: status === 429 && !isDailyLimit(message) ? retryAfterMs(message) : null, raw: message });
 }
 
 // Zufälliges freies Modell mit einer Fähigkeit (für Battle und als Ersatz)

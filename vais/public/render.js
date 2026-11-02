@@ -57,6 +57,24 @@ export function markdown(text) {
   return html;
 }
 
+// Rückfragen: Zustand pro Fragebogen (bleibt, auch wenn die Antwort neu gezeichnet wird)
+export const QSTATE = new Map();
+export function showQuestion(card, step) {
+  const items = [...card.querySelectorAll('.q-item')];
+  const n = items.length;
+  const i = Math.max(0, Math.min(step, n - 1));
+  const st = QSTATE.get(card.dataset.qkey);
+  if (st) st.step = i;
+  items.forEach((it, k) => { it.hidden = k !== i; });
+  card.querySelector('.q-count').textContent = `${i + 1} / ${n}`;
+  card.querySelector('.q-bar i').style.width = `${((i + 1) / n) * 100}%`;
+  card.querySelector('[data-q-back]').hidden = i === 0;
+  card.querySelector('[data-q-skip]').hidden = i !== 0; // „Mach einfach“ nur am Anfang
+  const next = card.querySelector('[data-q-next]');
+  next.textContent = i === n - 1 ? t('Antworten senden', 'Send answers') : t('Weiter', 'Next');
+  next.toggleAttribute('data-q-send', i === n - 1);
+}
+
 // Code-Blöcke einfärben und mit Kopf (Sprache + Kopieren) versehen
 export function enhance(root) {
   // Breite Tabellen: in einen wischbaren Rahmen (links/rechts) statt zusammengequetscht
@@ -90,38 +108,51 @@ export function enhance(root) {
       return;
     }
     if (lang === 'questions') {
-      // Rückfragen von Agent X: Antworten zum Antippen + eigenes Feld, unten „Antworten senden“
-      const qs = code.textContent.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 6).map((line) => {
+      // Rückfragen von Agent X: eine Frage nach der anderen, Antworten zum Antippen + eigenes Feld
+      const src = code.textContent;
+      const qs = src.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 6).map((line) => {
         const [q, ...opts] = line.split('|').map((x) => x.trim());
         return { q: q.replace(/^\s*(\d+[.)]|[-*•])\s*/, ''), opts: opts.filter((o) => o && !/^[_….]+$/.test(o)).slice(0, 6) };
       }).filter((x) => x.q);
+      const key = src.trim();
+      const st = QSTATE.get(key) ?? { step: 0, picked: {}, own: {} };
+      QSTATE.set(key, st);
       const card = document.createElement('div');
       card.className = 'q-card';
-      const head = document.createElement('p');
-      head.className = 'plan-head';
-      head.textContent = t('Kurz ein paar Fragen', 'A few quick questions');
-      card.append(head);
+      card.dataset.qkey = key;
+      const head = document.createElement('div');
+      head.className = 'q-head';
+      head.innerHTML = `<span class="plan-head">${t('Kurz ein paar Fragen', 'A few quick questions')}</span><span class="q-count"></span>`;
+      const bar = document.createElement('div');
+      bar.className = 'q-bar';
+      bar.innerHTML = '<i></i>';
+      card.append(head, bar);
       qs.forEach((item, i) => {
         const box = document.createElement('div');
         box.className = 'q-item';
         box.dataset.q = item.q;
+        box.dataset.i = String(i);
         box.append(Object.assign(document.createElement('p'), { className: 'q-text', textContent: item.q }));
         if (item.opts.length) {
           const chips = document.createElement('div');
           chips.className = 'q-chips';
-          for (const o of item.opts) chips.append(Object.assign(document.createElement('button'), { type: 'button', className: 'q-chip', textContent: o, ariaPressed: 'false' }));
+          for (const o of item.opts) {
+            const chip = Object.assign(document.createElement('button'), { type: 'button', className: 'q-chip', textContent: o });
+            chip.setAttribute('aria-pressed', String((st.picked[i] ?? []).includes(o)));
+            chips.append(chip);
+          }
           box.append(chips);
         }
-        const input = Object.assign(document.createElement('input'), { className: 'q-input', type: 'text', maxLength: 300, placeholder: item.opts.length ? t('Oder eigene Antwort …', 'Or your own answer …') : t('Deine Antwort …', 'Your answer …') });
+        const input = Object.assign(document.createElement('input'), { className: 'q-input', type: 'text', maxLength: 300, value: st.own[i] ?? '', placeholder: item.opts.length ? t('Oder eigene Antwort …', 'Or your own answer …') : t('Deine Antwort …', 'Your answer …') });
         input.setAttribute('aria-label', item.q);
-        input.id = `q-${Math.random().toString(36).slice(2, 8)}-${i}`;
         box.append(input);
         card.append(box);
       });
       const acts = document.createElement('div');
-      acts.className = 'plan-acts';
-      acts.innerHTML = `<button type="button" class="plan-go" data-q-send>${t('Antworten senden', 'Send answers')}</button><button type="button" class="plan-edit" data-q-skip>${t('Mach einfach', 'Just do it')}</button>`;
+      acts.className = 'q-acts';
+      acts.innerHTML = `<button type="button" class="q-back" data-q-back>${t('Zurück', 'Back')}</button><button type="button" class="q-skip" data-q-skip>${t('Mach einfach', 'Just do it')}</button><button type="button" class="q-next" data-q-next></button>`;
       card.append(acts);
+      showQuestion(card, Math.min(st.step, qs.length - 1));
       pre.replaceWith(card);
       return;
     }

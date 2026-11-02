@@ -1,5 +1,5 @@
 import { t, LANG, LOCALE, LANGUAGES, EXTRA_LANGS, translateDom, setLang, getTheme, setTheme } from './i18n.js';
-import { markdown, enhance } from './render.js';
+import { markdown, enhance, QSTATE, showQuestion } from './render.js';
 import { startTour, tourDone } from './tour.js';
 import { CHANGES, LATEST } from './changelog.js';
 import { openTeam, refreshTeamBadge } from './team.js';
@@ -1195,13 +1195,42 @@ el.thread.addEventListener('click', (e) => {
   }
 });
 
-// Rückfragen von Agent X beantworten (Knöpfe antippen, eigenes Feld, dann senden)
+// Rückfragen von Agent X beantworten: eine Frage nach der anderen, „Weiter“, am Ende senden
+const qAnswer = (item) => {
+  const picked = [...item.querySelectorAll('.q-chip[aria-pressed="true"]')].map((c) => c.textContent);
+  const own = item.querySelector('.q-input')?.value.trim();
+  return [...picked, ...(own ? [own] : [])].join(', ');
+};
+function qSave(card) {
+  const st = QSTATE.get(card.dataset.qkey);
+  if (!st) return;
+  card.querySelectorAll('.q-item').forEach((item) => {
+    const i = item.dataset.i;
+    st.picked[i] = [...item.querySelectorAll('.q-chip[aria-pressed="true"]')].map((c) => c.textContent);
+    st.own[i] = item.querySelector('.q-input')?.value ?? '';
+  });
+}
+el.thread.addEventListener('input', (e) => { if (e.target.classList?.contains('q-input')) qSave(e.target.closest('.q-card')); });
 el.thread.addEventListener('click', (e) => {
   const chip = e.target.closest('.q-chip');
-  if (chip) { chip.setAttribute('aria-pressed', String(chip.getAttribute('aria-pressed') !== 'true')); haptic('tap'); return; }
-  const btn = e.target.closest('[data-q-send], [data-q-skip]');
+  if (chip) {
+    chip.setAttribute('aria-pressed', String(chip.getAttribute('aria-pressed') !== 'true'));
+    qSave(chip.closest('.q-card'));
+    haptic('tap');
+    return;
+  }
+  const btn = e.target.closest('[data-q-next], [data-q-back], [data-q-skip]');
   if (!btn) return;
   const card = btn.closest('.q-card');
+  const st = QSTATE.get(card.dataset.qkey) ?? { step: 0 };
+  if (btn.hasAttribute('data-q-back')) return showQuestion(card, st.step - 1);
+  const items = [...card.querySelectorAll('.q-item')];
+  if (btn.hasAttribute('data-q-next') && !btn.hasAttribute('data-q-send')) {
+    if (!qAnswer(items[st.step])) return toast(t('Tippe eine Antwort an oder schreib etwas.', 'Pick an answer or type something.'));
+    showQuestion(card, st.step + 1);
+    card.querySelector('.q-item:not([hidden]) .q-input')?.focus({ preventScroll: true });
+    return;
+  }
   const turnNode = btn.closest('.turn');
   if (!state.chat || Number(turnNode?.dataset.index) !== state.chat.turns.length - 1) return toast(t('Das sind ältere Fragen.', 'Those are older questions.'));
   if (busy()) return;
@@ -1209,23 +1238,16 @@ el.thread.addEventListener('click', (e) => {
     el.prompt.value = t('Mach einfach – entscheide selbst sinnvoll, aber erfinde keine Fakten oder Kontaktdaten.', 'Just do it – decide sensibly yourself, but do not invent facts or contact details.');
     return send();
   }
-  const lines = [...card.querySelectorAll('.q-item')].map((item) => {
-    const picked = [...item.querySelectorAll('.q-chip[aria-pressed="true"]')].map((c) => c.textContent);
-    const own = item.querySelector('.q-input')?.value.trim();
-    const answer = [...picked, ...(own ? [own] : [])].join(', ');
-    return answer ? `- ${item.dataset.q} → ${answer}` : null;
-  }).filter(Boolean);
-  if (!lines.length) return toast(t('Tippe mindestens eine Antwort an oder schreib etwas.', 'Pick at least one answer or type something.'));
+  if (!qAnswer(items[st.step])) return toast(t('Tippe eine Antwort an oder schreib etwas.', 'Pick an answer or type something.'));
+  const lines = items.map((item) => { const a = qAnswer(item); return a ? `- ${item.dataset.q} → ${a}` : null; }).filter(Boolean);
   el.prompt.value = `${t('Meine Antworten:', 'My answers:')}\n${lines.join('\n')}`;
   send();
 });
-// Enter im Antwortfeld = zum nächsten Feld bzw. senden
+// Enter im Antwortfeld = Weiter bzw. senden
 el.thread.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || !e.target.classList?.contains('q-input')) return;
   e.preventDefault();
-  const inputs = [...e.target.closest('.q-card').querySelectorAll('.q-input')];
-  const next = inputs[inputs.indexOf(e.target) + 1];
-  if (next) next.focus(); else e.target.closest('.q-card').querySelector('[data-q-send]').click();
+  e.target.closest('.q-card').querySelector('[data-q-next]').click();
 });
 
 // Erstelltes Bild bearbeiten: als Anhang für die nächste Nachricht übernehmen
