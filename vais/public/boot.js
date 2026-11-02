@@ -24,14 +24,26 @@
     report((r && (r.message || String(r))) || 'Promise abgelehnt', location.pathname, '');
   });
 
+  // Einmalig: alte, automatisch gespeicherte Werte verwerfen (nicht selbst gewählt):
+  // früher wurde Englisch als Start-Sprache und „Battle“ als Modus einfach abgelegt.
+  if (read('vais.prefsV') !== 2) {
+    try {
+      if (!read('vais.langPicked')) { localStorage.removeItem('vais.lang'); document.cookie = 'vais_lang=; path=/; max-age=0'; }
+      if (read('vais.mode') === 'battle') localStorage.setItem('vais.mode', JSON.stringify('direct'));
+      localStorage.setItem('vais.prefsV', '2');
+    } catch (e) { /* egal */ }
+  }
+
+  // Design: gewählt (hell/dunkel/System) – sonst dunkles Weltraum-Design
   var theme = read('vais.theme');
   if (theme === 'light' || theme === 'dark') root.setAttribute('data-theme', theme);
+  else if (theme !== 'system') root.setAttribute('data-theme', 'dark');
 
   var LANGS = ['de', 'en', 'tr', 'es', 'fr', 'uk'];
-  // Sprache: gewählte > bisherige (Cookie) > Browsersprache > Deutsch
+  // Sprache: selbst gewählte > Browsersprache > Deutsch
   var lang = read('vais.lang');
   if (LANGS.indexOf(lang) === -1) {
-    var before = (/(?:^|;\s*)vais_lang=([a-z]{2})/.exec(document.cookie || '') || [])[1];
+    var before = read('vais.langPicked') ? (/(?:^|;\s*)vais_lang=([a-z]{2})/.exec(document.cookie || '') || [])[1] : null;
     var nav = String(navigator.language || '').slice(0, 2).toLowerCase();
     lang = LANGS.indexOf(before) !== -1 ? before : LANGS.indexOf(nav) !== -1 ? nav : 'de';
     try { localStorage.setItem('vais.lang', JSON.stringify(lang)); } catch (e) { /* egal */ }

@@ -47,13 +47,14 @@ function save(key, value) {
 
 export function setLang(lang) {
   save('vais.lang', lang);
+  save('vais.langPicked', true);
   document.cookie = `vais_lang=${lang}; path=/; max-age=31536000; samesite=lax`;
   location.reload();
 }
 
 // 'system' | 'light' | 'dark'
 export function getTheme() {
-  try { return JSON.parse(localStorage.getItem('vais.theme')) || 'system'; } catch { return 'system'; }
+  try { return JSON.parse(localStorage.getItem('vais.theme')) || 'dark'; } catch { return 'dark'; }
 }
 export function setTheme(theme) {
   save('vais.theme', theme);

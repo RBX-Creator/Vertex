@@ -1924,9 +1924,9 @@ body.incognito .composer { border-style: dashed; border-color: var(--border-stro
 
 /* Himmel je nach Tageszeit (ganz dezent hinter allem) */
 body[data-sky]::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; transition: background 2s; }
-body[data-sky="morning"]::before { background: radial-gradient(120% 60% at 15% 0%, rgba(255, 196, 140, .2), transparent 60%), radial-gradient(90% 50% at 100% 0%, rgba(255, 150, 170, .13), transparent 60%); }
+body[data-sky="morning"]::before { background: radial-gradient(120% 60% at 15% 0%, rgba(255, 200, 150, .16), transparent 60%); }
 body[data-sky="day"]::before { background: radial-gradient(120% 60% at 85% 0%, rgba(120, 190, 255, .15), transparent 60%); }
-body[data-sky="evening"]::before { background: radial-gradient(120% 60% at 80% 0%, rgba(255, 120, 90, .2), transparent 60%), radial-gradient(100% 60% at 0% 10%, rgba(160, 90, 220, .16), transparent 60%); }
+body[data-sky="evening"]::before { background: radial-gradient(120% 60% at 80% 0%, rgba(255, 140, 100, .14), transparent 60%); }
 body[data-sky="night"]::before {
   background:
     radial-gradient(1px 1px at 12% 18%, rgba(255,255,255,.7), transparent 60%), radial-gradient(1px 1px at 33% 8%, rgba(255,255,255,.5), transparent 60%),
