@@ -572,3 +572,30 @@ test('Sicherheit: Vorschläge pro Antwort nur einmal berechnen', async () => {
   const other = await signUp('extras2@example.com');
   assert.equal((await other.json('/api/chat/extras', { chatId: start.data.id, turn: 0 })).status, 404);
 });
+
+test('Eigene Antworten vom Admin: sofort, ohne KI, zählt nicht; häufigste Fragen', async () => {
+  const a = client();
+  await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
+  assert.equal((await a.json('/api/admin/faq', { question: 'Wer hat VAIs gemacht?', answer: 'VAIs hat Leeam gebaut 🚀' })).status, 200);
+  const u = await signUp('faq@example.com');
+  const first = (await u.json('/api/chat/models')).data.models.find((m) => !m.agent && !m.auto && m.caps.includes('text'));
+  const start = await u.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'F' });
+  const before = (await u.json('/api/chat/usage')).data.kinds.text.used;
+  const r = await stream(u, start.data.id, 'wer hat bitte vais gemacht');
+  assert.ok(r.lines.some((l) => l.faq));
+  assert.equal(r.text, 'VAIs hat Leeam gebaut 🚀');
+  assert.equal((await u.json('/api/chat/usage')).data.kinds.text.used, before); // zählt nicht
+  const other = await stream(u, start.data.id, 'Was ist ein Wal?', 1);
+  assert.ok(!other.lines.some((l) => l.faq));
+  const list = (await a.json('/api/admin/faq')).data.faq;
+  assert.equal(list[0].hits, 1);
+  // normale Nutzer dürfen nichts eintragen
+  assert.equal((await u.json('/api/admin/faq', { question: 'x y', answer: 'z' })).status, 404);
+  // häufigste Fragen: zweite Person fragt dasselbe
+  const u2 = await signUp('faq2@example.com');
+  const s2 = await u2.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'F2' });
+  await stream(u2, s2.data.id, 'Was ist ein Wal?');
+  const top = (await a.json('/api/admin/top-questions?days=30')).data;
+  const wal = top.questions.find((q) => /wal/i.test(q.text));
+  assert.ok(wal && wal.users === 2 && wal.percent > 0);
+});

@@ -3,6 +3,7 @@ import { maintenance, maintenanceText, blockDuringMaintenance } from './maintena
 import { isStaff } from './config.js';
 import { registerCache } from './stability.js';
 import { helperQuota, ipAnswerQuota, undoIpAnswer } from './guard.js';
+import { faqMatch } from './faq.js';
 import { randomBytes, createHash } from 'node:crypto';
 import { get, run, all, purgeChats, getSetting, logEvent } from './db.js';
 import { t } from './i18n.js';
@@ -354,10 +355,12 @@ chat.post('/stream', wrap(async (req, res) => {
   // Jugendschutz: die neue Nachricht prüfen, bevor ein Modell sie bekommt (nicht bei „ok“ usw.)
   const lastText = typeof display?.text === 'string' && display.text.trim() ? display.text : plain(clean.at(-1));
   const blocked = quick ? null : await checkText(lastText, row.modality === 'image' ? 'image' : 'prompt');
+  // Eigene Antwort vom Admin (FAQ): passt die Frage, kommt sofort diese Antwort – ohne KI, zählt nicht
+  const faq = !blocked && !quick && !req.body?.fresh && ['direct', 'agent'].includes(row.mode) && row.modality !== 'image' && !hasImages ? await faqMatch(lastText).catch(() => null) : null;
   // Viele Konten aus demselben Netz (Limit-Diebstahl): großzügige Grenze pro Netz und Tag
-  if (!blocked && kind && !isStaff(req.user)) ipAnswerQuota(req.ip, kind, L[kind]);
+  if (!blocked && !faq && kind && !isStaff(req.user)) ipAnswerQuota(req.ip, kind, L[kind]);
   let charged;
-  try { charged = blocked ? null : await charge(req.user, kind); } catch (err) { if (kind) undoIpAnswer(req.ip, kind); throw err; }
+  try { charged = blocked || faq ? null : await charge(req.user, kind); } catch (err) { if (kind) undoIpAnswer(req.ip, kind); throw err; }
   const giveBack = async () => { await refund(req.user, charged); if (charged) undoIpAnswer(req.ip, kind); }; // nichts geantwortet → zählt nicht
   const personal = await personalFor(req.user.id);
   if (row.incognito) { personal.memoryOn = false; personal.memories = []; } // Inkognito: nichts merken
@@ -382,14 +385,15 @@ chat.post('/stream', wrap(async (req, res) => {
   let reaction = null; // Emoji-Reaktion von Agent X auf deine Nachricht
   let fallback = null; // Notfall-Modell, falls das gewählte voll war
   let cached = false; // Antwort kam aus dem Antwort-Speicher
+  let faqHit = false; // Antwort kam aus den eigenen Antworten des Admins
   const summarized = fitted.summarized || null;
   const save = (s, content, status = 'done', error = null, attachments = null) => (turnNo === null ? null : run(
     `INSERT INTO messages (chat_id, turn, side, content, status, error, meta, attachments, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(chat_id, turn, side) DO UPDATE SET content = excluded.content, status = excluded.status, error = excluded.error,
        meta = excluded.meta, attachments = COALESCE(excluded.attachments, messages.attachments)`,
     row.id, turnNo, s, content, status, error,
-    s >= 0 && (steps.length || thinking || sources.size || images.length || reaction || fallback || summarized || auto || cached)
-      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, sources: [...sources.values()], images, reaction, fallback, summarized, auto, cached: cached || undefined }) : null,
+    s >= 0 && (steps.length || thinking || sources.size || images.length || reaction || fallback || summarized || auto || cached || faqHit)
+      ? JSON.stringify({ steps, thinking: thinking.slice(0, 20_000), thinkMs, sources: [...sources.values()], images, reaction, fallback, summarized, auto: faqHit ? undefined : auto, cached: cached || undefined, faq: faqHit || undefined }) : null,
     attachments, Date.now(),
   ).catch((e) => console.error('Verlauf speichern fehlgeschlagen:', e.message)));
   // Deine Frage so speichern, wie sie angezeigt wird (Text + Anhänge), nicht als Modell-Format
@@ -419,6 +423,17 @@ chat.post('/stream', wrap(async (req, res) => {
     return res.end();
   }
 
+  if (faq) {
+    faqHit = true;
+    out(`${JSON.stringify({ faq: true })}\n`);
+    for (let i = 0; i < faq.answer.length; i += 24) {
+      out(`${JSON.stringify({ t: faq.answer.slice(i, i + 24) })}\n`);
+      if (i % 240 === 0) await new Promise((ok) => setTimeout(ok, 8));
+    }
+    out(`${JSON.stringify({ done: true })}\n`);
+    await save(side === 1 ? 1 : 0, faq.answer, 'done');
+    return res.end();
+  }
   // Antwort-Speicher: nur erste Frage, ohne Bilder, ohne eigene Anweisungen, nichts Zeitabhängiges, nicht im Battle
   const firstQuestion = clean.length === 1 && typeof clean[0].content === 'string' ? clean[0].content : null;
   const cacheKey = model !== 'agent' && row.mode !== 'battle' && ['auto', 'text', 'code'].includes(row.modality ?? 'auto') && firstQuestion
@@ -1031,7 +1046,7 @@ async function loadChatData(row, { forShare = false } = {}) {
         text: m.content, status: m.status, error: m.error,
         steps: meta.steps ?? [], thinking: forShare ? '' : meta.thinking ?? '', thinkMs: meta.thinkMs ?? 0,
         feedback: forShare ? 0 : m.feedback ?? 0, reasons: forShare || !m.feedback_reason ? [] : String(m.feedback_reason).split(','), sources: meta.sources ?? [], images: meta.images ?? [],
-        reaction: meta.reaction ?? null, fallback: meta.fallback ?? null, summarized: meta.summarized ?? null, auto: meta.auto ?? null, cached: !!meta.cached,
+        reaction: meta.reaction ?? null, fallback: meta.fallback ?? null, summarized: meta.summarized ?? null, auto: meta.auto ?? null, cached: !!meta.cached, faq: !!meta.faq,
       };
     }
   }

@@ -15,6 +15,7 @@ import { alarmsOn, setAlarms, alarm } from './alarm.js';
 import { maintenance, forgetMaintenance } from './maintenance.js';
 import { listReports, actOnReport, openReportCount } from './reports.js';
 import { memory, healthList, runHealthCheck } from './stability.js';
+import { faqList, faqSave, faqRemove, topQuestions } from './faq.js';
 
 export const admin = Router();
 
@@ -151,6 +152,22 @@ admin.post('/maintenance', adminOnly, wrap(async (req, res) => {
 admin.post('/health-check', adminOnly, wrap(async (req, res) => {
   await runHealthCheck();
   res.json({ health: healthList() });
+}));
+
+// ── Eigene Antworten (FAQ) und häufigste Fragen ─────────────────────
+admin.get('/faq', wrap(async (req, res) => res.json({ faq: await faqList() })));
+admin.post('/faq', adminOnly, wrap(async (req, res) => {
+  try { await faqSave(req.body ?? {}); } catch (err) { throw new HttpError(err.status ?? 400, err.message); }
+  await logEvent('admin', null, `Eigene Antwort gespeichert: „${String(req.body?.question ?? '').slice(0, 80)}“`);
+  res.json({ faq: await faqList() });
+}));
+admin.post('/faq/remove', adminOnly, wrap(async (req, res) => {
+  await faqRemove(req.body?.id);
+  res.json({ faq: await faqList() });
+}));
+admin.get('/top-questions', wrap(async (req, res) => {
+  const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
+  res.json(await topQuestions(days));
 }));
 
 // ── Meldungen (Admins und Mods) ──────────────────────────────────────

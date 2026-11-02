@@ -3,6 +3,14 @@ import { t } from './i18n.js';
 
 export const CHANGES = () => [
   {
+    id: 15, date: '2026-11-02',
+    items: [
+      ['🍳', t('Kocht …', 'Cooking …'), t('Solange die KI nachdenkt, siehst du kurze Sprüche wie „Kocht …“, „Cooked …“ oder „Tüftelt …“.', 'While the AI is thinking you see short phrases like “Cooking …”, “Cooked …” or “Crafting …”.')],
+      ['📌', t('Antworten vom VAIs-Team', 'Answers from the VAIs team'), t('Häufige Fragen beantwortet das Team jetzt selbst – sofort und ohne dein Tageslimit zu verbrauchen.', 'The team now answers frequent questions itself – instantly and without using your daily limit.')],
+      ['🌌', t('Neue Galaxie', 'New galaxy'), t('Der geheime Galaxie-Befehl ist jetzt ein kleiner Film … 🤫', 'The secret galaxy command is now a little movie … 🤫')],
+    ],
+  },
+  {
     id: 14, date: '2026-11-02',
     items: [
       ['🕳️', t('Lebendiges Schwarzes Loch', 'Living black hole'), t('Das Logo atmet, dreht sich, während die KI denkt, und schluckt deine Nachricht beim Senden.', 'The logo breathes, spins while the AI thinks and swallows your message when you send.')],

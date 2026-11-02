@@ -38,6 +38,29 @@
       <ol class="adm-reports" id="reports"></ol>
     </section>
 
+    <section class="adm-card" id="faq-card">
+      <h2 data-en="Your own answers">Eigene Antworten</h2>
+      <p class="adm-sub" data-en="Type a question and your answer below it. If someone asks the same (or almost the same – filler words, word order and small typos don’t matter; for longer questions one word may differ), your answer comes instantly – without AI and without using the daily limit.">Frage eintippen, darunter deine Antwort. Fragt jemand dasselbe (oder fast dasselbe – Füllwörter, Reihenfolge und kleine Tippfehler egal, bei längeren Fragen darf ein Wort anders sein), kommt sofort deine Antwort – ohne KI und ohne Tageslimit.</p>
+      <form class="adm-faq-form" id="faq-form" novalidate data-admin-only>
+        <input type="hidden" id="faq-id">
+        <input class="adm-input" id="faq-q" maxlength="300" placeholder="Frage, z. B. Wer hat VAIs gemacht?" data-en-placeholder="Question, e.g. Who made VAIs?">
+        <textarea class="adm-input" id="faq-a" rows="3" maxlength="4000" placeholder="Deine Antwort …" data-en-placeholder="Your answer …"></textarea>
+        <p class="adm-hint" id="faq-test"></p>
+        <div class="adm-row"><button class="adm-btn primary" type="submit" id="faq-save" data-en="Save answer">Antwort speichern</button><button class="adm-btn" type="button" id="faq-cancel" hidden data-en="Cancel">Abbrechen</button></div>
+      </form>
+      <ol class="adm-faq" id="faq-list"></ol>
+      <div class="adm-card-head adm-top-head">
+        <h3 class="adm-h3" data-en="Most asked questions">Häufigste Fragen</h3>
+        <div class="adm-seg" id="top-range" role="group" aria-label="Zeitraum" data-en-aria-label="Period">
+          <button type="button" data-days="7" data-en="7 d">7 T</button>
+          <button type="button" data-days="30" aria-pressed="true" data-en="30 d">30 T</button>
+          <button type="button" data-days="90" data-en="90 d">90 T</button>
+        </div>
+      </div>
+      <p class="adm-sub" id="top-sub" data-en="Similar questions are combined. Only questions that at least 2 different people asked are shown.">Ähnliche Fragen werden zusammengefasst. Gezeigt werden nur Fragen, die mindestens 2 verschiedene Personen gestellt haben.</p>
+      <ol class="adm-top" id="top-list"></ol>
+    </section>
+
     <section class="adm-card">
       <div class="adm-card-head">
         <h2 data-en="History">Verlauf</h2>

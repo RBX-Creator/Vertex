@@ -726,6 +726,13 @@ function paintLabel(card, side) {
     note.textContent = `⚡ ${t('Notfall', 'Backup')}: ${a.fallback.name}`;
     label.append(note);
   }
+  if (a?.faq) {
+    const note = document.createElement('span');
+    note.className = 'fallback-tag';
+    note.title = t('Diese Antwort hat das VAIs-Team selbst geschrieben – sie kam sofort und hat nichts verbraucht.', 'The VAIs team wrote this answer – it came instantly and used nothing.');
+    note.textContent = t('📌 Antwort vom VAIs-Team', '📌 Answer from the VAIs team');
+    label.append(note);
+  }
   if (a?.cached && chat.mode !== 'battle') {
     const note = document.createElement('span');
     note.className = 'fallback-tag';
@@ -733,7 +740,7 @@ function paintLabel(card, side) {
     note.textContent = t('⚡ Sofort-Antwort', '⚡ Instant answer');
     label.append(note);
   }
-  if (a?.auto && !a.fallback && !a.cached && chat.mode !== 'battle') {
+  if (a?.auto && !a.fallback && !a.cached && !a.faq && chat.mode !== 'battle') {
     // Auto-Modus: zeigen, welches Modell gewählt wurde und warum
     const note = document.createElement('span');
     note.className = 'fallback-tag auto-tag';
@@ -843,16 +850,30 @@ function updateCard(turnIndex, side) {
   } else if (!a.text) {
     body.innerHTML = a.status === 'stopped'
       ? `<p class="card-error" style="color:var(--muted)">${t('Gestoppt.', 'Stopped.')}</p>`
-      : `<div class="typing" aria-label="${t('Schreibt …', 'Typing …')}"><span></span><span></span><span></span></div>`;
+      : `<div class="typing" aria-label="${t('Schreibt …', 'Typing …')}"><span></span><span></span><span></span><em class="load-word">${loadWord()}</em></div>`;
   } else {
     body.innerHTML = markdown(a.text);
     // Turbo: kurze Frage → blitzschnelles Modell; auf Wunsch genauer mit dem stärksten Modell
-    if (a.status === 'done' && isLast && ['quick', 'general'].includes(a.auto?.kind) && !a.boosted) {
+    if (a.status === 'done' && isLast && ['quick', 'general'].includes(a.auto?.kind) && !a.boosted && !a.faq && !a.cached) {
       body.insertAdjacentHTML('beforeend', `<button type="button" class="boost-btn" data-act="boost">🚀 ${t('Genauer mit stärkerem Modell', 'More detail with a stronger model')}</button>`);
     }
   }
   enhance(body);
 }
+
+// Kurze Lade-Sprüche, solange die KI noch nichts geschrieben hat („Kocht …“, „Cooked …“)
+const LOAD_WORDS = () => t(
+  ['Kocht …', 'Cooked …', 'Grübelt …', 'Tüftelt …', 'Zaubert …', 'Brodelt …', 'Knobelt …', 'Mixt …', 'Schmiedet …', 'Rechnet …', 'Funkt …', 'Sortiert …', 'Lädt Hirn …', 'Denkt …'],
+  ['Cooking …', 'Cooked …', 'Brewing …', 'Crafting …', 'Thinking …', 'Plotting …', 'Mixing …', 'Forging …', 'Vibing …', 'Loading brain …'],
+);
+let loadIdx = Math.floor(Math.random() * 10);
+const loadWord = () => { const w = LOAD_WORDS(); return w[loadIdx % w.length]; };
+setInterval(() => {
+  const els = document.querySelectorAll('.load-word');
+  if (!els.length) return;
+  loadIdx += 1 + Math.floor(Math.random() * 3);
+  els.forEach((e) => { e.classList.remove('swap'); void e.offsetWidth; e.textContent = loadWord(); e.classList.add('swap'); });
+}, 1500);
 
 // „Denkt nach …“: Gedanken laufen schnell durch, klappen zu, sobald die Antwort beginnt
 function renderThinking(card, a) {
@@ -981,7 +1002,7 @@ function scheduleUpdate(turnIndex, side) {
 async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
   const chat = state.chat;
   const a = chat.turns[turnIndex].answers[side];
-  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, images: [], reaction: null, fallback: null, auto: null, cached: false, summarized: null, startedAt: Date.now(), buildMs: 0 });
+  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, images: [], reaction: null, fallback: null, auto: null, cached: false, faq: false, summarized: null, startedAt: Date.now(), buildMs: 0 });
   paintReactions(turnIndex);
   updateCard(turnIndex, side);
 
@@ -1036,6 +1057,7 @@ async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
         if (msg.fallback) { a.fallback = msg.fallback; scheduleUpdate(turnIndex, side); }
         if (msg.auto) { a.auto = msg.auto; scheduleUpdate(turnIndex, side); }
         if (msg.cached) { a.cached = true; scheduleUpdate(turnIndex, side); }
+        if (msg.faq) { a.faq = true; scheduleUpdate(turnIndex, side); }
         if (msg.summarized) { a.summarized = msg.summarized; scheduleUpdate(turnIndex, side); }
         if (msg.done) finished = true;
       }

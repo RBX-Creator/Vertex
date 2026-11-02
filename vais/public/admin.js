@@ -95,6 +95,75 @@ $('#metrics').addEventListener('click', (e) => {
   drawHistory();
 });
 
+// ── Eigene Antworten (FAQ) + häufigste Fragen ─────────────────────────
+let topDays = 30;
+function paintFaq(list) {
+  $('#faq-list').innerHTML = list.length ? list.map((f) => `
+    <li data-faq="${f.id}">
+      <p class="adm-faq-q">❓ ${esc(f.question)}</p>
+      <p class="adm-faq-a">${esc(f.answer)}</p>
+      <small class="muted">${f.hits ? t(`${num(f.hits)}× beantwortet – ${num(f.hits)} KI-Anfragen gespart`, `answered ${num(f.hits)}× – ${num(f.hits)} AI requests saved`) : t('Noch nie gefragt', 'Not asked yet')}${f.lastHit ? ` · ${t('zuletzt', 'last')} ${when(f.lastHit)}` : ''}</small>
+      ${role === 'admin' ? `<div class="adm-row"><button class="adm-link" data-faq-edit="${f.id}">${t('Bearbeiten', 'Edit')}</button><button class="adm-link danger" data-faq-del="${f.id}">${t('Löschen', 'Delete')}</button></div>` : ''}
+    </li>`).join('') : `<li class="adm-empty">${t('Noch keine eigenen Antworten.', 'No own answers yet.')}</li>`;
+  faqCache = list;
+}
+let faqCache = [];
+async function loadFaq() {
+  try { paintFaq((await api('faq')).faq); } catch (err) { toast(err.message); }
+  try {
+    const d = await api(`top-questions?days=${topDays}`);
+    $('#top-sub').textContent = t(`${num(d.users)} Personen haben in den letzten ${d.days} Tagen gefragt. Ähnliche Fragen sind zusammengefasst; gezeigt werden nur Fragen von mindestens 2 Personen.`, `${num(d.users)} people asked in the last ${d.days} days. Similar questions are combined; only questions from at least 2 people are shown.`);
+    $('#top-list').innerHTML = d.questions.length ? d.questions.map((q, i) => `
+      <li>
+        <div class="adm-top-row"><span class="adm-top-rank">${i + 1}</span><b class="adm-top-q">${esc(q.text)}</b><span class="adm-top-pct">${q.percent} %</span></div>
+        <span class="adm-bar"><i style="width:${q.percent}%"></i></span>
+        <small class="muted">${t(`${num(q.users)} von ${num(d.users)} Personen · ${num(q.count)}× gefragt`, `${num(q.users)} of ${num(d.users)} people · asked ${num(q.count)}×`)}
+          ${q.answered ? ` · <span class="adm-ok">✓ ${t('hat eigene Antwort', 'has own answer')}</span>` : role === 'admin' ? ` · <button class="adm-link" data-top-answer="${i}">${t('↳ Antwort festlegen', '↳ Set answer')}</button>` : ''}</small>
+      </li>`).join('') : `<li class="adm-empty">${t('Noch keine Frage, die mehrere Leute gestellt haben.', 'No question asked by several people yet.')}</li>`;
+    topCache = d.questions;
+  } catch (err) { toast(err.message); }
+}
+let topCache = [];
+function editFaq(f) {
+  $('#faq-id').value = f?.id ?? '';
+  $('#faq-q').value = f?.question ?? '';
+  $('#faq-a').value = f?.answer ?? '';
+  $('#faq-cancel').hidden = !f?.id;
+  $('#faq-save').textContent = f?.id ? t('Änderung speichern', 'Save change') : t('Antwort speichern', 'Save answer');
+  $('#faq-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  (f?.question ? $('#faq-a') : $('#faq-q')).focus();
+}
+$('#faq-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    paintFaq((await api('faq', { id: Number($('#faq-id').value) || undefined, question: $('#faq-q').value, answer: $('#faq-a').value })).faq);
+    toast(t('Gespeichert ✓ – ab jetzt kommt bei dieser Frage deine Antwort.', 'Saved ✓ – from now on this question gets your answer.'));
+    editFaq(null);
+    loadFaq();
+  } catch (err) { toast(err.message); }
+});
+$('#faq-cancel').addEventListener('click', () => editFaq(null));
+$('#faq-list').addEventListener('click', async (e) => {
+  const ed = e.target.closest('[data-faq-edit]');
+  if (ed) return editFaq(faqCache.find((f) => f.id === Number(ed.dataset.faqEdit)));
+  const del = e.target.closest('[data-faq-del]');
+  if (del && confirm(t('Diese eigene Antwort löschen?', 'Delete this own answer?'))) {
+    try { paintFaq((await api('faq/remove', { id: Number(del.dataset.faqDel) })).faq); loadFaq(); } catch (err) { toast(err.message); }
+  }
+});
+$('#top-list').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-top-answer]');
+  if (!b) return;
+  editFaq({ question: topCache[Number(b.dataset.topAnswer)]?.text ?? '' });
+});
+$('#top-range').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-days]');
+  if (!b) return;
+  topDays = Number(b.dataset.days);
+  document.querySelectorAll('#top-range [data-days]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  loadFaq();
+});
+
 // ── Server: Speicher, Laufzeit, Modell-Gesundheit ──────────────────────
 function paintServer(m, health) {
   if (!m) return;
@@ -221,6 +290,7 @@ async function load() {
     models(d.models, d.modes);
     loadStats();
     loadReports();
+    loadFaq();
     lastServer = d.server;
     paintServer(d.server, d.health);
     if (role === 'admin') api('maintenance').then(paintMaint).catch(() => {});

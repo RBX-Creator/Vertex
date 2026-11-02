@@ -206,3 +206,24 @@ textarea.adm-input { resize: vertical; min-height: 80px; line-height: 1.45; }
 .adm-health-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success, #2e9e5b); flex: none; }
 .adm-health .bad .adm-health-dot { background: var(--danger); }
 .adm-health .bad b { color: var(--danger); }
+
+/* Eigene Antworten + häufigste Fragen */
+.adm-faq-form { display: grid; gap: 8px; margin: 12px 0 6px; }
+.adm-faq-form textarea { resize: vertical; font: inherit; font-size: 15px; }
+.adm-faq { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.adm-faq > li { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.adm-faq > li.adm-empty { border: 0; background: none; padding: 2px 0; color: var(--muted); }
+.adm-faq-q { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.adm-faq-a { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); font-size: 14px; }
+.adm-faq .adm-row { margin: 2px 0 0; }
+.adm-top-head { margin-top: 18px; }
+.adm-top { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
+.adm-top > li { display: grid; gap: 4px; }
+.adm-top > li.adm-empty { color: var(--muted); }
+.adm-top-row { display: flex; align-items: baseline; gap: 8px; }
+.adm-top-rank { flex: none; width: 22px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.adm-top-q { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
+.adm-top-pct { flex: none; font-weight: 700; font-variant-numeric: tabular-nums; }
+.adm-top .adm-bar { height: 6px; margin-left: 30px; }
+.adm-top small { margin-left: 30px; }
+.adm-ok { color: var(--success, #2e9e5b); }
