@@ -106,37 +106,145 @@ function loop(layer, draw) {
 const W = () => innerWidth;
 const H = () => innerHeight;
 
+// Rückmeldung per Vibration (die App reicht ihre Haptik-Funktion herein)
+let buzz = () => {};
+export const setHaptic = (fn) => { buzz = fn || (() => {}); };
+
 // Das Schwarze-Loch-Logo groß in der Mitte (dreht sich, leuchtet, Akkretionsscheibe dahinter)
 function holeCenter(ms) {
   const svg = document.querySelector('.topbar .brand svg, .brand svg');
-  if (!svg) return;
+  if (!svg) return null;
   const box = document.createElement('div');
   box.className = 'fx-hole-center';
   box.innerHTML = `<span class="fx-disk"></span><span class="fx-core"></span>${svg.outerHTML}`;
   document.body.append(box);
-  setTimeout(() => { box.classList.add('out'); setTimeout(() => box.remove(), 600); }, ms - 600);
+  setTimeout(() => { box.classList.add('out'); setTimeout(() => box.remove(), 600); }, ms);
+  return box;
 }
-function warp() { // Sprung durch die Galaxie – die Sterne kommen aus dem Schwarzen Loch in der Mitte
-  holeCenter(3600);
-  const L = canvasLayer(3600);
-  const stars = Array.from({ length: 260 }, () => ({ x: (Math.random() - 0.5) * W(), y: (Math.random() - 0.5) * H(), z: Math.random() * W() }));
-  loop(L, () => {
+
+// /galaxie – ein kleiner Film in 4 Akten (ca. 6,5 s):
+// 1. Erscheinen: Dunkelheit, Sterne, das Schwarze Loch wächst mit glühender Scheibe
+// 2. Sog: Sterne spiralen hinein, die App wird eingesaugt
+// 3. Hyper-Sprung: Lichtblitz, Sterne schießen mit Lichtgeschwindigkeit heraus, Bildschirm bebt
+// 4. Ankunft: bunte Nebel, Sternschnuppe, „VAIs Galaxie“ – dann ist alles wieder da
+function warp() {
+  const TOTAL = 6600;
+  const P1 = 1200, P2 = 2700, P3 = 4700;
+  const hole = holeCenter(P2 + 150);
+  const L = canvasLayer(TOTAL);
+  const cx = () => W() / 2, cy = () => H() / 2;
+  const R = Math.hypot(W(), H()) / 2;
+  const sky = Array.from({ length: 260 }, () => ({ a: Math.random() * Math.PI * 2, r: 40 + Math.random() * R, s: Math.random() * 1.6 + 0.4, tw: Math.random() * 6, hue: 200 + Math.random() * 100 }));
+  const disk = Array.from({ length: 180 }, () => ({ a: Math.random() * Math.PI * 2, r: 0, base: 38 + Math.random() * 70, sp: 0.02 + Math.random() * 0.03 }));
+  const jump = Array.from({ length: 320 }, () => ({ x: (Math.random() - 0.5) * W(), y: (Math.random() - 0.5) * H(), z: Math.random() * W() }));
+  const nebula = [
+    { x: 0.25, y: 0.3, r: 0.55, c: '139,124,255' }, { x: 0.75, y: 0.65, r: 0.6, c: '61,214,198' },
+    { x: 0.6, y: 0.2, r: 0.45, c: '255,94,126' }, { x: 0.3, y: 0.8, r: 0.5, c: '255,211,110' },
+  ];
+  let flashed = false, pulled = false, said = false;
+  const start = performance.now();
+  const ease = (x) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+  buzz('tap');
+  loop(L, (now) => {
+    const t = now - start;
     const { ctx } = L;
-    ctx.fillStyle = 'rgba(5,6,20,.35)';
-    ctx.fillRect(0, 0, W(), H());
-    for (const s of stars) {
-      const pz = s.z;
-      s.z -= 18;
-      if (s.z < 1) { s.z = W(); s.x = (Math.random() - 0.5) * W(); s.y = (Math.random() - 0.5) * H(); continue; }
-      const k = 220 / s.z, pk = 220 / pz;
-      ctx.strokeStyle = `hsla(${200 + (s.x % 60)}, 90%, ${60 + 30 * (1 - s.z / W())}%, .9)`;
-      ctx.lineWidth = Math.max(0.6, 2.2 * (1 - s.z / W()));
-      ctx.beginPath();
-      ctx.moveTo(W() / 2 + s.x * pk, H() / 2 + s.y * pk);
-      ctx.lineTo(W() / 2 + s.x * k, H() / 2 + s.y * k);
-      ctx.stroke();
+    ctx.save();
+    // Akt 3: Bildschirm bebt
+    if (t > P2 && t < P2 + 900) { const k = (1 - (t - P2) / 900) * 6; ctx.translate((Math.random() - 0.5) * k, (Math.random() - 0.5) * k); }
+    if (t < P2) {
+      // Akt 1 + 2: Hintergrund wird dunkel
+      ctx.fillStyle = `rgba(4,5,16,${0.18 + 0.6 * ease(t / P1)})`;
+      ctx.fillRect(-10, -10, W() + 20, H() + 20);
+      const pull = t < P1 ? 0 : ease((t - P1) / (P2 - P1));
+      if (pull > 0 && !pulled) { pulled = true; document.body.classList.add('fx-pull'); buzz('tap'); }
+      for (const st of sky) {
+        const pr = st.r;
+        if (pull > 0) { st.r *= 1 - 0.012 - pull * 0.05; st.a += (0.6 / Math.max(st.r, 20)) * (1 + pull * 5); }
+        if (st.r < 22) { st.r = R * (0.7 + Math.random() * 0.3); st.a = Math.random() * Math.PI * 2; continue; }
+        const x = cx() + Math.cos(st.a) * st.r, y = cy() + Math.sin(st.a) * st.r;
+        const alpha = 0.35 + 0.65 * Math.abs(Math.sin(t / 400 + st.tw));
+        ctx.strokeStyle = ctx.fillStyle = `hsla(${st.hue},90%,${75 + pull * 20}%,${alpha})`;
+        if (pull > 0.05) {
+          ctx.lineWidth = st.s;
+          ctx.beginPath();
+          ctx.moveTo(cx() + Math.cos(st.a - 0.08) * pr, cy() + Math.sin(st.a - 0.08) * pr);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+        } else { ctx.beginPath(); ctx.arc(x, y, st.s, 0, Math.PI * 2); ctx.fill(); }
+      }
+      // glühende Akkretionsscheibe (flache Ellipse, innen heiß)
+      const grow = ease(t / P1);
+      for (const d of disk) {
+        d.a += d.sp * (1 + pull * 4);
+        d.r = d.base * grow * (1 - pull * 0.55);
+        const x = cx() + Math.cos(d.a) * d.r * 1.9, y = cy() + Math.sin(d.a) * d.r * 0.42;
+        const hot = 1 - (d.base - 38) / 70;
+        ctx.fillStyle = `hsla(${30 + (1 - hot) * 230},100%,${55 + hot * 35}%,${0.55 * grow})`;
+        ctx.beginPath(); ctx.arc(x, y, 1.6 + hot * 1.6, 0, Math.PI * 2); ctx.fill();
+      }
+      // Gravitationslinse: Leuchtring um das Loch
+      const g = ctx.createRadialGradient(cx(), cy(), 20 * grow, cx(), cy(), 120 * grow + 1);
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.55, `rgba(139,124,255,${0.18 * grow})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W(), H());
+    } else if (t < P3) {
+      // Akt 3: Lichtblitz + Hyper-Sprung
+      if (!flashed) { flashed = true; document.body.classList.remove('fx-pull'); buzz('success'); }
+      const k = (t - P2) / (P3 - P2);
+      ctx.fillStyle = `rgba(4,5,16,${0.28 + k * 0.2})`;
+      ctx.fillRect(-10, -10, W() + 20, H() + 20);
+      const speed = 10 + 46 * Math.sin(Math.min(1, k * 1.25) * Math.PI / 2) * (k < 0.85 ? 1 : (1 - k) / 0.15 + 0.15);
+      for (const s of jump) {
+        const pz = s.z;
+        s.z -= speed;
+        if (s.z < 1) { s.z = W(); s.x = (Math.random() - 0.5) * W(); s.y = (Math.random() - 0.5) * H(); continue; }
+        const kk = 240 / s.z, pk = 240 / pz;
+        ctx.strokeStyle = `hsla(${190 + k * 120 + (s.x % 40)},95%,${62 + 30 * (1 - s.z / W())}%,.95)`;
+        ctx.lineWidth = Math.max(0.6, 2.6 * (1 - s.z / W()));
+        ctx.beginPath(); ctx.moveTo(cx() + s.x * pk, cy() + s.y * pk); ctx.lineTo(cx() + s.x * kk, cy() + s.y * kk); ctx.stroke();
+      }
+      const fl = Math.max(0, 1 - (t - P2) / 450);
+      if (fl > 0) {
+        const g = ctx.createRadialGradient(cx(), cy(), 0, cx(), cy(), R * (0.4 + (1 - fl)));
+        g.addColorStop(0, `rgba(255,255,255,${fl})`); g.addColorStop(0.4, `rgba(190,180,255,${fl * 0.6})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W(), H());
+      }
+    } else {
+      // Akt 4: Ankunft in der Galaxie – Nebel, langsame Sterne, Sternschnuppe, Schriftzug
+      const k = (t - P3) / (TOTAL - P3);
+      ctx.fillStyle = 'rgba(4,5,16,.32)';
+      ctx.fillRect(-10, -10, W() + 20, H() + 20);
+      const vis = Math.sin(Math.min(1, k * 1.6) * Math.PI / 2) * (1 - Math.max(0, (k - 0.75) / 0.25));
+      for (const n of nebula) {
+        const g = ctx.createRadialGradient(n.x * W(), n.y * H(), 0, n.x * W(), n.y * H(), n.r * Math.max(W(), H()));
+        g.addColorStop(0, `rgba(${n.c},${0.22 * vis})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W(), H());
+      }
+      for (const s of jump.slice(0, 180)) {
+        s.z -= 2;
+        if (s.z < 1) s.z = W();
+        const kk = 240 / s.z;
+        ctx.fillStyle = `rgba(255,255,255,${0.8 * vis})`;
+        ctx.beginPath(); ctx.arc(cx() + s.x * kk, cy() + s.y * kk, Math.max(0.5, 1.8 * (1 - s.z / W())), 0, Math.PI * 2); ctx.fill();
+      }
+      const sx = W() * (1.1 - k * 1.4), sy = H() * (0.15 + k * 0.35);
+      const tail = ctx.createLinearGradient(sx, sy, sx + 140, sy - 60);
+      tail.addColorStop(0, `rgba(255,255,255,${vis})`); tail.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.strokeStyle = tail; ctx.lineWidth = 2.4;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + 140, sy - 60); ctx.stroke();
+      if (!said) { said = true; title(TOTAL - P3); }
     }
+    ctx.restore();
   });
+  setTimeout(() => document.body.classList.remove('fx-pull'), TOTAL);
+  return hole;
+}
+// Schriftzug am Ende
+function title(ms) {
+  const el = document.createElement('div');
+  el.className = 'fx-title';
+  el.innerHTML = '<b>VAIs Galaxie</b><span>✦ willkommen im All ✦</span>';
+  document.body.append(el);
+  setTimeout(() => el.remove(), ms);
 }
 function confetti() {
   const L = canvasLayer(3800);

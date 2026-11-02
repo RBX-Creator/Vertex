@@ -6,7 +6,7 @@ import { openTeam, refreshTeamBadge } from './team.js';
 import { Listener, canRecord, toText, setAudioSession, hasAudioSession } from './listen.js';
 import { OnlineVoice } from './voice-out.js';
 import { buildDeck, parseSlides } from './deck.js';
-import { applyFx, fxPrefs, setBusy, sendOrb, runEgg, logoTap, enableTilt } from './fx.js';
+import { applyFx, fxPrefs, setBusy, sendOrb, runEgg, logoTap, enableTilt, setHaptic } from './fx.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 translateDom();
@@ -3833,6 +3833,7 @@ async function init() {
   fitPicks();
   renderControls();
   applyFx();
+  setHaptic(haptic);
   if (!location.hash) resumeLast(); // App neu geöffnet → zum letzten Chat
   await route();
   const seen = Number(store.get('vais.news', 0));

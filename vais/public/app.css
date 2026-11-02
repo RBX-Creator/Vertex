@@ -1985,3 +1985,11 @@ body[data-sky="night"]::before {
 @keyframes disk-spin { to { transform: translate(-50%, -50%) rotateX(68deg) rotate(360deg); } }
 @keyframes hole-in { from { transform: translate(-50%, -50%) scale(.1) rotate(-180deg); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
 @keyframes hole-out { to { transform: translate(-50%, -50%) scale(2.6); opacity: 0; filter: blur(4px); } }
+/* /galaxie: App wird ins Schwarze Loch gesaugt, Schriftzug am Ende */
+.fx-pull .stage, .fx-pull .topbar { animation: pull-in 1.5s cubic-bezier(.55, 0, .9, .4) both; transform-origin: 50% 50vh; }
+@keyframes pull-in { to { transform: scale(.05) rotate(220deg); filter: blur(3px); opacity: 0; } }
+.fx-hole-center { transition: transform .4s; }
+.fx-title { position: fixed; left: 50%; top: 50%; z-index: 302; transform: translate(-50%, -50%); text-align: center; color: #fff; pointer-events: none; display: grid; gap: 6px; animation: title-in 1.9s ease both; }
+.fx-title b { white-space: nowrap; font-family: var(--serif); font-weight: 400; font-size: clamp(36px, 11vw, 72px); letter-spacing: .02em; background: linear-gradient(100deg, #fff 25%, #b9aaff 60%, #6fe7d8); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: 0 0 40px #8b7cff66; }
+.fx-title span { white-space: nowrap; font-size: 12px; letter-spacing: .24em; text-transform: uppercase; color: #cfc9ff; }
+@keyframes title-in { 0% { opacity: 0; transform: translate(-50%, -40%) scale(.92); filter: blur(6px); } 25%, 75% { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: none; } 100% { opacity: 0; transform: translate(-50%, -58%) scale(1.04); filter: blur(4px); } }
