@@ -50,7 +50,7 @@
       meta.name = 'theme-color';
       document.head.appendChild(meta);
     }
-    meta.content = dark ? '#242422' : '#f6f5f1';
+    meta.content = dark ? '#0b0b0d' : '#f6f5f1';
   }
   window.__vaisPaintBar = paintBar;
   paintBar();

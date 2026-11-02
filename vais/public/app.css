@@ -1998,3 +1998,58 @@ body[data-sky="night"]::before {
 .typing .load-word.swap { animation: word-in .35s ease both; }
 @keyframes word-in { from { opacity: 0; transform: translateY(4px); filter: blur(2px); } to { opacity: 1; transform: none; filter: none; } }
 .typing { align-items: center; }
+
+/* ── Space-Design (Weltraum-Look, Hell- und Dunkelmodus bleiben) ─────── */
+/* 8: große, runde Eingabe-Box */
+.composer { border-radius: 28px; box-shadow: 0 8px 30px rgba(0, 0, 0, .06); }
+.composer textarea { padding: 16px 20px 6px; }
+.composer-bar { padding: 4px 10px 10px 12px; }
+.send { width: 40px; height: 40px; border-radius: 50%; }
+.send.ready, .send.stop { background: var(--accent); border-color: var(--accent); color: var(--accent-text); box-shadow: 0 0 0 0 transparent; }
+.send.ready:hover { filter: brightness(1.08); }
+.send-area .model-chip { color: var(--muted); padding: 0 6px 0 8px; gap: 5px; height: 36px; border-radius: 999px; }
+.send-area .model-chip:hover { color: var(--text); }
+.send-area .model-chip .logo { width: 16px; height: 16px; opacity: .9; }
+.send-area .model-chip .name { font-size: 14px; font-weight: 500; }
+@media (max-width: 420px) { .send-area .model-chip { max-width: 112px; } }
+
+/* 9: Modus-Pillen unter dem Feld (nur Startseite) */
+.mode-pills { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 10px 0 2px; }
+.mode-pills[hidden] { display: none; }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--muted); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; transition: color .15s, background .15s, border-color .15s, transform .1s; }
+.pill:hover { color: var(--text); border-color: var(--border-strong); }
+.pill:active { transform: scale(.96); }
+.pill .pill-ico { font-size: 14px; line-height: 1; }
+.pill.on { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
+
+/* 13: leise Aktions-Symbole unter den Antworten */
+.card-actions .card-btn, .card-foot .card-btn { width: 34px; height: 34px; color: var(--muted); border-radius: 50%; }
+.card-actions .card-btn svg, .card-foot .card-btn svg { width: 17px; height: 17px; }
+.card-actions .card-btn:hover, .card-foot .card-btn:hover, .card-actions .card-btn:active, .card-foot .card-btn:active { color: var(--text); }
+.card-btn[aria-pressed='true'] { color: var(--text); }
+
+/* 1 + 7: Weltraum-Schwarz und feiner Sternenhimmel auf der Startseite (nur im Dunkelmodus) */
+:root[data-theme='dark'] .composer { box-shadow: 0 0 0 1px rgba(255, 255, 255, .02), 0 14px 44px rgba(0, 0, 0, .55); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .composer { box-shadow: 0 0 0 1px rgba(255, 255, 255, .02), 0 14px 44px rgba(0, 0, 0, .55); } }
+.home-stars { display: none; }
+body[data-view='home'] .home-stars { display: block; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .0; }
+:root[data-theme='dark'] body[data-view='home'] .home-stars { opacity: 1; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) body[data-view='home'] .home-stars { opacity: 1; } }
+.home-stars { background:
+  radial-gradient(1px 1px at 6% 14%, rgba(255,255,255,.55), transparent 60%), radial-gradient(1px 1px at 17% 63%, rgba(255,255,255,.35), transparent 60%),
+  radial-gradient(1.4px 1.4px at 27% 27%, rgba(255,255,255,.5), transparent 60%), radial-gradient(1px 1px at 39% 84%, rgba(255,255,255,.3), transparent 60%),
+  radial-gradient(1px 1px at 48% 9%, rgba(255,255,255,.45), transparent 60%), radial-gradient(1.2px 1.2px at 58% 52%, rgba(255,255,255,.25), transparent 60%),
+  radial-gradient(1px 1px at 69% 21%, rgba(255,255,255,.5), transparent 60%), radial-gradient(1.4px 1.4px at 78% 71%, rgba(255,255,255,.35), transparent 60%),
+  radial-gradient(1px 1px at 88% 38%, rgba(255,255,255,.45), transparent 60%), radial-gradient(1px 1px at 95% 88%, rgba(255,255,255,.3), transparent 60%),
+  radial-gradient(1px 1px at 12% 92%, rgba(255,255,255,.3), transparent 60%), radial-gradient(1px 1px at 33% 47%, rgba(255,255,255,.2), transparent 60%),
+  radial-gradient(1.2px 1.2px at 63% 94%, rgba(255,255,255,.3), transparent 60%), radial-gradient(1px 1px at 84% 6%, rgba(255,255,255,.4), transparent 60%);
+  animation: twinkle 9s ease-in-out infinite; }
+.stage { position: relative; z-index: 1; }
+.dock { position: relative; z-index: 2; }
+.topbar { position: relative; z-index: 3; }
+@media (prefers-reduced-motion: reduce) { .home-stars { animation: none; } }
+/* Pillen: immer eine Zeile (auf schmalen Handys wischbar) */
+.mode-pills { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; justify-content: safe center; padding: 0 2px; }
+.mode-pills::-webkit-scrollbar { display: none; }
+.pill { flex: none; height: 32px; padding: 0 12px; font-size: 13.5px; gap: 5px; }
+.pill .pill-ico { font-size: 13px; }

@@ -287,7 +287,48 @@ const busy = () => state.controllers.size > 0;
 const modelById = (id) => state.models.find((m) => m.id === id);
 
 // ── Steuerung unten (Modus + Modelle) ─────────────────────────────
+// Schnellwahl unter dem Eingabefeld (nur auf der Startseite): Websuche, Bild, Code, Agent X
+const PILLS = [
+  { key: 'web', kind: 'modality', ico: '🌐', label: () => 'Web' },
+  { key: 'image', kind: 'modality', ico: '🎨', label: () => t('Bild', 'Image') },
+  { key: 'code', kind: 'modality', ico: '</>', label: () => 'Code' },
+  { key: 'agent', kind: 'mode', ico: '🤖', label: () => 'Agent X' },
+];
+let modeBeforeAgent = null;
+function renderPills() {
+  const box = $('#mode-pills');
+  if (!box) return;
+  box.hidden = !!state.chat;
+  if (state.chat) return;
+  box.innerHTML = PILLS.map((p) => {
+    const on = p.kind === 'mode' ? state.mode === 'agent' : state.mode !== 'agent' && state.modality === p.key;
+    return `<button type="button" class="pill${on ? ' on' : ''}" data-pill="${p.key}" aria-pressed="${on}"><span class="pill-ico" aria-hidden="true">${escapeHtml(p.ico)}</span>${escapeHtml(p.label())}</button>`;
+  }).join('');
+}
+$('#mode-pills')?.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pill]');
+  if (!b) return;
+  const pill = PILLS.find((p) => p.key === b.dataset.pill);
+  haptic('tap');
+  if (pill.kind === 'mode') {
+    // Agent X an/aus (danach wieder der vorige Modus)
+    const next = state.mode === 'agent' ? (modeBeforeAgent && modeBeforeAgent !== 'agent' ? modeBeforeAgent : 'direct') : 'agent';
+    if (next === 'agent') modeBeforeAgent = state.mode;
+    state.mode = next;
+    store.set('vais.mode', next);
+  } else {
+    if (state.mode === 'agent') { state.mode = modeBeforeAgent && modeBeforeAgent !== 'agent' ? modeBeforeAgent : 'direct'; store.set('vais.mode', state.mode); }
+    const next = state.modality === pill.key ? 'auto' : pill.key; // nochmal tippen = aus
+    state.modality = next;
+    store.set('vais.modality', next);
+    fitPicks();
+  }
+  renderControls();
+  el.prompt.focus();
+});
+
 function renderControls() {
+  queueMicrotask(renderPills);
   el.modeBtn.innerHTML = ICON[state.mode] + ICON.chev;
   el.modeBtn.setAttribute('aria-label', `${t('Modus', 'Mode')}: ${MODES[state.mode].label}`);
   el.modalityBtn.hidden = state.mode === 'agent';
@@ -453,6 +494,8 @@ function showView(view) {
   el.newChat.hidden = view === 'home';
   $('#share-chat').hidden = view !== 'thread';
   $('#suggest').hidden = view !== 'home';
+  document.body.dataset.view = view;
+  renderPills();
   if (view === 'home' || view === 'thread') paintIncognito();
   else { $('#incognito-btn').hidden = true; $('#incognito-banner').hidden = true; }
   if (view === 'board' || view === 'stats') el.title.textContent = '';

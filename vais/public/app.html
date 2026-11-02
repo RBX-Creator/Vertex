@@ -86,6 +86,7 @@
     </p>
 
     <p class="incognito-banner" id="incognito-banner" hidden><span aria-hidden="true">🕶️</span> <span data-en="Incognito – this chat will not be saved and disappears when you leave it.">Inkognito – dieser Chat wird nicht gespeichert und verschwindet, wenn du ihn verlässt.</span></p>
+    <div class="home-stars" aria-hidden="true"></div>
     <main class="stage" id="stage">
       <section class="home" id="home">
         <h1 class="home-title" data-en="What would you like to do?">Was möchtest du tun?</h1>
@@ -162,10 +163,10 @@
               </div>
               <button type="button" class="ctrl" id="mode-btn" aria-haspopup="true" aria-expanded="false" aria-controls="mode-menu"></button>
               <button type="button" class="ctrl" id="modality-btn" aria-haspopup="true" aria-expanded="false" aria-controls="modality-menu"></button>
-              <button type="button" class="ctrl model-chip" data-slot="0" hidden></button>
-              <button type="button" class="ctrl model-chip" data-slot="1" hidden></button>
             </div>
             <div class="send-area">
+              <button type="button" class="ctrl model-chip" data-slot="0" hidden></button>
+              <button type="button" class="ctrl model-chip" data-slot="1" hidden></button>
               <button type="button" class="mic" id="mic" aria-label="Sprechen" data-en-aria-label="Speak" title="Sprechen" data-en-title="Speak" aria-pressed="false" hidden>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
               </button>
@@ -176,6 +177,7 @@
             </div>
           </div>
         </form>
+        <div class="mode-pills" id="mode-pills" role="group" aria-label="Schnellwahl" data-en-aria-label="Quick select"></div>
       </div>
     </div>
   </div>
