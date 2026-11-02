@@ -96,12 +96,16 @@ test('Agent X reagiert und zählt „ok“ nicht', async () => {
   const c = await signUp('agent@example.com');
   const start = await c.json('/api/chat/start', { mode: 'agent', modality: 'auto', title: 'Agent' });
   const one = await stream(c, start.data.id, 'Erzähl mir einen Witz');
-  assert.ok(one.lines.some((l) => l.react === '👀'));
+  assert.ok(!one.lines.some((l) => l.react), 'normale Frage → kein Emoji');
   const before = (await c.json('/api/chat/usage')).data.kinds.agent.used;
   assert.equal(before, 1); // ein Agent-X-Auftrag
   const res = await c.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 1, messages: [{ role: 'user', content: 'Witz' }, { role: 'assistant', content: 'Haha, fertig.' }, { role: 'user', content: 'ok danke' }], display: { text: 'ok danke' } });
   const lines = (await res.text()).trim().split('\n').map((l) => JSON.parse(l));
   assert.ok(lines.some((l) => l.react === '❤️'));
+  const praise = await c.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 2, messages: [{ role: 'user', content: 'Witz' }, { role: 'assistant', content: 'Haha, fertig.' }, { role: 'user', content: 'Du bist der Beste' }], display: { text: 'Du bist der Beste' } });
+  const pl = (await praise.text()).trim().split('\n').map((l) => JSON.parse(l));
+  assert.ok(pl.some((l) => l.react === '❤️'));
+  assert.ok(!pl.some((l) => l.t), 'nur Emoji, kein Text');
   assert.equal((await c.json('/api/chat/usage')).data.kinds.agent.used, before); // zählt nicht
 });
 

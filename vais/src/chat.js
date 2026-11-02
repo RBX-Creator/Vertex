@@ -550,6 +550,8 @@ chat.post('/stream', wrap(async (req, res) => {
       // Websuche: zusätzlich Links aus der Antwort als Quellen sammeln
       if (row.modality === 'web' || /#search$|compound/.test(model)) onSources(sourcesFromText(text));
     }
+    // Emoji-Reaktion nur, wenn sie die ganze Antwort ist – mit Text keine Reaktion
+    if (reaction && text.trim()) { reaction = null; out(`${JSON.stringify({ react: '' })}\n`); }
     out(`${JSON.stringify({ done: true })}\n`);
     const got = text || images.length || reaction;
     if (!got) await giveBack();

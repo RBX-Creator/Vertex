@@ -42,6 +42,10 @@ test('Kurze Bestätigungen bekommen nur ein Emoji', () => {
   assert.equal(agent.quickReaction(chat('ok')), '👍');
   assert.equal(agent.quickReaction(chat('ok danke')), '❤️');
   assert.equal(agent.quickReaction(chat('haha')), '😂');
+  assert.equal(agent.quickReaction(chat('Du bist der Beste')), '❤️');
+  assert.equal(agent.quickReaction(chat('krass')), '🔥');
+  assert.equal(agent.quickReaction(chat('du bist doof')), null);
+  assert.equal(agent.quickReaction(chat('der')), null);
   assert.equal(agent.quickReaction(chat('Was ist 2+2?')), null);
   assert.equal(agent.quickReaction(chat('ok', 'Soll ich weitermachen?')), null); // Antwort auf eine Frage
   assert.equal(agent.quickReaction([{ role: 'user', content: 'ok' }]), null); // erste Nachricht

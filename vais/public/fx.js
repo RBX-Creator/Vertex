@@ -106,7 +106,18 @@ function loop(layer, draw) {
 const W = () => innerWidth;
 const H = () => innerHeight;
 
-function warp() { // Sprung durch die Galaxie
+// Das Schwarze-Loch-Logo groß in der Mitte (dreht sich, leuchtet, Akkretionsscheibe dahinter)
+function holeCenter(ms) {
+  const svg = document.querySelector('.topbar .brand svg, .brand svg');
+  if (!svg) return;
+  const box = document.createElement('div');
+  box.className = 'fx-hole-center';
+  box.innerHTML = `<span class="fx-disk"></span><span class="fx-core"></span>${svg.outerHTML}`;
+  document.body.append(box);
+  setTimeout(() => { box.classList.add('out'); setTimeout(() => box.remove(), 600); }, ms - 600);
+}
+function warp() { // Sprung durch die Galaxie – die Sterne kommen aus dem Schwarzen Loch in der Mitte
+  holeCenter(3600);
   const L = canvasLayer(3600);
   const stars = Array.from({ length: 260 }, () => ({ x: (Math.random() - 0.5) * W(), y: (Math.random() - 0.5) * H(), z: Math.random() * W() }));
   loop(L, () => {

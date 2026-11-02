@@ -21,14 +21,16 @@ export function splitReaction(text) {
 }
 // Kurze Bestätigungen wie „ok“ oder „danke“ beantwortet Agent X nur mit einem Emoji – ohne Modell, spart das Limit
 const ACK = {
-  '❤️': ['danke', 'dankeschön', 'dankesehr', 'vielen', 'dank', 'thx', 'thanks', 'thank', 'ty', 'merci', 'lieb', 'nett'],
+  '❤️': ['danke', 'dankeschön', 'dankesehr', 'vielen', 'dank', 'thx', 'thanks', 'thank', 'ty', 'merci', 'lieb', 'nett',
+    'du', 'bist', 'der', 'die', 'beste', 'bester', 'best', 'love', 'liebe', 'dich', 'ily', 'goat', 'legende', 'ehrenmann', 'are', 'the', 'ich', 'mag', 'hab', 'lieb', 'awesome', 'amazing', 'genial'],
+  '🔥': ['krass', 'wow', 'wahnsinn', 'hammer', 'stark', 'fire', 'insane', 'unglaublich'],
   '😂': ['haha', 'hahaha', 'hahahaha', 'hehe', 'lol', 'lmao', 'xd', 'rofl'],
   '👋': ['gute', 'nacht', 'n8', 'good', 'night', 'tschüss', 'tschau', 'ciao', 'bye', 'bis', 'später', 'morgen', 'see', 'you'],
   '👍': ['ok', 'okay', 'okey', 'oki', 'k', 'kk', 'alles', 'klar', 'passt', 'gut', 'super', 'top', 'perfekt', 'cool', 'nice', 'klasse', 'prima',
     'verstanden', 'alright', 'got', 'it', 'great', 'perfect', 'sounds', 'mega', 'geil', 'genau', 'stimmt', 'sehr', 'so', 'much', 'dir', 'euch', 'schön', 'a', 'lot', 'ganz', 'echt'],
 };
 const ACK_WORDS = new Map(Object.entries(ACK).flatMap(([emoji, words]) => words.map((w) => [w, emoji])));
-const PRIORITY = ['😂', '❤️', '👋', '👍'];
+const PRIORITY = ['😂', '❤️', '🔥', '👋', '👍'];
 export function quickReaction(messages) {
   if (messages.length < 2) return null; // erste Nachricht immer richtig beantworten
   const last = messages.at(-1);
@@ -45,7 +47,7 @@ export function quickReaction(messages) {
   if (!words.length || !words.every((w) => ACK_WORDS.has(w) || /^(ha){2,}h?$|^(he){2,}$|^x+d+$/.test(w))) return null;
   const found = new Set(words.map((w) => ACK_WORDS.get(w) ?? '😂'));
   // „sehr“, „so“ usw. allein sind keine Bestätigung
-  if (words.every((w) => ['sehr', 'so', 'much', 'dir', 'euch', 'a', 'lot', 'ganz', 'echt', 'it', 'you', 'bis', 'see', 'good', 'gute'].includes(w))) return null;
+  if (words.every((w) => ['sehr', 'so', 'much', 'dir', 'euch', 'a', 'lot', 'ganz', 'echt', 'it', 'you', 'bis', 'see', 'good', 'gute', 'du', 'bist', 'der', 'die', 'the', 'are', 'dich', 'ich', 'mag', 'hab'].includes(w))) return null;
   return PRIORITY.find((e) => found.has(e)) ?? '👍';
 }
 
@@ -201,8 +203,7 @@ function systemPrompt(personal = {}) {
     'Diagramme: Wenn Zahlen als Diagramm helfen (Vergleiche, Entwicklungen, Anteile), füge einen Block ```chart mit JSON ein, z. B. {"type":"bar","title":"Einwohner (Mio.)","unit":"Mio.","labels":["Berlin","Hamburg"],"series":[{"name":"2024","data":[3.8,1.9]}]}. type ist bar, line (für Verläufe) oder pie (Anteile, nur eine Reihe). Höchstens 8 Reihen und 40 Werte. Die App zeichnet das Diagramm selbst.',
     'Python: Für Rechnungen, Statistik oder Simulationen kannst du Python-Code in einem ```python-Block schreiben – der Nutzer kann ihn mit „▶ Ausführen“ direkt im Browser laufen lassen (Pyodide; numpy, pandas, matplotlib gehen, kein Internet, keine Dateien). Gib Ergebnisse mit print() aus.',
     'Wenn der Nutzer Bilder angehängt hat, bekommst du eine Beschreibung davon als [Bild …]. Nutze sie, als hättest du das Bild selbst gesehen.',
-    `Du kannst auf die Nachricht des Nutzers mit genau EINEM Emoji reagieren (wie in einem Messenger), indem du ganz an den Anfang deiner Antwort [[react:EMOJI]] schreibst. Erlaubt: ${REACTIONS.join(' ')}. Mach das, wenn es passt (z. B. 🎉 bei guten Nachrichten, 😂 bei Witzen, ❤️ bei Dank, 🔥 bei coolen Ideen, ✅ wenn eine Aufgabe erledigt ist), aber nicht bei jeder Nachricht.`,
-    'Braucht eine Nachricht keine Antwort (z. B. „ok“, „danke“, „passt“, „gute Nacht“), antworte NUR mit der Reaktion, ohne Text.',
+    `Emoji-Reaktion (wie im Messenger): NUR wenn die Nachricht des Nutzers gar keine Antwort braucht – z. B. Dank („danke“, „vielen Dank“), Lob („du bist der Beste“), „ok“, „passt“, „haha“, „gute Nacht“ –, antwortest du ausschließlich mit [[react:EMOJI]] und KEINEM Text (❤️ bei Dank und Lob, 😂 bei Witzen, 👍 bei ok, 👋 bei Abschied, 🔥 bei „krass“). Erlaubt: ${REACTIONS.join(' ')}. Bei allen anderen Nachrichten (Fragen, Aufgaben, Erzählungen) reagierst du NICHT mit einem Emoji, sondern antwortest normal mit Text.`,
     ...(personal.memoryOn ? [
       'Du hast ein Gedächtnis: Erzählt der Nutzer etwas Dauerhaftes über sich (Name, Alter, Hobbys, Schule/Beruf, Vorlieben, Projekte, wie er angesprochen werden will) oder bittet er dich, dir etwas zu merken, speichere es mit remember – kurz, in der dritten Person (z. B. „Heißt Leeam, mag Grok“). Speichere nichts Sensibles (Passwörter, Gesundheit, Adressen) und nichts Vorübergehendes.',
       personal.memories?.length ? `Was du über den Nutzer weißt:\n${personal.memories.map((m) => `- ${m.text}`).join('\n')}\nNutze das natürlich, ohne es ständig zu erwähnen.` : 'Du weißt noch nichts über den Nutzer.',
@@ -705,7 +706,6 @@ const AGENT_BACKUP = [/^groq:meta-llama\/llama-4-scout/, /^groq:moonshotai\/kimi
 const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 
 export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, personal = {}, onRemember = null, onReminder = null, inbox = null }) {
-  onReact('👀'); // „hab’s gesehen, bin dran“
   if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, planFirst: personal.planFirst, inbox });
   const model = await pickModel(AGENT_PREFERENCE);
   if (!model) throw new Error(t('Agent X braucht einen Groq-Schlüssel (GROQ_API_KEY), damit er Werkzeuge benutzen kann.', 'Agent X needs a Groq key (GROQ_API_KEY) to use tools.'));
@@ -732,8 +732,8 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   // Am Ende: wurde eine Webseite geprüft, aber nicht mitgeschickt, hängen wir die geprüfte Fassung an
   const finish = (content) => {
     const split = splitReaction(content);
-    onReact(split.reaction); // 👀 durch die passende Reaktion ersetzen (oder entfernen)
-    if (split.reaction && !split.text.trim() && !ctx.lastHtml) return undefined; // nur Emoji, kein Text
+    // Emoji nur, wenn es die ganze Antwort ist (z. B. ❤️ auf „danke“) – sonst gar keins
+    if (split.reaction && !split.text.trim() && !ctx.lastHtml) { onReact(split.reaction); return undefined; }
     let text = split.text || t('Ich konnte leider keine Antwort finden.', 'Sorry, I could not find an answer.');
     if (ctx.lastHtml && !hasHtmlBlock(text) && /<\/html>/i.test(ctx.lastHtml)) text += `\n\n\`\`\`html\n${ctx.lastHtml.trim()}\n\`\`\``;
     return emitText(text, onText, signal);
@@ -830,19 +830,16 @@ async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onR
     onStep({ kind: 'reminder', text: rem[2] });
     let msg;
     try { msg = await reminder({ text: rem[2], in_minutes: Number(rem[1]) }); } catch (err) { msg = err.message; }
-    onReact('✅');
     return emitText(`**Agent X (Demo)** – ${msg.replace(/ ACHTUNG:.*/, ' Schalte Benachrichtigungen in den Einstellungen ein, damit sie ankommt.')}`, onText, signal);
   }
   const fact = q.match(/(?:merk dir|ich heiße|mein name ist)\s*:?\s*(.{2,80})/i)?.[1];
   if (fact && remember) {
     onStep({ kind: 'memory', text: fact });
     await remember(fact);
-    onReact('👍');
     return emitText(`**Agent X (Demo)** – gemerkt: „${fact}“.`, onText, signal);
   }
   if (/präsentation|praesentation|folien|referat|vortrag|slides/i.test(q)) {
     await sleep(300); onStep({ kind: 'wiki', text: 'Mond' });
-    onReact('🔥');
     return emitText('**Agent X (Demo)** – hier ist deine Präsentation:\n\n```slides\ntheme: ozean\n# Der Mond 🌙\nUnser nächster Nachbar im All\n---\n## Steckbrief\n- 🌍 **384.400 km** von der Erde entfernt\n- 📏 Durchmesser: **3.474 km**\n- 🕐 Umlauf: **27,3 Tage**\nNotiz: Vergleich – die Erde ist fast viermal so groß.\n---\n## Warum hat er Phasen?\n- ☀️ Die Sonne beleuchtet **immer eine Hälfte**\n- 🔄 Wir sehen je nach Stellung mehr oder weniger davon\n- 🌑 Neumond → 🌕 Vollmond in ca. **15 Tagen**\n---\n## Fazit\n> Ohne den Mond gäbe es kaum Ebbe und Flut.\n- Er stabilisiert die **Erdachse**\n- Bisher waren **12 Menschen** dort\n```\n\nTippe auf **Präsentieren**, um die Folien zu zeigen.', onText, signal, 8, 6);
   }
   const said = (re) => messages.some((m) => m.role === 'user' && re.test(Array.isArray(m.content) ? m.content.map((p) => p.text ?? '').join(' ') : String(m.content)));
@@ -864,12 +861,10 @@ async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onR
       zaehler: { html: '<section id="zaehler" class="vx-section"><div class="container" style="display:grid;place-items:center;min-height:60vh"><button id="b" class="btn">Klick mich: 0</button></div></section>', css: '', js: "(() => { const root = document.getElementById('zaehler'); if (!root) return; let n = 0; const b = root.querySelector('#b'); b.onclick = () => { b.textContent = `Klick mich: ${++n}`; }; })();" },
       footer: { html: '<footer id="footer"><div class="container">© <span data-year></span></div></footer>', css: '#footer{padding:24px 0;color:var(--muted)}', js: '' },
     });
-    onReact('🔥');
     return emitText(`**Agent X (Demo)** – ich habe die Seite in mehreren Schritten gebaut und geprüft: Kopfzeile, Zähler und Fußzeile.\n\n\`\`\`html\n${page}\n\`\`\``, onText, signal, 6, 8);
   }
   if (/diagramm|chart|python|statistik/i.test(q)) {
     await sleep(300);
-    onReact('🔥');
     return emitText('**Agent X (Demo)** – hier als Diagramm:\n\n```chart\n{"type":"bar","title":"Einwohner der größten Städte","unit":"Mio.","labels":["Berlin","Hamburg","München","Köln"],"series":[{"name":"2023","data":[3.76,1.89,1.51,1.08]},{"name":"2013","data":[3.42,1.75,1.41,1.02]}]}\n```\n\nUnd zum Nachrechnen in Python:\n\n```python\nstaedte = {"Berlin": 3.76, "Hamburg": 1.89, "München": 1.51, "Köln": 1.08}\nfor name, mio in staedte.items():\n    print(f"{name}: {mio} Mio.")\nprint("Summe:", round(sum(staedte.values()), 2), "Mio.")\n```', onText, signal, 8, 6);
   }
   await sleep(400); onStep({ kind: 'search', text: q.slice(0, 60) });
@@ -881,6 +876,5 @@ async function demoAgent({ messages, onStep, onText, onReasoning, onSources, onR
   while (inbox?.length) { const x = inbox.shift(); extras.push(x); onStep({ kind: 'inbox', text: x }); }
   await sleep(500); onStep({ kind: 'calc', text: '21 * 2' });
   await sleep(400);
-  onReact(/witz|joke/i.test(q) ? '😂' : null);
   await emitText(`**Agent X (Demo)**\n\n${pics ? 'Auf dem Bild sehe ich (Demo) etwas Schönes. ' : ''}Ich habe parallel gesucht, Wikipedia gelesen und gerechnet: 21 × 2 = **${calculate('21*2')}**.${extras.length ? ` Deinen Nachtrag „${extras.join('“, „')}“ habe ich berücksichtigt.` : ''}\n\nMit einem Groq-Schlüssel arbeite ich mit echten Werkzeugen.\n\n**Quellen**\n- [example.com](https://example.com)`, onText, signal);
 }

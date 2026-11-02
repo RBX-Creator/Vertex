@@ -1976,3 +1976,12 @@ body[data-sky="night"]::before {
 .welcome-idea b { display: block; font-weight: 600; }
 .welcome-idea small { color: #b8b4dc; }
 .welcome-go { margin-top: 6px; justify-self: center; min-width: 200px; background: linear-gradient(100deg, #8b7cff, #3dd6c6); color: #0b0b12; border: 0; font-weight: 600; animation: fadeUp .6s ease .75s both; }
+/* /galaxie: Schwarzes Loch in der Mitte */
+.fx-hole-center { position: fixed; left: 50%; top: 50%; z-index: 301; width: min(46vw, 210px); aspect-ratio: 880 / 435; transform: translate(-50%, -50%); pointer-events: none; color: #fff; animation: hole-in .9s cubic-bezier(.2, .8, .2, 1) both; }
+.fx-hole-center.out { animation: hole-out .6s ease-in both; }
+.fx-hole-center svg { position: relative; width: 100%; height: auto; display: block; animation: hole-spin 3s linear infinite, hole-glow 1.4s ease-in-out infinite; filter: drop-shadow(0 0 12px #8b7cff) drop-shadow(0 0 26px #3dd6c6); }
+.fx-disk { position: absolute; left: 50%; top: 55%; width: 190%; aspect-ratio: 1; transform: translate(-50%, -50%) rotateX(68deg); border-radius: 50%; background: conic-gradient(from 0deg, transparent, #8b7cff88, #3dd6c6aa, #ffd36e66, transparent 70%); filter: blur(6px); animation: disk-spin 2.2s linear infinite; }
+.fx-core { position: absolute; left: 50%; top: 55%; width: 38%; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle, #000 55%, #8b7cff55 70%, transparent 74%); box-shadow: 0 0 40px 10px #8b7cff55; }
+@keyframes disk-spin { to { transform: translate(-50%, -50%) rotateX(68deg) rotate(360deg); } }
+@keyframes hole-in { from { transform: translate(-50%, -50%) scale(.1) rotate(-180deg); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+@keyframes hole-out { to { transform: translate(-50%, -50%) scale(2.6); opacity: 0; filter: blur(4px); } }
