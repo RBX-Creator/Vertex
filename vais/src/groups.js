@@ -6,7 +6,7 @@ import { get, run, all } from './db.js';
 import { t } from './i18n.js';
 import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { isAdmin, isStaff, ADMIN_EMAILS } from './config.js';
-import { listModels, complete, demoMode, helperModel } from './models.js';
+import { listModels, complete, demoMode, helperModel, rankModels } from './models.js';
 import { notifyUser } from './push.js';
 import { checkText } from './safety.js';
 import { charge, refund } from './limits.js';
@@ -33,7 +33,6 @@ await run(`CREATE TABLE IF NOT EXISTS group_messages (
 await run('CREATE INDEX IF NOT EXISTS group_messages_group ON group_messages (group_id, id)');
 
 const MENTION = /(^|\s)@(ki|ai|vais|agent)\b/i;
-const AI_PREFERENCE = [/^groq:openai\/gpt-oss-120b$/, /^groq:moonshotai\/kimi-k2/, /^groq:.*llama-3\.3-70b/, /^groq:qwen\//, /^groq:openai\/gpt-oss-20b$/, /^gemini:/, /^openrouter:.*:free$/];
 const thinking = new Map(); // Gruppe → seit wann die KI antwortet
 const lastPush = new Map(); // 'gruppe:nutzer' → Zeit (nicht zu oft benachrichtigen)
 const nameOf = (email) => String(email ?? '').split('@')[0];
@@ -138,7 +137,7 @@ async function answer(g, user, text) {
         if (demoMode) reply = t(`(Demo) Hallo ${nameOf(user.email)}! Ich habe eure ${history.length} letzten Nachrichten gelesen. Mit einem Groq-Schlüssel antworte ich hier richtig.`, `(Demo) Hi ${nameOf(user.email)}! I read your last ${history.length} messages. With a Groq key I answer properly here.`);
         else {
           const all2 = (await listModels()).filter((m) => m.caps.includes('text') && !m.paid && !m.busy);
-          const model = AI_PREFERENCE.map((re) => all2.find((m) => re.test(m.id))).find(Boolean) ?? (await helperModel());
+          const model = rankModels('smart', all2)[0] ?? (await helperModel());
           if (!model) throw new Error(t('Gerade ist kein Modell frei.', 'No model is free right now.'));
           const msg = await complete({
             model: model.id,

@@ -17,7 +17,7 @@ import { limitSettings, charge, refund, usageOf, usageHistory } from './limits.j
 import { sourcesFromText } from './models.js';
 import { pickAvailable, isBusy } from './models.js';
 import { generateImage, editImage, helperModel, complete, transcribe } from './models.js';
-import { listModels, findModel, streamChat, displayName, describeModel, modelKey, demoMode } from './models.js';
+import { listModels, findModel, streamChat, displayName, describeModel, modelKey, demoMode, rankModels } from './models.js';
 
 const MAX_MESSAGES = 120;         // so viele Nachrichten nehmen wir an (ältere werden zusammengefasst)
 const MAX_CHARS = 20_000;         // pro Nachricht
@@ -126,41 +126,39 @@ chat.get('/models', wrap(async (req, res) => {
 // ── Auto-Modus: für jede Nachricht das passende Modell (ohne extra KI-Anfrage, nur nach dem Inhalt) ──
 const AUTO_RULES = [
   { kind: 'code', label: () => t('Code', 'Code'), cap: 'code', test: /```|\b(code|programm\w*|funktion|function|javascript|typescript|python|html|css|sql|java|c\+\+|c#|rust|golang|php|bug|stack ?trace|regex|json|api|react|node|skript|script|compiler|debug)\b/i,
-    prefer: [/^groq:qwen\/qwen3/, /^groq:moonshotai\/kimi-k2/, /^groq:openai\/gpt-oss-120b$/, /^cerebras:.*(qwen|gpt-oss)/, /^gemini:/, /^mistral:.*(codestral|devstral)/] },
+    task: 'code' },
   { kind: 'math', label: () => t('Mathe & Logik', 'Maths & logic'), cap: 'text', test: /\d\s*[+\-*/^×÷=]\s*\d|\b(rechne|berechne|gleichung|integral|ableitung|beweis\w*|wahrscheinlichkeit|prozent\w*|mathe\w*|logik|rätsel|knobel\w*|physik|chemie|formel)\b/i,
-    prefer: [/^groq:openai\/gpt-oss-120b$/, /^cerebras:gpt-oss-120b$/, /^groq:qwen\/qwen3/, /deepseek-r1/, /^gemini:/] },
+    task: 'math' },
   { kind: 'web', label: () => t('Aktuelles (Websuche)', 'Current info (web search)'), cap: 'web', test: /\b(heute|gestern|morgen|aktuell\w*|gerade|news|nachrichten|wetter|preis\w*|kostet|kurs|ergebnis\w*|neueste\w*|neu erschienen|termin\w*|wann spielt|tabelle)\b|\b20(2[5-9]|3\d)\b/i,
-    prefer: [/^groq:groq\/compound$/, /^groq:openai\/gpt-oss-120b#search$/, /compound/, /#search$/] },
+    task: 'web' },
   { kind: 'creative', label: () => t('Kreativ', 'Creative'), cap: 'text', test: /\b(geschichte|gedicht|story|witz|lied|songtext|reim\w*|märchen|fantasie|rollenspiel|kreativ|slogan|brief)\b/i,
-    prefer: [/^groq:moonshotai\/kimi-k2/, /^groq:.*llama-3\.3-70b/, /^groq:openai\/gpt-oss-120b$/, /^mistral:/, /^gemini:/] },
+    task: 'creative' },
 ];
-const AUTO_QUICK = [/^groq:.*llama-3\.1-8b/, /^groq:openai\/gpt-oss-20b$/, /^groq:meta-llama\/llama-4-scout/, /^cerebras:/];
-const AUTO_GENERAL = [/^groq:openai\/gpt-oss-120b$/, /^groq:moonshotai\/kimi-k2/, /^cerebras:gpt-oss-120b$/, /^groq:.*llama-3\.3-70b/, /^gemini:gemini-2\.5-flash$/, /^groq:qwen\/qwen3/, /^groq:openai\/gpt-oss-20b$/];
 export async function autoPick(text = '', { images = false, modality = 'auto', boost = false } = {}) {
   const all = (await listModels()).filter((m) => !m.paid);
   const free = all.filter((m) => !m.busy);
-  const find = (prefs, cap) => prefs.map((re) => free.find((m) => re.test(m.id) && m.caps.includes(cap))).find(Boolean);
+  const find = (task, cap) => rankModels(task, free, { cap })[0];
   const any = (cap) => free.find((m) => m.caps.includes(cap)) ?? all.find((m) => m.caps.includes(cap));
   if (modality === 'image') { const m = any('image'); return m && { model: m, kind: 'image', label: t('Bild', 'Image') }; }
-  if (images) { const m = find([/llama-4-maverick/, /llama-4-scout/, /^gemini:/], 'vision') ?? any('vision'); return m && { model: m, kind: 'vision', label: t('Bild ansehen', 'Looking at an image') }; }
-  if (modality === 'web') { const r = AUTO_RULES.find((x) => x.kind === 'web'); const m = find(r.prefer, 'web') ?? any('web'); return m && { model: m, kind: 'web', label: r.label() }; }
+  if (images) { const m = find('vision', 'vision') ?? any('vision'); return m && { model: m, kind: 'vision', label: t('Bild ansehen', 'Looking at an image') }; }
+  if (modality === 'web') { const r = AUTO_RULES.find((x) => x.kind === 'web'); const m = find('web', 'web') ?? any('web'); return m && { model: m, kind: 'web', label: r.label() }; }
   const q = String(text).slice(0, 4000);
   for (const r of AUTO_RULES) {
     if (r.kind === 'web' && modality === 'code') continue;
     if (!r.test.test(q)) continue;
-    const m = find(r.prefer, r.cap) ?? (r.cap !== 'text' ? any(r.cap) : null);
+    const m = find(r.task, r.cap) ?? (r.cap !== 'text' ? any(r.cap) : null);
     if (m) return { model: m, kind: r.kind, label: r.label() };
   }
   if (boost) {
-    // „Genauer“: das stärkste freie Modell
-    const m = find(AUTO_GENERAL, modality === 'code' ? 'code' : 'text');
+    // „Genauer“ / Experte: das stärkste freie Modell
+    const m = find(modality === 'code' ? 'code' : 'smart', modality === 'code' ? 'code' : 'text');
     if (m) return { model: m, kind: 'boost', label: t('Genauer', 'More detail') };
   }
   if (q.length < 50 && !/\?.*\?/.test(q)) {
-    const m = find(AUTO_QUICK, 'text');
+    const m = find('quick', 'text');
     if (m) return { model: m, kind: 'quick', label: t('Kurze Frage – schnell', 'Short question – fast') };
   }
-  const m = find(AUTO_GENERAL, modality === 'code' ? 'code' : 'text') ?? any(modality === 'code' ? 'code' : 'text');
+  const m = find(modality === 'code' ? 'code' : 'smart', modality === 'code' ? 'code' : 'text') ?? any(modality === 'code' ? 'code' : 'text');
   return m && { model: m, kind: 'general', label: t('Allgemein', 'General') };
 }
 
@@ -278,20 +276,11 @@ function withSystem(parts, messages) {
 
 // Notfall-Modelle: ist das gewählte Modell voll, antwortet ein starkes freies Modell (bevorzugt Groq)
 const NOTFALL_STATUS = new Set([401, 403, 404, 429, 500, 502, 503, 504]);
-const EMERGENCY = {
-  text: [/^groq:openai\/gpt-oss-120b$/, /^groq:moonshotai\/kimi-k2/, /^groq:.*llama-3\.3-70b/, /^groq:qwen\/qwen3/, /^groq:openai\/gpt-oss-20b$/, /^groq:/, /^gemini:/, /^cerebras:/, /^mistral:/, /^openrouter:.*:free$/],
-  code: [/^groq:openai\/gpt-oss-120b$/, /^groq:moonshotai\/kimi-k2/, /^groq:qwen\/qwen3/, /^groq:/, /^gemini:/, /^openrouter:.*:free$/],
-  web: [/^groq:groq\/compound$/, /^groq:openai\/gpt-oss-120b#search$/, /^groq:.*compound/, /#search$/],
-  vision: [/^groq:meta-llama\/llama-4-maverick/, /^groq:meta-llama\/llama-4-scout/, /^gemini:/, /^openrouter:.*:free$/],
-  image: [/^pollinations:/],
-};
+const EMERGENCY = { text: 'smart', code: 'code', web: 'web', vision: 'vision' };
 async function pickEmergency(cap, exclude) {
   const all = (await listModels()).filter((m) => m.caps.includes(cap) && !m.busy && !exclude.includes(m.id));
-  for (const re of EMERGENCY[cap] ?? EMERGENCY.text) {
-    const hit = all.find((m) => re.test(m.id));
-    if (hit) return hit;
-  }
-  return all[0] ?? null;
+  if (cap === 'image') return all.find((m) => m.provider === 'pollinations') ?? all[0] ?? null;
+  return rankModels(EMERGENCY[cap] ?? 'smart', all)[0] ?? all.find((m) => !m.paid) ?? null;
 }
 
 const running = new Map(); // 'chat:turn:side' → { controller, userId }
@@ -872,7 +861,7 @@ chat.post('/improve', wrap(async (req, res) => {
   helperQuota(req, 'improve');
   if (demoMode) return res.json({ text: `${text}\n\nBitte antworte klar gegliedert, mit einem kurzen Beispiel und einer Zusammenfassung am Ende.` });
   const all = (await listModels()).filter((m) => m.caps.includes('text') && !m.paid && !m.busy);
-  const model = TRANSLATE_PREFERENCE.map((re) => all.find((m) => re.test(m.id))).find(Boolean) ?? (await helperModel());
+  const model = rankModels('translate', all)[0] ?? (await helperModel());
   if (!model) throw new HttpError(503, t('Gerade ist kein Modell frei.', 'No model is free right now.'));
   const goal = modality === 'image' ? 'eine detaillierte Bildbeschreibung (Motiv, Stil, Licht, Farben, Perspektive)'
     : modality === 'code' || /webseite|website|app|spiel|game|html|code/i.test(text) ? 'eine klare Programmier-/Webseiten-Anfrage (Ziel, Funktionen, Aussehen, Handy-tauglich)'
@@ -895,7 +884,6 @@ chat.post('/improve', wrap(async (req, res) => {
 }));
 
 // ── Live-Übersetzer ──────────────────────────────────────────────
-const TRANSLATE_PREFERENCE = [/^groq:openai\/gpt-oss-120b$/, /^groq:moonshotai\/kimi-k2/, /^groq:.*llama-3\.3-70b/, /^groq:openai\/gpt-oss-20b$/, /^groq:meta-llama\/llama-4/, /^gemini:/, /^openrouter:.*:free$/];
 chat.post('/translate', wrap(async (req, res) => {
   const text = String(req.body?.text ?? '').trim().slice(0, 2000);
   const from = String(req.body?.from ?? '').slice(0, 40);
@@ -910,7 +898,7 @@ chat.post('/translate', wrap(async (req, res) => {
   try {
     if (demoMode) return res.json({ text: `[${to}] ${text}` });
     const all = (await listModels()).filter((m) => m.caps.includes('text') && !m.paid && !m.busy);
-    const model = TRANSLATE_PREFERENCE.map((re) => all.find((m) => re.test(m.id))).find(Boolean) ?? (await helperModel());
+    const model = rankModels('translate', all)[0] ?? (await helperModel());
     if (!model) throw new HttpError(503, t('Gerade ist kein Modell frei.', 'No model is free right now.'));
     const msg = await complete({
       model: model.id,

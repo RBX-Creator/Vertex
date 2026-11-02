@@ -6,19 +6,8 @@
 // So passt jede einzelne Anfrage in die Limits der kostenlosen Modelle – die Seite wird trotzdem lang und detailliert.
 // Änderungen später: Nur die betroffenen Abschnitte werden neu geschrieben (Markierungen <!--vx:ID--> im HTML).
 import vm from 'node:vm';
-import { complete, listModels } from './models.js';
+import { complete, listModels, rankModels } from './models.js';
 
-const PREF = [
-  /^groq:openai\/gpt-oss-120b$/,
-  /^cerebras:gpt-oss-120b$/,
-  /^groq:moonshotai\/kimi-k2/,
-  /^groq:.*llama-3\.3-70b/,
-  /^gemini:gemini-2\.5-flash$/,
-  /^groq:qwen\/qwen3/,
-  /^groq:openai\/gpt-oss-20b$/,
-  /^cerebras:/,
-  /^mistral:/,
-];
 const sleep = (ms, signal) => new Promise((ok, no) => {
   const tm = setTimeout(ok, ms);
   signal?.addEventListener('abort', () => { clearTimeout(tm); no(signal.reason ?? new Error('abgebrochen')); }, { once: true });
@@ -34,7 +23,7 @@ async function realAsk(messages, { maxTokens = 4000, signal, effort = 'medium' }
   let stay = null; // nach dem Warten dasselbe (beste) Modell nochmal
   for (let attempt = 0; attempt < 14; attempt++) {
     const all = await listModels();
-    let model = stay ?? PREF.map((re) => all.find((m) => re.test(m.id) && !m.busy && !tried.has(m.id))).find(Boolean);
+    let model = stay ?? rankModels('builder', all, { exclude: [...tried] })[0];
     stay = null;
     if (!model) {
       // alle gerade voll: kurz warten und dann wieder von vorne (Limits pro Minute)
@@ -42,7 +31,7 @@ async function realAsk(messages, { maxTokens = 4000, signal, effort = 'medium' }
       await sleep(8000, signal);
       waited += 8000;
       tried.clear();
-      model = PREF.map((re) => all.find((m) => re.test(m.id))).find(Boolean);
+      model = rankModels('builder', all, { includeBusy: true })[0];
       if (!model) break;
     }
     try {

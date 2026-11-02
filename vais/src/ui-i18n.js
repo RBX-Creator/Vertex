@@ -4,12 +4,11 @@
 import { readFileSync } from 'node:fs';
 import { getSetting, setSetting } from './db.js';
 import { EXTRA_LANGS, setDict } from './i18n.js';
-import { listModels, complete, demoMode } from './models.js';
+import { listModels, complete, demoMode, rankModels } from './models.js';
 
 const STRINGS = JSON.parse(readFileSync(new URL('../public/i18n/strings.json', import.meta.url), 'utf8'));
 const NAMES = { tr: 'Turkish (Türkçe)', es: 'Spanish (Español)', fr: 'French (Français)', uk: 'Ukrainian (Українська)' };
 const STYLE = { tr: 'informal "sen"', es: 'informal "tú"', fr: 'informal "tu"', uk: 'informal "ти"' };
-const PREFERENCE = [/^groq:openai\/gpt-oss-120b$/, /^groq:moonshotai\/kimi-k2/, /^groq:.*llama-3\.3-70b/, /^groq:openai\/gpt-oss-20b$/, /^gemini:/, /^openrouter:.*:free$/];
 const BATCH = 40;
 
 const dicts = {};
@@ -24,7 +23,7 @@ const missing = (l) => STRINGS.filter((s) => !dicts[l]?.[s]);
 
 async function pickModel() {
   const all = (await listModels()).filter((m) => m.caps.includes('text') && !m.paid && !m.busy);
-  return PREFERENCE.map((re) => all.find((m) => re.test(m.id))).find(Boolean) ?? null;
+  return rankModels('translate', all)[0] ?? null;
 }
 
 async function translateBatch(l, items, model) {

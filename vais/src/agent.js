@@ -6,7 +6,7 @@ import net from 'node:net';
 import vm from 'node:vm';
 import { buildWebsite, editWebsite, assemble } from './sitebuilder.js';
 import { t, lang } from './i18n.js';
-import { listModels, complete, demoMode, sourcesFromText, makeSource } from './models.js';
+import { listModels, complete, demoMode, sourcesFromText, makeSource, rankModels } from './models.js';
 
 const MAX_STEPS = 8;
 
@@ -51,30 +51,12 @@ export function quickReaction(messages) {
   return PRIORITY.find((e) => found.has(e)) ?? '👍';
 }
 
-// Das stärkste verfügbare Modell mit Werkzeug-Unterstützung
-const AGENT_PREFERENCE = [
-  /^groq:openai\/gpt-oss-120b$/,
-  /^cerebras:gpt-oss-120b$/,
-  /^groq:moonshotai\/kimi-k2/,
-  /^groq:.*llama-3\.3-70b/,
-  /^groq:openai\/gpt-oss-20b$/,
-  /^groq:qwen\/qwen3/,
-  /^gemini:gemini-2\.5-flash$/,
-];
-async function pickModel(preferences) {
+// Das stärkste verfügbare Modell mit Werkzeug-Unterstützung (Rangliste in models.js)
+async function pickModel(task) {
   const all = await listModels();
-  for (const re of preferences) {
-    const hit = all.find((m) => re.test(m.id) && !m.busy);
-    if (hit) return hit;
-  }
   // Alle gerade „voll“ (meist nur das Minuten-Limit): trotzdem das beste nehmen – ask() wartet notfalls kurz
-  for (const re of preferences) {
-    const hit = all.find((m) => re.test(m.id));
-    if (hit) return hit;
-  }
-  return null;
+  return rankModels(task, all)[0] ?? rankModels(task, all, { includeBusy: true })[0] ?? null;
 }
-const SEARCH_PREFERENCE = [/^groq:groq\/compound$/, /^groq:.*compound(?!-mini)/, /^groq:.*compound/, /^groq:openai\/gpt-oss-120b#search$/, /#search$/];
 
 const REMEMBER_TOOL = {
   type: 'function',
@@ -233,7 +215,7 @@ async function searchOnce(query, model, signal, addSources) {
 }
 
 async function webSearch(queries, signal, addSources) {
-  const model = await pickModel(SEARCH_PREFERENCE);
+  const model = await pickModel('web');
   if (!model) throw new Error(t('Websuche ist nicht verfügbar (GROQ_API_KEY fehlt).', 'Web search is not available (GROQ_API_KEY missing).'));
   const results = await Promise.allSettled(queries.map((q) => searchOnce(q, model, signal, addSources)));
   if (signal?.aborted) throw new Error('aborted');
@@ -602,7 +584,6 @@ async function emitText(text, onText, signal, words = 3, delay = 12) {
 }
 
 // Bilder für Agent X: ein Modell mit 👁 beschreibt sie, Agent X arbeitet mit der Beschreibung
-const VISION_PREFERENCE = [/^groq:meta-llama\/llama-4-maverick/, /^groq:meta-llama\/llama-4-scout/, /^gemini:gemini-2\.5-flash$/, /^mistral:.*pixtral|mistral-medium/, /^openrouter:.*/];
 async function describeImages(messages, signal, onStep) {
   const MAX = 4;
   let count = 0;
@@ -617,8 +598,7 @@ async function describeImages(messages, signal, onStep) {
   }
   if (!jobs.some((j) => j.imgs.length)) return messages;
   const all = (await listModels()).filter((m) => m.caps.includes('vision') && !m.paid && !m.busy);
-  let model = null;
-  for (const re of VISION_PREFERENCE) { model = all.find((m) => re.test(m.id)); if (model) break; }
+  const model = rankModels('vision', all)[0] ?? all[0] ?? null;
   const total = jobs.reduce((n, j) => n + j.imgs.length, 0);
   onStep({ kind: 'look', text: total === 1 ? t('1 Bild', '1 image') : t(`${total} Bilder`, `${total} images`) });
   const out = new Map();
@@ -701,13 +681,12 @@ function squeeze(convo, hard = false) {
 }
 const tooBig = (err) => err?.status === 413 || (err?.status === 400 && /zu lang|zu groß|too long|too large|context/i.test(err.message)) || /zu groß für das kostenlose Limit|too large for this model/i.test(err?.message ?? '');
 // Ersatz, wenn das Hauptmodell voll ist oder die Anfrage zu groß war (größere Limits)
-const AGENT_BACKUP = [/^groq:meta-llama\/llama-4-scout/, /^groq:moonshotai\/kimi-k2/, /^groq:.*llama-3\.3-70b/, /^groq:meta-llama\/llama-4-maverick/, /^groq:qwen\/qwen3/, /^groq:openai\/gpt-oss-20b$/, /^gemini:gemini-2\.5-flash$/];
 
 const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 
 export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, personal = {}, onRemember = null, onReminder = null, inbox = null }) {
   if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, planFirst: personal.planFirst, inbox });
-  const model = await pickModel(AGENT_PREFERENCE);
+  const model = await pickModel('agent');
   if (!model) throw new Error(t('Agent X braucht einen Groq-Schlüssel (GROQ_API_KEY), damit er Werkzeuge benutzen kann.', 'Agent X needs a Groq key (GROQ_API_KEY) to use tools.'));
 
   const addSources = sourceCleaner(onSources);
@@ -759,7 +738,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
         if (!big && ![429, 500, 502, 503, 504].includes(err.status)) throw err;
         if (big && attempt < 2) { squeeze(convo, attempt === 1); continue; } // erst kürzen, dann stärker kürzen
         const all = await listModels();
-        const next = AGENT_BACKUP.map((re) => all.find((m) => re.test(m.id) && !m.busy && !tried.has(m.id))).find(Boolean);
+        const next = rankModels('agentBackup', all, { exclude: [...tried] })[0];
         if (!next) throw err;
         console.log(`Agent X: ${current.id} → ${next.id} (${err.message})`);
         tried.add(next.id);

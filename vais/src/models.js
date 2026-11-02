@@ -1,7 +1,7 @@
 // Modelle von mehreren Anbietern (alle über OpenAI-kompatible Schnittstellen):
 //   OPENROUTER_API_KEY  → kostenlose OpenRouter-Modelle (Endung ":free")
 //   GEMINI_API_KEY      → Google Gemini / Gemma (Google AI Studio, kostenloses Kontingent)
-//   GROQ_API_KEY        → Groq (gpt-oss, Llama, Qwen, Kimi … und "compound" mit Websuche)
+//   GROQ_API_KEY        → Groq (gpt-oss-120b/20b mit Websuche, Qwen)
 // Ohne Schlüssel läuft VAIs im Demo-Modus mit Platzhalter-Modellen.
 //
 // Optional: OPENROUTER_EXTRA_MODELS="anthropic/claude-sonnet-4.5,openai/gpt-5" schaltet
@@ -638,18 +638,69 @@ export async function streamChat({ model, messages, signal, onText, onReasoning 
   }
 }
 
-// ── Kleine Helfer-Aufgaben (Titel, Vorschläge) mit einem schnellen Modell ──
-const HELPER_PREFERENCE = [
-  /^groq:llama-3\.1-8b-instant$/, /^groq:openai\/gpt-oss-20b$/, /^groq:.*llama-3\.3-70b/, /^groq:openai\/gpt-oss-120b$/,
-  /^gemini:gemini-2\.5-flash-lite/, /^gemini:gemini-2\.5-flash$/, /^openrouter:.*:free$/,
-];
-export async function helperModel() {
-  const all = (await listModels()).filter((m) => m.caps.includes('text') && !m.paid);
-  for (const re of HELPER_PREFERENCE) {
-    const hit = all.find((m) => re.test(m.id) && !m.busy);
-    if (hit) return hit;
+// ── Rangliste: welches Modell für welche Aufgabe zuerst (eine Stelle für alles) ──────────
+// Stand November 2026, bei den Anbietern geprüft: Groq hat compound/compound-mini (21.09.2026),
+// Kimi K2, Llama 3.x/4 und ältere Qwen nicht mehr frei → übrig sind gpt-oss-120b/20b und qwen3.8-27b.
+// Google AI Studio (GEMINI_API_KEY): gemma-4-31b-it / gemma-4-26b-a4b-it, Gemini Flash.
+// OpenRouter (kostenlos, ":free"): Inkling, Nemotron 3 Ultra, Nemotron 3.5 Super VL, Gemma 4.
+// Pro Aufgabe gilt: erstes freies Modell gewinnt. Passen auf ein Muster mehrere Modelle
+// (z. B. gemini-3-flash und gemini-2.5-flash), kommt die neueste Version zuerst.
+const M = {
+  gptoss120: /^(groq|cerebras):(openai\/)?gpt-oss-120b$/,
+  gptoss20: /^(groq|cerebras):(openai\/)?gpt-oss-20b$/,
+  qwen: /^groq:(qwen\/)?qwen3/,
+  gemma31: /^gemini:gemma-4-31b/,
+  gemma26: /^gemini:gemma-4-26b/,
+  flash: /^gemini:gemini-[\d.]+-flash(?!-lite)/,
+  flashLite: /^gemini:gemini-[\d.]+-flash-lite/,
+  inkling: /^openrouter:thinkingmachines\/inkling:free$/,
+  inklingSmall: /^openrouter:thinkingmachines\/inkling-small:free$/,
+  nemoUltra: /^openrouter:nvidia\/nemotron-3-ultra[^:]*:free$/,
+  nemoVL: /^openrouter:nvidia\/nemotron-3\.5-super-vl:free$/,
+  orGemma: /^openrouter:google\/gemma-4-31b[^:]*:free$/,
+  northCode: /^openrouter:cohere\/north[^:]*code[^:]*:free$/,
+  orFree: /^openrouter:.*:free$/,
+  mistral: /^mistral:/,
+};
+export const RANKING = {
+  // Starke Allround-Antworten (Auto „Allgemein“, Experte, Notfall)
+  smart: [M.gptoss120, M.gemma31, M.inkling, M.nemoUltra, M.qwen, M.orGemma, M.flash, M.gptoss20, M.mistral, M.orFree],
+  // Kurze Fragen: schnell zuerst
+  quick: [M.gptoss20, M.gemma26, M.flashLite, M.qwen, M.gptoss120, M.gemma31, M.inklingSmall, M.orFree],
+  code: [M.gptoss120, M.qwen, M.inkling, M.nemoUltra, M.gemma31, M.northCode, M.flash, M.gptoss20, /^mistral:.*(codestral|devstral)/, M.orFree],
+  math: [M.gptoss120, M.qwen, M.nemoUltra, M.inkling, M.gemma31, M.flash, M.gptoss20],
+  creative: [M.gemma31, M.inkling, M.gptoss120, M.nemoUltra, M.qwen, M.flash, M.orFree],
+  // Modelle mit eingebauter Websuche (Groq browser_search); die eigene Suche steht in search.js
+  web: [/^groq:(openai\/)?gpt-oss-120b#search$/, /^groq:(openai\/)?gpt-oss-20b#search$/, /#search$/],
+  vision: [M.gemma31, M.nemoVL, M.flash, M.orGemma, M.inkling, M.mistral, M.orFree],
+  // Titel, Vorschläge, Zusammenfassungen
+  helper: [M.gptoss20, M.gemma26, M.flashLite, M.gemma31, M.qwen, M.gptoss120, M.orFree],
+  // Agent X (braucht Werkzeuge) und Ersatz bei vollen/zu kleinen Limits
+  agent: [M.gptoss120, M.gemma31, M.inkling, M.nemoUltra, M.qwen, M.gptoss20, M.flash],
+  agentBackup: [M.qwen, M.gemma31, M.inkling, M.nemoUltra, M.gptoss20, M.flash, M.gptoss120],
+  translate: [M.gptoss120, M.gemma31, M.qwen, M.inkling, M.gptoss20, M.flash, M.orFree],
+  builder: [M.gptoss120, M.qwen, M.inkling, M.nemoUltra, M.gemma31, M.flash, M.gptoss20, M.mistral],
+};
+// Modelle für eine Aufgabe in der Reihenfolge der Rangliste (nur kostenlose; volle nur mit includeBusy)
+export function rankModels(task, models, { cap = null, includeBusy = false, exclude = [] } = {}) {
+  const out = [];
+  const seen = new Set(exclude);
+  for (const re of RANKING[task] ?? RANKING.smart) {
+    const hits = models
+      .filter((m) => !seen.has(m.id) && !m.paid && re.test(m.id) && (!cap || m.caps.includes(cap)) && (includeBusy || !m.busy))
+      .sort((a, b) => String(b.upstream).localeCompare(String(a.upstream), 'en', { numeric: true }));
+    for (const h of hits) { seen.add(h.id); out.push(h); }
   }
-  return null;
+  return out;
+}
+// Das beste freie Modell für eine Aufgabe (oder null)
+export async function pickRanked(task, opts = {}) {
+  return rankModels(task, await listModels(), opts)[0] ?? null;
+}
+
+// ── Kleine Helfer-Aufgaben (Titel, Vorschläge, Zusammenfassungen) mit einem schnellen Modell ──
+export async function helperModel() {
+  return pickRanked('helper', { cap: 'text' });
 }
 
 // ── Bilder erstellen ──────────────────────────────────────────────
@@ -674,7 +725,6 @@ function shareTemp(dataUrl) {
 
 // Bild bearbeiten: Modelle mit Vorlage bekommen das Bild direkt; sonst beschreibt ein Bildmodell
 // das Bild genau, und das Bild wird mit der Änderung neu erzeugt.
-const VISION_FOR_EDIT = [/^groq:meta-llama\/llama-4-maverick/, /^groq:meta-llama\/llama-4-scout/, /^gemini:gemini-2\.5-flash$/, /^openrouter:.*:free$/];
 export async function editImage({ model, prompt, image, signal, onStep = () => {} }) {
   const info = (await listModels()).find((m) => m.id === model);
   const url = info?.edit ? shareTemp(image) : null;
@@ -687,7 +737,7 @@ export async function editImage({ model, prompt, image, signal, onStep = () => {
   if (demoMode) recipe = `${prompt} (Demo-Bearbeitung)`;
   else {
     const all = (await listModels()).filter((m) => m.caps.includes('vision') && !m.busy && !m.paid);
-    const seer = VISION_FOR_EDIT.map((re) => all.find((m) => re.test(m.id))).find(Boolean) ?? all[0];
+    const seer = rankModels('vision', all)[0] ?? all[0];
     if (!seer) throw new Error(t('Gerade ist kein Modell frei, das Bilder ansehen kann.', 'No model that can see images is free right now.'));
     const msg = await complete({
       model: seer.id,
