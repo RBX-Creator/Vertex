@@ -11,6 +11,7 @@ import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { runAgent, quickReaction } from './agent.js';
 import { profile, personalFor, instructionsPrompt, remember } from './profile.js';
 import { basePrompt } from './prompt.js';
+import { searchWeb, resultsPrompt } from './search.js';
 import { push, addReminder, notifyUser } from './push.js';
 import { sites } from './sites.js';
 import { checkText } from './safety.js';
@@ -269,6 +270,21 @@ async function fitHistory(row, messages) {
 }
 const summaryPrompt = (summary) => (summary ? `Zusammenfassung des bisherigen Gesprächs (ältere Nachrichten, die nicht mehr mitgeschickt werden):\n${summary}` : null);
 
+// Suchbegriff: die Frage selbst – bei Nachfragen („und morgen?“) mit dem Verlauf zu einer eigenständigen Suche gemacht
+async function searchQuery(messages, question, signal) {
+  const q = String(question ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  const earlier = messages.slice(0, -1).filter((m) => m.role === 'user').slice(-3).map((m) => plain(m).slice(0, 300));
+  if (demoMode || !earlier.length || q.split(' ').length > 9) return q;
+  const model = await helperModel();
+  if (!model) return q;
+  try {
+    const msg = await complete({ model: model.id, signal, maxTokens: 60, timeoutMs: 6000, reasoningEffort: 'low', messages: [{ role: 'user', content:
+      `Earlier questions:\n${earlier.map((e) => `- ${e}`).join('\n')}\n\nNew question: ${q}\n\nWrite ONE standalone web search query (in the language of the new question, max 12 words) for the new question. Only the query.` }] });
+    const out = String(msg.content ?? '').replace(/^["'„\s]+|["'“\s]+$/g, '').split('\n')[0].slice(0, 200);
+    return out.length > 2 ? out : q;
+  } catch { return q; }
+}
+
 // Eine einzige Systemnachricht vorne (manche Anbieter mögen keine mehreren)
 function withSystem(parts, messages) {
   const text = parts.filter(Boolean).join('\n\n');
@@ -494,6 +510,20 @@ chat.post('/stream', wrap(async (req, res) => {
         });
       }
     } else {
+      // Websuche: erst selbst suchen (Tavily → Exa → Groq → Wikipedia), dann antwortet ein starkes
+      // Text-Modell mit den nummerierten Ergebnissen und zitiert sie als [1], [2] …
+      let webResults = null;
+      if (row.modality !== 'image' && (row.modality === 'web' || auto?.kind === 'web' || model.endsWith('#search'))) {
+        const query = await searchQuery(clean, typeof display?.text === 'string' ? display.text : plain(clean.at(-1)), controller.signal);
+        out(`${JSON.stringify({ searching: query })}\n`);
+        const found = await searchWeb(query, { signal: controller.signal, max: 6 }).catch(() => null);
+        if (found?.results.length) {
+          webResults = { query, results: found.results };
+          onSources(found.results.map(({ url, title }) => ({ url, title })));
+          // Such-Modell (#search) nicht nochmal suchen lassen – das normale Modell reicht jetzt
+          if (model.endsWith('#search') && (await findModel(model.slice(0, -7)))) model = model.slice(0, -7);
+        }
+      }
       // Im Battle springt bei einem Ausfall still ein anderes Modell ein (Namen sind ja geheim)
       const tried = [model];
       for (let attempt = 0; ; attempt++) {
@@ -520,6 +550,7 @@ chat.post('/stream', wrap(async (req, res) => {
             messages: withSystem([
               basePrompt({ battle: row.mode === 'battle', model: row.mode === 'battle' ? null : await findModel(model), memories: personal.memoryOn ? personal.memories : [] }),
               row.modality === 'code' ? CODE_PROMPT : null, custom, summaryPrompt(fitted.summary),
+              webResults ? resultsPrompt(webResults.results, { query: webResults.query }) : null,
             ], clean),
             signal: controller.signal,
             think,
@@ -560,7 +591,7 @@ chat.post('/stream', wrap(async (req, res) => {
         }
       }
       // Websuche: zusätzlich Links aus der Antwort als Quellen sammeln
-      if (row.modality === 'web' || /#search$|compound/.test(model)) onSources(sourcesFromText(text));
+      if (!webResults && (row.modality === 'web' || /#search$/.test(model))) onSources(sourcesFromText(text));
     }
     // Emoji-Reaktion nur, wenn sie die ganze Antwort ist – mit Text keine Reaktion
     if (reaction && text.trim()) { reaction = null; out(`${JSON.stringify({ react: '' })}\n`); }

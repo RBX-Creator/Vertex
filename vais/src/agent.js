@@ -6,7 +6,8 @@ import net from 'node:net';
 import vm from 'node:vm';
 import { buildWebsite, editWebsite, assemble } from './sitebuilder.js';
 import { t, lang } from './i18n.js';
-import { listModels, complete, demoMode, sourcesFromText, makeSource, rankModels } from './models.js';
+import { listModels, complete, demoMode, makeSource, rankModels } from './models.js';
+import { searchWeb } from './search.js';
 
 const MAX_STEPS = 8;
 
@@ -200,27 +201,19 @@ function systemPrompt(personal = {}) {
 }
 
 // ── Werkzeuge ─────────────────────────────────────────────────────
-async function searchOnce(query, model, signal, addSources) {
-  const msg = await complete({
-    model: model.id,
-    signal,
-    messages: [
-      { role: 'system', content: 'Du bist eine Suchmaschine. Suche im Web und antworte knapp mit den wichtigsten Fakten (mit Datum, falls relevant). Bevorzuge seriöse, aktuelle Quellen. Liste am Ende die Quellen als vollständige URLs auf.' },
-      { role: 'user', content: query },
-    ],
-  });
-  const text = (msg.content || 'Keine Ergebnisse gefunden.').replace(/\s*【[^】]*】/g, '');
-  addSources([...(msg.sources ?? []), ...sourcesFromText(text)]);
-  return text;
-}
-
+// Websuche über src/search.js (Tavily → Exa → Groq → Wikipedia) – gleiche Suche wie der Web-Modus
 async function webSearch(queries, signal, addSources) {
-  const model = await pickModel('web');
-  if (!model) throw new Error(t('Websuche ist nicht verfügbar (GROQ_API_KEY fehlt).', 'Web search is not available (GROQ_API_KEY missing).'));
-  const results = await Promise.allSettled(queries.map((q) => searchOnce(q, model, signal, addSources)));
+  const results = await Promise.allSettled(queries.map((q) => searchWeb(q, { signal, max: 6 })));
   if (signal?.aborted) throw new Error('aborted');
-  if (results.every((r) => r.status === 'rejected')) throw results[0].reason;
-  return results.map((r, i) => `### Suche: ${queries[i]}\n${r.status === 'fulfilled' ? r.value : `Fehler: ${r.reason?.message}`}`).join('\n\n');
+  if (results.every((r) => r.status === 'rejected' || !r.value.results.length)) {
+    if (results[0].status === 'rejected') throw results[0].reason;
+    return t('Keine Ergebnisse gefunden.', 'No results found.');
+  }
+  return results.map((r, i) => {
+    const list = r.status === 'fulfilled' ? r.value.results : [];
+    addSources(list.map(({ url, title }) => ({ url, title })));
+    return `### Suche: ${queries[i]}\n${list.length ? list.map((x) => `- ${x.title}${x.date ? ` (${x.date})` : ''}\n  ${x.url}\n  ${x.snippet}`).join('\n') : `Fehler: ${r.reason?.message ?? 'keine Ergebnisse'}`}`;
+  }).join('\n\n');
 }
 
 // YouTube: Titel/Kanal über die offizielle oEmbed-Schnittstelle, Inhalt über die Websuche

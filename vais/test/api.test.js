@@ -642,3 +642,17 @@ test('„Denken“ zählt als 2 Antworten und liefert Gedanken', async () => {
   await stream(c, start.data.id, 'Und ohne Denken?', 1);
   assert.equal((await c.json('/api/chat/usage')).data.kinds.text.used, 3);
 });
+
+test('Websuche: eigene Suche, nummerierte Quellen und [n] in der Antwort', async () => {
+  const c = await signUp('web@example.com');
+  const models = (await c.json('/api/chat/models')).data.models;
+  const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'web', models: ['auto'], title: 'W' });
+  assert.equal(start.status, 200);
+  const out = await stream(c, start.data.id, 'Wie viele Einwohner hat Berlin?');
+  assert.ok(out.lines.some((l) => l.searching), 'zeigt Suchbegriff');
+  const src = out.lines.find((l) => l.sources)?.sources;
+  assert.ok(src?.length >= 2, 'Quellen kommen vor dem Text');
+  assert.equal(src[0].url, 'https://de.wikipedia.org/wiki/Berlin');
+  assert.match(out.text, /\[1\]/);
+  assert.ok(models.length);
+});

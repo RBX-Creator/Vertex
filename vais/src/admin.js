@@ -1,5 +1,6 @@
 // Admin-Bereich: Übersicht (Nutzer, Nutzung, beliebte Modelle, Fehler) und Rechte
 // (Nutzer sperren, Bestenliste zurücksetzen). Nur für Konten aus ADMIN_EMAILS.
+import { searchStatus } from './search.js';
 import { Router } from 'express';
 import { get, run, all, getSetting, setSetting, logEvent } from './db.js';
 import { t } from './i18n.js';
@@ -87,7 +88,7 @@ admin.get('/overview', wrap(async (req, res) => {
     safety: await safetyOn(),
     alarms: await alarmsOn(),
     reportsOpen: await openReportCount(),
-    server: memory(),
+    server: { ...memory(), search: searchStatus() },
     health: healthList(),
   });
 }));

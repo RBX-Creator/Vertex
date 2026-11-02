@@ -978,7 +978,7 @@ async function loadThinkSummary(card, a, turnIndex, side) {
 function renderSources(card, a) {
   let box = $('.sources', card);
   const searching = a.status === 'streaming' && !a.text && !a.sources?.length
-    && state.chat?.modality === 'web' && state.chat?.mode !== 'agent';
+    && (a.searchQuery || (state.chat?.modality === 'web' && state.chat?.mode !== 'agent'));
   if (!a.sources?.length && !searching) { box?.remove(); return; }
   if (!box) {
     box = document.createElement('div');
@@ -988,12 +988,14 @@ function renderSources(card, a) {
   box.classList.toggle('searching', searching);
   box.classList.toggle('open', !!a.sourcesOpen);
   if (searching) {
-    box.innerHTML = `<div class="sources-head">${ICON['m-web']}<span class="shimmer">${t('Sucht im Web …', 'Searching the web …')}</span></div>`;
+    box.innerHTML = `<div class="sources-head">${ICON['m-web']}<span class="shimmer"></span></div>`;
+    $('.shimmer', box).textContent = a.searchQuery ? `${t('Sucht', 'Searching')}: ${a.searchQuery} …` : t('Sucht im Web …', 'Searching the web …');
     return;
   }
+  const hosts = [...new Set(a.sources.map((src) => { try { return new URL(src.url).hostname; } catch { return ''; } }).filter(Boolean))].slice(0, 4);
   box.innerHTML = `
-    <button type="button" class="sources-head" data-act="sources" aria-expanded="${!!a.sourcesOpen}">
-      ${ICON['m-web']}<span>${t('Quellen', 'Sources')} <small>${a.sources.length}</small></span>${ICON.chev}
+    <button type="button" class="sources-head src-pill" data-act="sources" aria-expanded="${!!a.sourcesOpen}">
+      <span class="src-faces">${hosts.map(() => '<img alt="" loading="lazy">').join('')}</span><span>${a.sources.length} ${a.sources.length === 1 ? t('Quelle', 'source') : t('Quellen', 'sources')}</span>${ICON.chev}
     </button>
     <ol class="sources-list">${a.sources.map((src, i) => `
       <li><a target="_blank" rel="noopener noreferrer">
@@ -1001,6 +1003,7 @@ function renderSources(card, a) {
         <span class="src-text"><b><span class="cite">${i + 1}</span><span class="src-title"></span></b><small></small></span>
       </a></li>`).join('')}
     </ol>`;
+  box.querySelectorAll('.src-faces img').forEach((img, i) => { img.src = `/favicon/${encodeURIComponent(hosts[i])}`; img.onerror = () => img.remove(); });
   box.querySelectorAll('.sources-list a').forEach((link, i) => {
     const src = a.sources[i];
     let host = '';
@@ -1104,7 +1107,7 @@ function scheduleUpdate(turnIndex, side) {
 async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
   const chat = state.chat;
   const a = chat.turns[turnIndex].answers[side];
-  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, images: [], reaction: null, fallback: null, auto: null, cached: false, faq: false, summarized: null, startedAt: Date.now(), buildMs: 0 });
+  Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, searchQuery: null, images: [], reaction: null, fallback: null, auto: null, cached: false, faq: false, summarized: null, startedAt: Date.now(), buildMs: 0 });
   paintReactions(turnIndex);
   updateCard(turnIndex, side);
 
@@ -1150,6 +1153,7 @@ async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
         }
         if (msg.step) { a.steps.push(msg.step); scheduleUpdate(turnIndex, side); }
         if (msg.sources) { a.sources = msg.sources; scheduleUpdate(turnIndex, side); }
+        if (msg.searching) { a.searchQuery = msg.searching; scheduleUpdate(turnIndex, side); }
         if (msg.image) { a.images = [...(a.images ?? []), msg.image]; scheduleUpdate(turnIndex, side); }
         if (msg.react !== undefined) {
           a.reaction = msg.react || null;

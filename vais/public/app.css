@@ -2132,3 +2132,14 @@ body[data-view='home'] .home-stars { display: block; position: fixed; inset: 0; 
 .think-btn svg { width: 17px; height: 17px; }
 .think-btn.on { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
 .think-btn[hidden] { display: none; }
+/* „N Quellen“-Pille mit Logos der Seiten */
+.sources-head.src-pill { width: auto; display: inline-flex; gap: 8px; padding: 6px 12px 6px 8px; border-radius: 999px; font-size: 14px; color: var(--muted); }
+.sources-head.src-pill:hover { color: var(--text); }
+.src-faces { display: inline-flex; }
+.src-faces img { width: 18px; height: 18px; border-radius: 50%; background: var(--surface-2); border: 2px solid var(--surface); object-fit: cover; }
+.src-faces img + img { margin-left: -7px; }
+.sources-head.src-pill .chev { width: 13px; height: 13px; }
+.sources { border: 0; }
+.sources.searching .sources-head { padding: 6px 0; font-size: 14px; color: var(--muted); }
+.sources.searching .sources-head > svg:first-child { width: 18px; height: 18px; color: var(--muted); }
+.sources.open .sources-list { margin-top: 6px; border: 1px solid var(--border); border-radius: 14px; padding: 6px; }

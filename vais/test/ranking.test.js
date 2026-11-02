@@ -81,3 +81,15 @@ test('Denken: passende Einstellung je Anbieter', async () => {
   assert.deepEqual(reasoningParams('openrouter', 'thinkingmachines/inkling:free', 'high'), { reasoning: { effort: 'high' } });
   assert.deepEqual(reasoningParams('groq', 'openai/gpt-oss-120b', null), {});
 });
+
+test('Suche: ohne Schlüssel werden Tavily/Exa übersprungen, Ergebnisse nummeriert im Prompt', async () => {
+  const { resultsPrompt, searchStatus } = await import('../src/search.js');
+  delete process.env.TAVILY_API_KEY; delete process.env.EXA_API_KEY;
+  const st = searchStatus();
+  assert.equal(st.tavily, false);
+  assert.equal(st.exa, false);
+  const p = resultsPrompt([{ url: 'https://a.de', title: 'A', snippet: 'x' }, { url: 'https://b.de', title: 'B', snippet: 'y', date: '2026-11-01' }], { query: 'q' });
+  assert.match(p, /\[1\] A/);
+  assert.match(p, /\[2\] B \(2026-11-01\)/);
+  assert.match(p, /\[2\]\[3\]|\[1\] or/);
+});

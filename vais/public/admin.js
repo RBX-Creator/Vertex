@@ -173,6 +173,7 @@ function paintServer(m, health) {
     <div class="adm-key-meter"><small>${t('Arbeitsspeicher', 'Memory')}: <b>${m.rss} MB</b> / 512 MB · ${t('Höchstwert', 'peak')} ${m.peak} MB · ${t('läuft seit', 'up for')} ${up}</small>
       <span class="adm-bar${pct >= 80 ? ' full' : ''}"><i style="width:${pct}%"></i></span></div>
     <small class="muted">${t(`Ab ${m.limit} MB leert VAIs automatisch Zwischenspeicher.`, `From ${m.limit} MB VAIs clears caches automatically.`)}${m.lastClear ? ` ${t('Zuletzt', 'Last')}: ${when(m.lastClear)}` : ''}</small>
+    <small class="muted">🔎 ${t('Websuche', 'Web search')}: ${m.search ? `Tavily ${m.search.tavily ? '✓' : '–'} · Exa ${m.search.exa ? '✓' : '–'} · Groq ${m.search.groq === false ? '–' : '✓'} · Wikipedia ✓` : '–'}</small>
     <small class="muted">${m.keepAlive?.on ? `☕ ${t('Wachhalten aktiv', 'Keep-alive on')}${m.keepAlive.last ? ` · ${t('zuletzt', 'last')} ${when(m.keepAlive.last)} ${m.keepAlive.ok ? '✓' : '✕'}` : ''}` : `💤 ${t('Wachhalten aus (nur auf Render aktiv)', 'Keep-alive off (only active on Render)')}`}</small>`;
   const list = [...(health ?? [])].sort((a, b) => Number(a.ok) - Number(b.ok));
   $('#server-health').innerHTML = list.length ? list.map((h) => `<li class="${h.ok ? 'ok' : 'bad'}"><span class="adm-health-dot" aria-hidden="true"></span><b>${esc(h.name ?? h.id)}</b>
