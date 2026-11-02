@@ -12,7 +12,7 @@ let server;
 let log = '';
 
 before(async () => {
-  const env = { ...process.env, PORT, DATABASE_URL: `file:${join(mkdtempSync(join(tmpdir(), 'vais-api-')), 'api.db')}`, ADMIN_EMAILS: 'admin@example.com', AUTH_RATE_LIMIT: '1000' };
+  const env = { ...process.env, PORT, DATABASE_URL: `file:${join(mkdtempSync(join(tmpdir(), 'vais-api-')), 'api.db')}`, ADMIN_EMAILS: 'admin@example.com', AUTH_RATE_LIMIT: '1000', SIGNUPS_PER_IP_DAY: '1000', CODES_PER_IP_DAY: '1000' };
   for (const k of ['OPENROUTER_API_KEY', 'GROQ_API_KEY', 'GEMINI_API_KEY', 'CEREBRAS_API_KEY', 'MISTRAL_API_KEY', 'BREVO_API_KEY', 'SMTP_HOST', 'GOOGLE_CLIENT_ID']) delete env[k];
   server = spawn(process.execPath, ['server.js'], { cwd: new URL('..', import.meta.url).pathname, env, stdio: ['ignore', 'pipe', 'pipe'] });
   server.stdout.on('data', (d) => { log += d; });
@@ -536,4 +536,35 @@ test('Wiederaufnahme: Verbindung weg – die Antwort wird trotzdem fertig gespei
   }
   assert.equal(answer.status, 'done');
   assert.ok(answer.text.length > 20);
+});
+
+test('Sicherheit: Anfragen ohne Herkunft, Wegwerf-Adressen, Sicherheits-Kopfzeilen', async () => {
+  // POST ohne Origin/Referer (z. B. Skript mit geklautem Cookie) → abgelehnt
+  const raw = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'x@example.com', password: 'geheim1234' }) });
+  assert.equal(raw.status, 403);
+  const evil = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://evil.example' }, body: '{}' });
+  assert.equal(evil.status, 403);
+  // Wegwerf-Adresse
+  const c = client();
+  assert.equal((await c.json('/api/auth/register', { email: 'bot@mailinator.com', password: 'geheim1234' })).status, 400);
+  // Kopfzeilen
+  const page = await fetch(BASE + '/login');
+  assert.equal(page.headers.get('x-frame-options'), 'DENY');
+  assert.equal(page.headers.get('cross-origin-opener-policy'), 'same-origin');
+  assert.match(page.headers.get('content-security-policy'), /script-src 'self'/);
+  assert.equal(page.headers.get('x-powered-by'), null);
+});
+
+test('Sicherheit: Vorschläge pro Antwort nur einmal berechnen', async () => {
+  const c = await signUp('extras@example.com');
+  const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && !m.auto && m.caps.includes('text'));
+  const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'E' });
+  await stream(c, start.data.id, 'Hallo');
+  const a = await c.json('/api/chat/extras', { chatId: start.data.id, turn: 0 });
+  const b = await c.json('/api/chat/extras', { chatId: start.data.id, turn: 0 });
+  assert.equal(a.status, 200);
+  assert.deepEqual(a.data, b.data);
+  // fremder Chat → nichts
+  const other = await signUp('extras2@example.com');
+  assert.equal((await other.json('/api/chat/extras', { chatId: start.data.id, turn: 0 })).status, 404);
 });

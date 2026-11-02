@@ -55,7 +55,9 @@ app.use((req, res, next) => {
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'same-origin',
     'Content-Security-Policy': sandbox ? SANDBOX_CSP : CSP,
-    'Permissions-Policy': 'camera=(), geolocation=(), payment=(), microphone=(self)',
+    'Permissions-Policy': 'camera=(), geolocation=(), payment=(), usb=(), microphone=(self)',
+    'X-Permitted-Cross-Domain-Policies': 'none',
+    ...(sandbox ? {} : { 'Cross-Origin-Opener-Policy': 'same-origin' }),
   });
   if (!sandbox) res.set('X-Frame-Options', 'DENY');
   if (process.env.COOKIE_SECURE === 'true') res.set('Strict-Transport-Security', 'max-age=15552000');
@@ -65,12 +67,12 @@ app.use((req, res, next) => {
 // Schutz vor Anfragen fremder Webseiten (CSRF): ändernde API-Aufrufe nur von hier
 app.use('/api', (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
-  const origin = req.headers.origin;
-  if (origin) {
-    let host = '';
-    try { host = new URL(origin).host; } catch { /* ungültig */ }
-    if (host !== req.headers.host) return res.status(403).json({ error: t('Anfrage nicht erlaubt.', 'Request not allowed.') });
-  }
+  // Herkunft prüfen: Origin, sonst Referer. Fehlt beides, kommt die Anfrage nicht aus einem Browser auf VAIs
+  // (z. B. ein Skript mit geklautem Cookie) → ablehnen. Moderne Browser schicken bei POST immer Origin.
+  const source = req.headers.origin || req.headers.referer;
+  let host = '';
+  try { host = source ? new URL(source).host : ''; } catch { /* ungültig */ }
+  if (!host || host !== req.headers.host) return res.status(403).json({ error: t('Anfrage nicht erlaubt.', 'Request not allowed.') });
   next();
 });
 

@@ -5,6 +5,7 @@ import { get, run, all, purgeChats } from './db.js';
 import { t, lang } from './i18n.js';
 import { isAdmin, isMod } from './config.js';
 import { sendCode } from './mailer.js';
+import { signupGuard, codeGuard } from './guard.js';
 
 const scryptAsync = promisify(scrypt);
 
@@ -43,13 +44,14 @@ export class HttpError extends Error {
 }
 
 // ── Einmal-Codes ──────────────────────────────────────────────────
-async function issueCode(email, purpose) {
+async function issueCode(email, purpose, req = null) {
   const existing = await get('SELECT sent_at FROM codes WHERE email = ? AND purpose = ?', email, purpose);
   const now = Date.now();
   if (existing && now - existing.sent_at < RESEND_COOLDOWN) {
     const wait = Math.ceil((RESEND_COOLDOWN - (now - existing.sent_at)) / 1000);
     throw new HttpError(429, t(`Bitte warte noch ${wait} Sekunden.`, `Please wait ${wait} more seconds.`), { retryAfter: wait });
   }
+  codeGuard(req, email); // begrenzt: höchstens ein paar Codes pro Adresse/Netz und Tag (gegen Raten und Spam)
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
   await run(`
     INSERT INTO codes (email, purpose, code_hash, expires_at, sent_at, attempts)
@@ -193,6 +195,7 @@ auth.post('/register', wrap(async (req, res) => {
   const user = await get('SELECT id, verified FROM users WHERE email = ?', email);
   if (user?.verified) throw new HttpError(409, t('Zu dieser E-Mail gibt es schon ein Konto. Melde dich an.', 'An account with this email already exists. Please sign in.'));
 
+  if (!user) signupGuard(req, email); // gegen Massen-Konten (Limit-Diebstahl)
   const hash = await hashPassword(password);
   if (user) {
     // Noch nicht bestätigtes Konto: Passwort darf neu gesetzt werden
@@ -200,7 +203,7 @@ auth.post('/register', wrap(async (req, res) => {
   } else {
     await run('INSERT INTO users (email, password_hash, verified, created_at) VALUES (?, ?, 0, ?)', email, hash, Date.now());
   }
-  await issueCode(email, 'verify');
+  await issueCode(email, 'verify', req);
   res.json({ next: 'verify' });
 }));
 
@@ -221,7 +224,7 @@ auth.post('/resend', wrap(async (req, res) => {
   const purpose = req.body?.purpose === 'reset' ? 'reset' : 'verify';
   const user = await get('SELECT verified FROM users WHERE email = ?', email);
   const allowed = purpose === 'verify' ? user && !user.verified : user?.verified;
-  if (allowed) await issueCode(email, purpose);
+  if (allowed) await issueCode(email, purpose, req);
   res.json({ ok: true });
 }));
 
@@ -254,7 +257,7 @@ auth.post('/login', wrap(async (req, res) => {
   }
   failed.delete(email);
   if (!user.verified) {
-    await issueCode(email, 'verify').catch((e) => { if (e.status !== 429) throw e; });
+    await issueCode(email, 'verify', req).catch((e) => { if (e.status !== 429) throw e; });
     return res.json({ next: 'verify' });
   }
   await startSession(res, user.id, req, { notify: true });
@@ -266,7 +269,7 @@ auth.post('/forgot', wrap(async (req, res) => {
   const email = normEmail(req.body?.email);
   if (!validEmail(email)) throw new HttpError(400, t('Bitte gib eine gültige E-Mail-Adresse ein.', 'Please enter a valid email address.'));
   const user = await get('SELECT verified FROM users WHERE email = ?', email);
-  if (user?.verified) await issueCode(email, 'reset');
+  if (user?.verified) await issueCode(email, 'reset', req);
   res.json({ next: 'reset' });
 }));
 
@@ -412,6 +415,7 @@ auth.get('/google/callback', async (req, res) => {
     const email = normEmail(payload.email);
     let user = await get('SELECT id, verified FROM users WHERE email = ?', email);
     if (!user) {
+      signupGuard(req, email);
       // Neues Konto: Passwort ist ein Zufallswert (später über „Passwort vergessen“ setzbar)
       await run('INSERT INTO users (email, password_hash, verified, created_at) VALUES (?, ?, 1, ?)', email, await hashPassword(randomBytes(32).toString('hex')), Date.now());
       user = await get('SELECT id, verified FROM users WHERE email = ?', email);

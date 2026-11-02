@@ -22,9 +22,9 @@
     "@libsql/client": "^0.18.0",
     "dompurify": "^3.2.4",
     "express": "^5.1.0",
-    "katex": "^0.16.22",
+    "katex": "^0.19.1",
     "marked": "^15.0.12",
-    "nodemailer": "^7.0.0",
+    "nodemailer": "^10.3.1",
     "pdfjs-dist": "^4.10.38",
     "qrcode": "^1.5.4",
     "web-push": "^3.6.7"

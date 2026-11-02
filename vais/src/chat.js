@@ -2,6 +2,7 @@ import express, { Router } from 'express';
 import { maintenance, maintenanceText, blockDuringMaintenance } from './maintenance.js';
 import { isStaff } from './config.js';
 import { registerCache } from './stability.js';
+import { helperQuota, ipAnswerQuota, undoIpAnswer } from './guard.js';
 import { randomBytes, createHash } from 'node:crypto';
 import { get, run, all, purgeChats, getSetting, logEvent } from './db.js';
 import { t } from './i18n.js';
@@ -353,7 +354,11 @@ chat.post('/stream', wrap(async (req, res) => {
   // Jugendschutz: die neue Nachricht prüfen, bevor ein Modell sie bekommt (nicht bei „ok“ usw.)
   const lastText = typeof display?.text === 'string' && display.text.trim() ? display.text : plain(clean.at(-1));
   const blocked = quick ? null : await checkText(lastText, row.modality === 'image' ? 'image' : 'prompt');
-  const charged = blocked ? null : await charge(req.user, kind);
+  // Viele Konten aus demselben Netz (Limit-Diebstahl): großzügige Grenze pro Netz und Tag
+  if (!blocked && kind && !isStaff(req.user)) ipAnswerQuota(req.ip, kind, L[kind]);
+  let charged;
+  try { charged = blocked ? null : await charge(req.user, kind); } catch (err) { if (kind) undoIpAnswer(req.ip, kind); throw err; }
+  const giveBack = async () => { await refund(req.user, charged); if (charged) undoIpAnswer(req.ip, kind); }; // nichts geantwortet → zählt nicht
   const personal = await personalFor(req.user.id);
   if (row.incognito) { personal.memoryOn = false; personal.memories = []; } // Inkognito: nichts merken
   const custom = row.modality === 'image' ? null : instructionsPrompt(personal.instructions);
@@ -421,7 +426,7 @@ chat.post('/stream', wrap(async (req, res) => {
     ? answerKey(model, row.modality ?? 'auto', firstQuestion) : null;
   const hit = cacheKey && !req.body?.fresh ? await cachedAnswer(cacheKey) : null;
   if (hit) {
-    await refund(req.user, charged); // zählt nicht
+    await giveBack(); // zählt nicht
     cached = true;
     out(`${JSON.stringify({ cached: true })}\n`);
     for (let i = 0; i < hit.length; i += 24) {
@@ -547,11 +552,11 @@ chat.post('/stream', wrap(async (req, res) => {
     }
     out(`${JSON.stringify({ done: true })}\n`);
     const got = text || images.length || reaction;
-    if (!got) await refund(req.user, charged);
+    if (!got) await giveBack();
     if (cacheKey && text && !fallback && !/stehen geblieben|stopped here/.test(text.slice(-160))) storeAnswer(cacheKey, model, text);
     await save(side === 1 ? 1 : 0, text, got ? 'done' : 'error', got ? null : t('Das Modell hat keine Antwort geliefert.', 'The model returned no answer.'));
   } catch (err) {
-    if (!text && !images.length && !reaction) await refund(req.user, charged); // keine Antwort → Punkte zurück
+    if (!text && !images.length && !reaction) await giveBack(); // keine Antwort → Punkte zurück
     if (controller.signal.aborted) {
       await save(side === 1 ? 1 : 0, text, text || images.length ? 'done' : 'stopped');
     } else {
@@ -687,10 +692,19 @@ chat.get('/leaderboard', wrap(async (req, res) => {
 }));
 
 // ── Extras nach einer Antwort: Titel (beim ersten Mal) und 3 Folgefragen ──
+const extrasDone = new Map(); // 'chat:turn' → Ergebnis (pro Antwort nur EINE Modell-Anfrage, auch wenn jemand dauernd fragt)
+registerCache('extras', () => extrasDone.clear());
+setInterval(() => { const now = Date.now(); for (const [k, v] of extrasDone) if (now - v.at > 30 * 60 * 1000) extrasDone.delete(k); }, 10 * 60 * 1000).unref();
 chat.post('/extras', wrap(async (req, res) => {
   const { chatId, turn } = req.body ?? {};
   const row = await get('SELECT id, mode, modality, title, renamed, incognito FROM chats WHERE id = ? AND user_id = ?', String(chatId ?? ''), req.user.id);
   if (!row || !Number.isInteger(turn)) throw new HttpError(404, t('Chat nicht gefunden.', 'Chat not found.'));
+  const memoKey = `${row.id}:${turn}`;
+  const memo = extrasDone.get(memoKey);
+  if (memo) return res.json(memo.data);
+  if (!demoMode) helperQuota(req, 'extras');
+  const realJson = res.json.bind(res);
+  res.json = (data) => { if (res.statusCode < 400) extrasDone.set(memoKey, { at: Date.now(), data }); return realJson(data); };
   const msgs = await all('SELECT side, content FROM messages WHERE chat_id = ? AND turn = ? ORDER BY side', row.id, turn);
   const question = msgs.find((m) => m.side === -1)?.content ?? '';
   const answer = msgs.find((m) => m.side === 0)?.content ?? '';
@@ -782,6 +796,7 @@ chat.post('/tts', wrap(async (req, res) => {
   if (!text) throw new HttpError(400, t('Kein Text.', 'No text.'));
   const L = await limitSettings();
   limit(req.user.id, L.burst * 4);
+  helperQuota(req, 'tts');
   const key = `${voice}:${text}`;
   let buf = ttsCache.get(key);
   const apiKey = process.env.POLLINATIONS_API_KEY?.trim();
@@ -816,6 +831,7 @@ chat.post('/transcribe', express.raw({ type: ['audio/*', 'video/webm', 'video/mp
   if (!Buffer.isBuffer(buf) || buf.length < 500) return res.json({ text: '' }); // zu kurz/leer
   const L = await limitSettings();
   limit(req.user.id, L.burst * 2);
+  helperQuota(req, 'transcribe');
   const lang = String(req.query.lang ?? '').slice(0, 5);
   try {
     const text = await transcribe(buf, String(req.headers['content-type'] ?? ''), lang);
@@ -836,6 +852,7 @@ chat.post('/improve', wrap(async (req, res) => {
   if (text.length < 2) throw new HttpError(400, t('Schreib zuerst etwas.', 'Write something first.'));
   const L = await limitSettings();
   limit(req.user.id, L.burst);
+  helperQuota(req, 'improve');
   if (demoMode) return res.json({ text: `${text}\n\nBitte antworte klar gegliedert, mit einem kurzen Beispiel und einer Zusammenfassung am Ende.` });
   const all = (await listModels()).filter((m) => m.caps.includes('text') && !m.paid && !m.busy);
   const model = TRANSLATE_PREFERENCE.map((re) => all.find((m) => re.test(m.id))).find(Boolean) ?? (await helperModel());
@@ -871,6 +888,7 @@ chat.post('/translate', wrap(async (req, res) => {
   limit(req.user.id, L.burst);
   const unsafe = await checkText(text, 'prompt');
   if (unsafe) throw new HttpError(400, unsafe.message.replace(/\*\*/g, ''));
+  if (!isStaff(req.user)) ipAnswerQuota(req.ip, 'text', L.text);
   const charged = await charge(req.user, 'text');
   try {
     if (demoMode) return res.json({ text: `[${to}] ${text}` });
