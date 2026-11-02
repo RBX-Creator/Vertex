@@ -134,7 +134,7 @@ const AUTO_RULES = [
 ];
 const AUTO_QUICK = [/^groq:.*llama-3\.1-8b/, /^groq:openai\/gpt-oss-20b$/, /^groq:meta-llama\/llama-4-scout/, /^cerebras:/];
 const AUTO_GENERAL = [/^groq:openai\/gpt-oss-120b$/, /^groq:moonshotai\/kimi-k2/, /^cerebras:gpt-oss-120b$/, /^groq:.*llama-3\.3-70b/, /^gemini:gemini-2\.5-flash$/, /^groq:qwen\/qwen3/, /^groq:openai\/gpt-oss-20b$/];
-export async function autoPick(text = '', { images = false, modality = 'auto' } = {}) {
+export async function autoPick(text = '', { images = false, modality = 'auto', boost = false } = {}) {
   const all = (await listModels()).filter((m) => !m.paid);
   const free = all.filter((m) => !m.busy);
   const find = (prefs, cap) => prefs.map((re) => free.find((m) => re.test(m.id) && m.caps.includes(cap))).find(Boolean);
@@ -148,6 +148,11 @@ export async function autoPick(text = '', { images = false, modality = 'auto' } 
     if (!r.test.test(q)) continue;
     const m = find(r.prefer, r.cap) ?? (r.cap !== 'text' ? any(r.cap) : null);
     if (m) return { model: m, kind: r.kind, label: r.label() };
+  }
+  if (boost) {
+    // „Genauer“: das stärkste freie Modell
+    const m = find(AUTO_GENERAL, modality === 'code' ? 'code' : 'text');
+    if (m) return { model: m, kind: 'boost', label: t('Genauer', 'More detail') };
   }
   if (q.length < 50 && !/\?.*\?/.test(q)) {
     const m = find(AUTO_QUICK, 'text');
@@ -313,7 +318,7 @@ chat.post('/stream', wrap(async (req, res) => {
   let auto = null; // Auto-Modus: welches Modell und warum
   if (model === 'auto') {
     const ask = typeof display?.text === 'string' && display.text.trim() ? display.text : plain(clean.at(-1));
-    const pick = await autoPick(ask, { images: hasImages, modality: row.modality });
+    const pick = await autoPick(ask, { images: hasImages, modality: row.modality, boost: !!req.body?.boost });
     if (!pick) throw new HttpError(503, t('Gerade ist kein passendes Modell frei. Versuche es gleich noch einmal.', 'No suitable model is free right now. Try again in a moment.'));
     model = pick.model.id;
     auto = { id: pick.model.id, name: pick.model.name, maker: pick.model.maker, icon: pick.model.icon, kind: pick.kind, why: pick.label };

@@ -6,6 +6,7 @@ import { openTeam, refreshTeamBadge } from './team.js';
 import { Listener, canRecord, toText, setAudioSession, hasAudioSession } from './listen.js';
 import { OnlineVoice } from './voice-out.js';
 import { buildDeck, parseSlides } from './deck.js';
+import { applyFx, fxPrefs, setBusy, sendOrb, runEgg, logoTap, enableTilt } from './fx.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 translateDom();
@@ -546,7 +547,9 @@ function resetChat() {
   updateSend();
 }
 
-el.newChat.addEventListener('click', () => { go(''); el.prompt.focus(); });
+el.newChat.addEventListener('click', () => { go(''); el.prompt.focus(); setTimeout(saveLast, 50); });
+// Logo 7× schnell antippen → 🕳️
+$('.topbar .brand')?.addEventListener('click', (e) => { if (logoTap()) { e.preventDefault(); haptic('success'); } });
 
 // ── Wischgesten im Chat: nach rechts = Menü, nach links = neuer Chat (abschaltbar) ──
 const swipeOn = () => { try { return localStorage.getItem('vais.swipe') !== 'off'; } catch { return true; } };
@@ -578,6 +581,17 @@ el.stage.addEventListener('touchend', (e) => {
     toast(t('Neuer Chat', 'New chat'));
   }
 }, { passive: true });
+$('#set-fxlogo').addEventListener('change', (e) => { fxPrefs.set('logo', e.target.checked); haptic('tap'); });
+$('#set-sky').addEventListener('change', (e) => { fxPrefs.set('sky', e.target.checked); haptic('tap'); });
+$('#set-tilt').addEventListener('change', async (e) => {
+  if (e.target.checked) {
+    const ok = await enableTilt(); // iPhone fragt einmal nach Erlaubnis für die Bewegungssensoren
+    if (!ok) { e.target.checked = false; toast(t('Ohne Erlaubnis für Bewegung geht der 3D-Effekt nicht.', 'The 3D effect needs motion permission.')); return; }
+    toast(t('3D an – bewege dein Handy leicht 📱', '3D on – tilt your phone a little 📱'));
+  } else fxPrefs.set('tilt', false);
+  haptic('tap');
+});
+$('#set-imgq').addEventListener('change', (e) => { try { localStorage.setItem('vais.imgq', e.target.value); } catch { /* egal */ } haptic('tap'); });
 $('#set-haptics').addEventListener('change', (e) => { try { localStorage.setItem('vais.haptics', e.target.checked ? 'on' : 'off'); } catch { /* egal */ } if (e.target.checked) haptic('success'); });
 $('#set-swipe').addEventListener('change', (e) => { try { localStorage.setItem('vais.swipe', e.target.checked ? 'on' : 'off'); } catch { /* egal */ } haptic('tap'); });
 
@@ -762,6 +776,7 @@ function updateCard(turnIndex, side) {
   const card = cardEl(turnIndex, side);
   if (!card) return;
   const isLast = turnIndex === chat.turns.length - 1;
+  card.classList.toggle('typing-live', a.status === 'streaming' && !!a.text);
   paintLabel(card, side);
   const actBtn = (name) => card.querySelector(`.card-actions [data-act="${name}"], .card-foot [data-act="${name}"]`);
   actBtn('regen').disabled = !isLast || a.status === 'streaming';
@@ -831,6 +846,10 @@ function updateCard(turnIndex, side) {
       : `<div class="typing" aria-label="${t('Schreibt …', 'Typing …')}"><span></span><span></span><span></span></div>`;
   } else {
     body.innerHTML = markdown(a.text);
+    // Turbo: kurze Frage → blitzschnelles Modell; auf Wunsch genauer mit dem stärksten Modell
+    if (a.status === 'done' && isLast && ['quick', 'general'].includes(a.auto?.kind) && !a.boosted) {
+      body.insertAdjacentHTML('beforeend', `<button type="button" class="boost-btn" data-act="boost">🚀 ${t('Genauer mit stärkerem Modell', 'More detail with a stronger model')}</button>`);
+    }
   }
   enhance(body);
 }
@@ -919,6 +938,34 @@ function renderSteps(card, a) {
 
 // Beim Streamen höchstens einmal pro Frame neu zeichnen
 const pending = new Set();
+// Weiches Tippen: Text kommt in Brocken – wir blenden ihn gleichmäßig Zeichen für Zeichen ein
+// (holt schnell auf, wenn viel auf einmal kommt; bei „weniger Bewegung“ sofort)
+const smoothText = new Map();
+function feedText(a, chunk, turnIndex, side) {
+  if (quietMotion?.matches || document.hidden) { a.text += chunk; return scheduleUpdate(turnIndex, side); }
+  let st = smoothText.get(a);
+  if (!st) { st = { buf: '', raf: 0 }; smoothText.set(a, st); }
+  st.buf += chunk;
+  const tick = () => {
+    st.raf = 0;
+    if (!st.buf) return;
+    const n = Math.max(2, Math.ceil(st.buf.length / 7));
+    a.text += st.buf.slice(0, n);
+    st.buf = st.buf.slice(n);
+    scheduleUpdate(turnIndex, side);
+    if (st.buf) st.raf = requestAnimationFrame(tick);
+  };
+  if (!st.raf) st.raf = requestAnimationFrame(tick);
+}
+function flushText(a) {
+  const st = smoothText.get(a);
+  if (!st) return;
+  if (st.raf) cancelAnimationFrame(st.raf);
+  a.text += st.buf;
+  smoothText.delete(a);
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) for (const [a] of smoothText) flushText(a); });
+
 function scheduleUpdate(turnIndex, side) {
   const key = `${turnIndex}:${side}`;
   if (pending.has(key)) return;
@@ -931,7 +978,7 @@ function scheduleUpdate(turnIndex, side) {
   });
 }
 
-async function runSide(turnIndex, side, { fresh = false } = {}) {
+async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
   const chat = state.chat;
   const a = chat.turns[turnIndex].answers[side];
   Object.assign(a, { text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0, thinkStart: 0, thinkOpen: false, sources: [], sourcesOpen: false, images: [], reaction: null, fallback: null, auto: null, cached: false, summarized: null, startedAt: Date.now(), buildMs: 0 });
@@ -946,7 +993,7 @@ async function runSide(turnIndex, side, { fresh = false } = {}) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chatId: chat.id, side, turn: turnIndex, messages: buildMessages(turnIndex, side), fresh,
+        chatId: chat.id, side, turn: turnIndex, messages: buildMessages(turnIndex, side), fresh, boost,
         display: { text: chat.turns[turnIndex].user, attachments: chat.turns[turnIndex].attachments ?? [] },
       }),
       signal: ctrl.signal,
@@ -976,8 +1023,7 @@ async function runSide(turnIndex, side, { fresh = false } = {}) {
         }
         if (msg.t) {
           if (a.thinkStart && !a.thinkMs) a.thinkMs = Date.now() - a.thinkStart;
-          a.text += msg.t;
-          scheduleUpdate(turnIndex, side);
+          feedText(a, msg.t, turnIndex, side);
         }
         if (msg.step) { a.steps.push(msg.step); scheduleUpdate(turnIndex, side); }
         if (msg.sources) { a.sources = msg.sources; scheduleUpdate(turnIndex, side); }
@@ -994,12 +1040,14 @@ async function runSide(turnIndex, side, { fresh = false } = {}) {
         if (msg.done) finished = true;
       }
     }
+    flushText(a);
     if (!finished) throw new Error(t('Die Verbindung wurde unterbrochen.', 'The connection was interrupted.'));
     const got = a.text || a.images?.length || a.reaction;
     a.status = got ? 'done' : 'error';
     if (!got) a.error = t('Das Modell hat keine Antwort geliefert.', 'The model returned no answer.');
     if (document.visibilityState === 'visible') haptic(got ? 'success' : 'error'); // Antwort fertig
   } catch (err) {
+    flushText(a);
     const agentSide = chat.mode === 'agent' || (chat.labels?.[side] === 'Agent X');
     if (ctrl.signal.aborted) a.status = a.text || a.images?.length ? 'done' : 'stopped';
     else if (err instanceof TypeError || /unterbrochen|interrupted|network|load failed/i.test(err.message)) {
@@ -1030,6 +1078,8 @@ async function send() {
   const text = el.prompt.value.trim();
   const attachments = state.pending;
   if (!text && !attachments.length) return;
+  // Geheime Befehle wie „/galaxie“ – laufen nur hier, werden nicht gesendet
+  if (!attachments.length && runEgg(text)) { el.prompt.value = ''; autosize(); updateSend(); haptic('success'); return; }
   if (busy()) return queueMessage();
   if (offline || navigator.onLine === false) return queueOffline();
   if (pendingReads) return toast(t('Anhänge werden noch geladen …', 'Attachments are still loading …'));
@@ -1076,6 +1126,7 @@ async function send() {
   const chat = state.chat;
   historyDirty = true;
   haptic('send');
+  sendOrb(el.send);
   recognition?.stop();
   el.prompt.value = '';
   state.pending = [];
@@ -1533,6 +1584,12 @@ el.thread.addEventListener('click', async (e) => {
     enhance($('#expand-body'));
     $('#expand').hidden = false;
     $('#expand [data-close]').focus();
+  } else if (act === 'boost') {
+    if (turnIndex !== state.chat.turns.length - 1 || a.status === 'streaming' || busy()) return;
+    const chat = state.chat;
+    await runSide(turnIndex, side, { fresh: true, boost: true });
+    if (chat.turns[turnIndex]?.answers[side]) chat.turns[turnIndex].answers[side].boosted = true;
+    if (state.chat === chat) { updateCard(turnIndex, side); afterTurn(); }
   } else if (act === 'regen') {
     if (turnIndex !== state.chat.turns.length - 1 || a.status === 'streaming') return;
     el.vote.hidden = true;
@@ -2530,10 +2587,13 @@ const MAX_ATTACHMENTS = 4;
 const MAX_FILE_BYTES = 200_000;
 let pendingReads = 0;
 
-// Bilder verkleinern (max. 1280 px, JPEG), damit sie schnell hochgeladen sind
+// Bilder verkleinern, damit sie schnell hochgeladen sind (einstellbar: Daten sparen / Normal / Beste Qualität)
+const IMAGE_QUALITY = { saver: [1024, 0.72], normal: [1280, 0.82], best: [2048, 0.9] };
+const imageQuality = () => { try { return IMAGE_QUALITY[localStorage.getItem('vais.imgq')] ? localStorage.getItem('vais.imgq') : 'normal'; } catch { return 'normal'; } };
 async function shrinkImage(file) {
+  const [maxSide, quality] = IMAGE_QUALITY[imageQuality()];
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
@@ -2542,7 +2602,9 @@ async function shrinkImage(file) {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close?.();
-  return canvas.toDataURL('image/jpeg', 0.82);
+  let url = canvas.toDataURL('image/jpeg', quality);
+  if (url.length > 2_800_000) url = canvas.toDataURL('image/jpeg', 0.7); // Server-Grenze nicht überschreiten
+  return url;
 }
 
 // Text aus PDFs lesen (pdf.js wird erst bei Bedarf geladen)
@@ -2657,6 +2719,7 @@ function autosize() {
 
 function updateSend() {
   const isBusy = busy();
+  setBusy(isBusy);
   const hasText = !!el.prompt.value.trim() || state.pending.length > 0;
   // Während die KI antwortet: mit Text → vormerken, ohne Text → stoppen
   const stop = isBusy && !hasText;
@@ -2738,6 +2801,29 @@ function go(hash) {
   route();
 }
 
+// ── Da weitermachen, wo man zuletzt war (Chat + Scroll-Position) ─────
+const LAST_KEY = 'vais.last';
+let restoreScroll = null; // { id, top } – beim Laden dieses Chats dorthin scrollen
+function saveLast() {
+  if (offline) return;
+  try {
+    const id = state.chat?.incognito ? null : state.chat?.id ?? null;
+    localStorage.setItem(LAST_KEY, JSON.stringify({ id, top: id ? Math.round(el.stage.scrollTop) : 0, atBottom: el.stage.scrollHeight - el.stage.scrollTop - el.stage.clientHeight < 80, at: Date.now() }));
+  } catch { /* egal */ }
+}
+let lastTimer;
+el.stage.addEventListener('scroll', () => { clearTimeout(lastTimer); lastTimer = setTimeout(saveLast, 400); }, { passive: true });
+document.addEventListener('visibilitychange', () => { if (document.hidden) saveLast(); });
+window.addEventListener('pagehide', saveLast);
+function resumeLast() {
+  let last = null;
+  try { last = JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); } catch { /* egal */ }
+  if (!last?.id || Date.now() - (last.at ?? 0) > 14 * 24 * 3600 * 1000) return false;
+  restoreScroll = last.atBottom ? null : { id: last.id, top: last.top };
+  history.replaceState(null, '', `#c/${encodeURIComponent(last.id)}`);
+  return true;
+}
+
 async function route() {
   const h = location.hash;
   if (h.startsWith('#g/')) return; // Team-Chat (öffnet sich als eigenes Fenster)
@@ -2806,7 +2892,10 @@ async function loadChat(id) {
   renderControls();
   updateSend();
   afterTurn();
-  requestAnimationFrame(() => { el.stage.scrollTop = el.stage.scrollHeight; });
+  requestAnimationFrame(() => {
+    if (restoreScroll?.id === data.id) { el.stage.scrollTop = restoreScroll.top; restoreScroll = null; } else el.stage.scrollTop = el.stage.scrollHeight;
+    saveLast();
+  });
   if (!data.shared && data.turns.some((tn) => tn.answers.some((a) => a.status === 'streaming'))) watchBackground(data.id, data.mode === 'agent');
 }
 
@@ -3325,6 +3414,10 @@ window.addEventListener('appinstalled', () => { installPrompt = null; toast(t('V
 
 function paintSettings() {
   $('#set-haptics').checked = hapticsOn();
+  $('#set-fxlogo').checked = fxPrefs.logo();
+  $('#set-sky').checked = fxPrefs.sky();
+  $('#set-tilt').checked = fxPrefs.tilt();
+  $('#set-imgq').value = imageQuality();
   $('#set-swipe').checked = swipeOn();
   const theme = getTheme();
   document.querySelectorAll('[data-theme-opt]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.themeOpt === theme)));
@@ -3739,9 +3832,14 @@ async function init() {
   if (state.picks[0] && state.picks[0] === state.picks[1]) state.picks[1] = normal.find((m) => m.id !== state.picks[0])?.id ?? null;
   fitPicks();
   renderControls();
+  applyFx();
+  if (!location.hash) resumeLast(); // App neu geöffnet → zum letzten Chat
   await route();
   const seen = Number(store.get('vais.news', 0));
-  if (!tourDone() && !offline && !location.hash) {
+  if (user.welcome && !offline) {
+    store.set('vais.news', LATEST());
+    setTimeout(() => showWelcome(user.email), 300);
+  } else if (!tourDone() && !offline && !location.hash) {
     store.set('vais.news', LATEST()); // Neue Nutzer bekommen die Tour statt der Neuigkeiten
     setTimeout(startTour, 500);
   } else if (!offline) {
@@ -3750,6 +3848,46 @@ async function init() {
       showAnnouncements();
     }, 800);
   }
+}
+
+// ── Willkommens-Paket: nur ein einziges Mal pro Konto (der Server merkt es sich) ──
+function showWelcome(email) {
+  post('/api/auth/welcomed', {}).catch(() => {}); // sofort merken – auch wenn man die Seite gleich schließt
+  const raw = String(email).split('@')[0].split(/[._\-+\d]/).find(Boolean) || '';
+  const name = raw ? raw[0].toUpperCase() + raw.slice(1, 20) : '';
+  const ideas = [
+    ['🌐', t('Bau mir eine Webseite für mein Hobby', 'Build me a website for my hobby'), t('Agent X fragt kurz nach und baut sie.', 'Agent X asks a few questions and builds it.')],
+    ['🧠', t('Erklär mir schwarze Löcher, als wäre ich 12', 'Explain black holes like I am 12'), t('Verständlich, mit Beispielen.', 'Easy to follow, with examples.')],
+    ['📽️', t('Mach mir eine Präsentation über den Mond', 'Make me a presentation about the moon'), t('Schöne Folien zum Wischen.', 'Beautiful slides to swipe through.')],
+  ];
+  const logo = $('.topbar .brand svg')?.outerHTML ?? '';
+  const box = document.createElement('div');
+  box.className = 'welcome';
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-modal', 'true');
+  box.innerHTML = `
+    <div class="welcome-sky" aria-hidden="true"></div>
+    <div class="welcome-in">
+      <div class="welcome-logo" aria-hidden="true">${logo}</div>
+      <h2>${name ? t(`Willkommen, ${escapeHtml(name)}!`, `Welcome, ${escapeHtml(name)}!`) : t('Willkommen bei VAIs!', 'Welcome to VAIs!')}</h2>
+      <p class="welcome-sub">${t('Die besten KI-Modelle – kostenlos, an einem Ort. Probier gleich eins davon:', 'The best AI models – free, in one place. Try one of these:')}</p>
+      <div class="welcome-ideas">${ideas.map(([ico, q, sub], i) => `<button type="button" class="welcome-idea" style="--d:${0.35 + i * 0.12}s" data-idea="${i}"><span class="wi-ico">${ico}</span><span><b>${escapeHtml(q)}</b><small>${escapeHtml(sub)}</small></span></button>`).join('')}</div>
+      <button type="button" class="btn welcome-go">${t('Los geht’s ✨', 'Let’s go ✨')}</button>
+    </div>`;
+  document.body.append(box);
+  haptic('success');
+  const close = (prompt) => {
+    box.classList.add('out');
+    setTimeout(() => box.remove(), 350);
+    if (prompt) { el.prompt.value = prompt; autosize(); updateSend(); el.prompt.focus(); }
+    else if (!tourDone()) setTimeout(startTour, 450);
+  };
+  box.querySelector('.welcome-go').addEventListener('click', () => close());
+  box.querySelectorAll('[data-idea]').forEach((b) => b.addEventListener('click', () => {
+    if (!tourDone()) try { localStorage.setItem('vais_tour_done', '1'); } catch { /* egal */ }
+    close(ideas[Number(b.dataset.idea)][1]);
+  }));
+  box.querySelector('.welcome-go').focus();
 }
 
 $('#set-tour').addEventListener('click', () => {

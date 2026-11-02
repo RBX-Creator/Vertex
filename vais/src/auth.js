@@ -430,7 +430,15 @@ auth.get('/google/callback', async (req, res) => {
 auth.get('/me', wrap(async (req, res) => {
   const user = await currentUser(req);
   if (!user) return res.status(401).json({ error: t('Nicht angemeldet.', 'Not signed in.') });
-  res.json({ user: { email: user.email, admin: isAdmin(user) || undefined, mod: isMod(user) || undefined } });
+  const welcomed = (await get('SELECT welcomed FROM users WHERE id = ?', user.id))?.welcomed;
+  res.json({ user: { email: user.email, admin: isAdmin(user) || undefined, mod: isMod(user) || undefined, welcome: !welcomed || undefined } });
+}));
+// Willkommens-Paket gesehen → nie wieder zeigen (auf keinem Gerät)
+auth.post('/welcomed', wrap(async (req, res) => {
+  const user = await currentUser(req);
+  if (!user) throw new HttpError(401, t('Nicht angemeldet.', 'Not signed in.'));
+  await run('UPDATE users SET welcomed = 1 WHERE id = ?', user.id);
+  res.json({ ok: true });
 }));
 
 // Fehler einheitlich als JSON zurückgeben

@@ -5,7 +5,7 @@
 const CACHE = 'vais-v5';
 const SHELL = ['/waking.html', '/waking.js', '/boot.js', '/fonts.css', '/styles.css', '/logo.svg', '/icons/app-192.png'];
 // Für den Offline-Modus zusätzlich (Fehler hier stoppen die Installation nicht)
-const APP_FILES = ['/app.css', '/app.js', '/i18n.js', '/render.js', '/tour.js', '/changelog.js', '/team.js', '/listen.js', '/voice-out.js', '/deck.js', '/vendor/marked.js', '/vendor/purify.js', '/vendor/hljs.js', '/vendor/katex.js', '/vendor/katex.css', '/icons/app-512.png'];
+const APP_FILES = ['/app.css', '/app.js', '/i18n.js', '/render.js', '/tour.js', '/changelog.js', '/team.js', '/listen.js', '/voice-out.js', '/deck.js', '/fx.js', '/vendor/marked.js', '/vendor/purify.js', '/vendor/hljs.js', '/vendor/katex.js', '/vendor/katex.css', '/icons/app-512.png'];
 const WAKE_AFTER = 4500; // so lange warten wir auf den Server, bevor die Aufwach-Seite kommt
 
 self.addEventListener('install', (event) => {

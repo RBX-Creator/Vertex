@@ -3,6 +3,16 @@ import { t } from './i18n.js';
 
 export const CHANGES = () => [
   {
+    id: 14, date: '2026-11-02',
+    items: [
+      ['🕳️', t('Lebendiges Schwarzes Loch', 'Living black hole'), t('Das Logo atmet, dreht sich, während die KI denkt, und schluckt deine Nachricht beim Senden.', 'The logo breathes, spins while the AI thinks and swallows your message when you send.')],
+      ['✍️', t('Weiches Tippen', 'Smooth typing'), t('Antworten fließen gleichmäßig herein – mit leuchtendem Cursor.', 'Answers flow in smoothly – with a glowing cursor.')],
+      ['🌌', t('Himmel nach Tageszeit', 'Sky by time of day'), t('Morgens warm, abends Sonnenuntergang, nachts Sterne. Dazu 3D-Karten (Beta) in den Einstellungen.', 'Warm in the morning, sunset in the evening, stars at night. Plus 3D cards (beta) in settings.')],
+      ['⚡', t('Schneller & stabiler', 'Faster & more stable'), t('Die App öffnet dort, wo du warst. Antworten werden auch bei Funkloch fertig, gleiche Fragen kommen sofort, und kaputte Modelle werden automatisch ausgeblendet.', 'The app opens where you left off. Answers finish even if your connection drops, repeated questions answer instantly and broken models are hidden automatically.')],
+      ['🤫', t('Geheime Befehle', 'Secret commands'), t('Es gibt ein paar versteckte Befehle, die mit „/“ anfangen … und das Logo mag es, oft angetippt zu werden.', 'There are a few hidden commands starting with “/” … and the logo likes being tapped a lot.')],
+    ],
+  },
+  {
     id: 13, date: '2026-11-02',
     items: [
       ['✨', t('Auto-Modus', 'Auto mode'), t('Wähl „✨ Automatisch“ als Modell – VAIs nimmt für jede Frage das passende: Code, Mathe, Aktuelles, Kreatives oder schnell bei kurzen Fragen.', 'Pick “✨ Automatic” as the model – VAIs chooses the right one for every question: code, maths, current info, creative or fast for short questions.')],
