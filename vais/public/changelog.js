@@ -3,6 +3,12 @@ import { t } from './i18n.js';
 
 export const CHANGES = () => [
   {
+    id: 12, date: '2026-11-02',
+    items: [
+      ['📊', t('Tageslimit ohne Punkte', 'Daily limit without points'), t('Statt Punkten hast du jetzt pro Tag eine feste Anzahl Antworten, Websuchen, Bilder und Agent-X-Aufträge – jede Art mit eigenem Balken in deiner Statistik.', 'Instead of points you now get a fixed number of answers, web searches, images and Agent X tasks per day – each with its own bar in your stats.')],
+    ],
+  },
+  {
     id: 11, date: '2026-11-01',
     items: [
       ['🏗️', t('Webseiten wie vom Profi', 'Websites like a pro'), t('Agent X fragt erst nach, was du willst (Antworten zum Antippen), und baut die Seite dann Schritt für Schritt: Entwurf, Design-System, jeder Abschnitt einzeln, Prüfung. Größer, schöner – und ohne erfundene Fake-Inhalte.', 'Agent X first asks what you want (tap to answer), then builds the site step by step: draft, design system, each section on its own, check. Bigger, nicer – and without made-up fake content.')],

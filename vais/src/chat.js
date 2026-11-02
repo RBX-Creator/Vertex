@@ -10,7 +10,7 @@ import { profile, personalFor, instructionsPrompt, remember } from './profile.js
 import { push, addReminder, notifyUser } from './push.js';
 import { sites } from './sites.js';
 import { checkText } from './safety.js';
-import { limitSettings, charge, refund, usageOf } from './limits.js';
+import { limitSettings, charge, refund, usageOf, usageHistory } from './limits.js';
 import { sourcesFromText } from './models.js';
 import { pickAvailable, isBusy } from './models.js';
 import { generateImage, editImage, helperModel, complete, transcribe } from './models.js';
@@ -271,18 +271,17 @@ chat.post('/stream', wrap(async (req, res) => {
   const turnNo = Number.isInteger(turn) && turn >= 0 && turn < 1000 ? turn : null;
   const L = await limitSettings();
   limit(req.user.id, L.burst);
-  // Punkte fürs Tageslimit: je nach Art der Antwort
+  // Tageslimit: zählt je nach Art der Antwort (Antwort, Websuche, Bild, Agent X)
   const info = model === 'agent' ? null : await findModel(model);
-  const quick = model === 'agent' ? quickReaction(clean) : null; // „ok“, „danke“ … → nur Emoji, kostet nichts
-  const [cost, what] = quick ? [0, ''] : model === 'agent' ? [L.costAgent, 'Agent X']
-    : row.modality === 'image' ? [L.costImage, t('Ein Bild', 'An image')]
-      : info?.paid ? [L.costPremium, t('Ein Premium-Modell', 'A premium model')]
-        : row.modality === 'web' || info?.caps.includes('web') ? [L.costWeb, t('Websuche', 'Web search')]
-          : [L.costText, t('Eine Antwort', 'An answer')];
+  const quick = model === 'agent' ? quickReaction(clean) : null; // „ok“, „danke“ … → nur Emoji, zählt nicht
+  const kind = quick ? null : model === 'agent' ? 'agent'
+    : row.modality === 'image' ? 'image'
+      : row.modality === 'web' || info?.caps.includes('web') ? 'web'
+        : 'text';
   // Jugendschutz: die neue Nachricht prüfen, bevor ein Modell sie bekommt (nicht bei „ok“ usw.)
   const lastText = typeof display?.text === 'string' && display.text.trim() ? display.text : plain(clean.at(-1));
   const blocked = quick ? null : await checkText(lastText, row.modality === 'image' ? 'image' : 'prompt');
-  const charged = blocked ? 0 : await charge(req.user, cost, what);
+  const charged = blocked ? null : await charge(req.user, kind);
   const personal = await personalFor(req.user.id);
   if (row.incognito) { personal.memoryOn = false; personal.memories = []; } // Inkognito: nichts merken
   const custom = row.modality === 'image' ? null : instructionsPrompt(personal.instructions);
@@ -765,7 +764,7 @@ chat.post('/translate', wrap(async (req, res) => {
   limit(req.user.id, L.burst);
   const unsafe = await checkText(text, 'prompt');
   if (unsafe) throw new HttpError(400, unsafe.message.replace(/\*\*/g, ''));
-  const charged = await charge(req.user, L.costText, t('Eine Übersetzung', 'A translation'));
+  const charged = await charge(req.user, 'text');
   try {
     if (demoMode) return res.json({ text: `[${to}] ${text}` });
     const all = (await listModels()).filter((m) => m.caps.includes('text') && !m.paid && !m.busy);
@@ -800,7 +799,7 @@ chat.get('/export', wrap(async (req, res) => {
   const [memories, reminders, usage] = await Promise.all([
     all('SELECT text, created_at FROM memories WHERE user_id = ? ORDER BY id', uid).catch(() => []),
     all('SELECT text, due_at, sent_at FROM reminders WHERE user_id = ? ORDER BY due_at', uid).catch(() => []),
-    all('SELECT day, points FROM usage WHERE user_id = ? ORDER BY day', uid).catch(() => []),
+    usageHistory(uid).catch(() => []),
   ]);
   const file = {
     exportedAt: new Date().toISOString(),
@@ -809,7 +808,7 @@ chat.get('/export', wrap(async (req, res) => {
     settings: { instructions: user.instructions ?? '', memory: !user.memory_off, ownDailyLimit: user.daily_limit ?? null },
     memories: memories.map((m) => ({ text: m.text, created: new Date(Number(m.created_at)).toISOString() })),
     reminders: reminders.map((r) => ({ text: r.text, due: new Date(Number(r.due_at)).toISOString(), sent: r.sent_at ? new Date(Number(r.sent_at)).toISOString() : null })),
-    usagePerDay: usage.map((u) => ({ day: u.day, points: Number(u.points) })),
+    usagePerDay: usage,
     chats: out,
   };
   res.set('Content-Disposition', `attachment; filename="vais-daten-${new Date().toISOString().slice(0, 10)}.json"`);
@@ -818,8 +817,7 @@ chat.get('/export', wrap(async (req, res) => {
 
 // Eigener Verbrauch heute (0–100 %)
 async function usageWithCosts(user) {
-  const L = await limitSettings();
-  return { ...(await usageOf(user)), costs: { text: L.costText, web: L.costWeb, image: L.costImage, agent: L.costAgent, premium: L.costPremium } };
+  return usageOf(user);
 }
 chat.get('/usage', wrap(async (req, res) => res.json(await usageWithCosts(req.user))));
 

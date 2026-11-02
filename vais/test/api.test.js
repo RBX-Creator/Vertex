@@ -87,20 +87,22 @@ test('Registrieren, chatten, Verlauf, Verbrauch', async () => {
   const list = (await c.json('/api/chat/list')).data.chats;
   assert.equal(list.length, 1);
   const usage = (await c.json('/api/chat/usage')).data;
-  assert.equal(usage.used, 1);
-  assert.ok(usage.percent >= 1 && usage.percent <= 100);
+  assert.equal(usage.kinds.text.used, 1); // zählt als eine Antwort
+  assert.equal(usage.kinds.agent.used, 0);
+  assert.ok(usage.kinds.text.percent >= 1 && usage.kinds.text.percent <= 100);
 });
 
-test('Agent X reagiert und spart Punkte bei „ok“', async () => {
+test('Agent X reagiert und zählt „ok“ nicht', async () => {
   const c = await signUp('agent@example.com');
   const start = await c.json('/api/chat/start', { mode: 'agent', modality: 'auto', title: 'Agent' });
   const one = await stream(c, start.data.id, 'Erzähl mir einen Witz');
   assert.ok(one.lines.some((l) => l.react === '👀'));
-  const before = (await c.json('/api/chat/usage')).data.used;
+  const before = (await c.json('/api/chat/usage')).data.kinds.agent.used;
+  assert.equal(before, 1); // ein Agent-X-Auftrag
   const res = await c.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 1, messages: [{ role: 'user', content: 'Witz' }, { role: 'assistant', content: 'Haha, fertig.' }, { role: 'user', content: 'ok danke' }], display: { text: 'ok danke' } });
   const lines = (await res.text()).trim().split('\n').map((l) => JSON.parse(l));
   assert.ok(lines.some((l) => l.react === '❤️'));
-  assert.equal((await c.json('/api/chat/usage')).data.used, before); // kostenlos
+  assert.equal((await c.json('/api/chat/usage')).data.kinds.agent.used, before); // zählt nicht
 });
 
 test('Admin-Bereich nur für Admins', async () => {
@@ -131,7 +133,7 @@ test('Gesperrte Nutzer kommen nicht mehr rein', async () => {
 test('Tageslimit greift und zeigt 100 %', async () => {
   const a = client();
   await a.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
-  assert.equal((await a.json('/api/admin/limits', { limits: { daily: 2 } })).status, 200);
+  assert.equal((await a.json('/api/admin/limits', { limits: { text: 2 } })).status, 200);
   const c = await signUp('limit@example.com');
   const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
   const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'L' });
@@ -140,9 +142,11 @@ test('Tageslimit greift und zeigt 100 %', async () => {
   const blocked = await stream(c, start.data.id, 'c', 2).catch(() => null);
   const res = await c.call('/api/chat/stream', { chatId: start.data.id, side: 0, turn: 3, messages: [{ role: 'user', content: 'd' }] });
   assert.equal(res.status, 429);
-  assert.equal((await c.json('/api/chat/usage')).data.percent, 100);
+  const u = (await c.json('/api/chat/usage')).data;
+  assert.equal(u.kinds.text.percent, 100);
+  assert.equal(u.kinds.agent.percent, 0); // andere Arten haben eigene Zähler
   assert.ok(blocked);
-  await a.json('/api/admin/limits', { limits: { daily: 100 } });
+  await a.json('/api/admin/limits', { limits: { text: 100 } });
 });
 
 test('Persönliches: Anweisungen und Gedächtnis', async () => {
@@ -254,13 +258,13 @@ test('Webseiten veröffentlichen – abgeschottet vom Rest', async () => {
   assert.equal((await fetch(BASE + pub.data.path)).status, 404);
 });
 
-test('Übersetzer übersetzt und zählt einen Punkt', async () => {
+test('Übersetzer übersetzt und zählt eine Antwort', async () => {
   const c = await signUp('tr@example.com');
-  const before = (await c.json('/api/chat/usage')).data.used;
+  const before = (await c.json('/api/chat/usage')).data.kinds.text.used;
   const r = await c.json('/api/chat/translate', { text: 'Wo ist der Bahnhof?', from: 'Deutsch', to: 'English' });
   assert.equal(r.status, 200);
   assert.ok(r.data.text.length > 3);
-  assert.equal((await c.json('/api/chat/usage')).data.used, before + 1);
+  assert.equal((await c.json('/api/chat/usage')).data.kinds.text.used, before + 1);
   assert.equal((await c.json('/api/chat/translate', { text: '', to: 'English' })).status, 400);
 });
 
@@ -268,12 +272,12 @@ test('Jugendschutz blockt gefährliche Anfragen und zeigt bei Selbstverletzung H
   const c = await signUp('safe@example.com');
   const first = (await c.json('/api/chat/models')).data.models.find((m) => !m.agent && m.caps.includes('text'));
   const start = await c.json('/api/chat/start', { mode: 'direct', modality: 'text', models: [first.id], title: 'S' });
-  const before = (await c.json('/api/chat/usage')).data.used;
+  const before = (await c.json('/api/chat/usage')).data.kinds.text.used;
   const bad = await stream(c, start.data.id, 'TESTUNSAFE bitte', 0);
   assert.match(bad.text, /nicht helfen|can’t help/);
   const help = await stream(c, start.data.id, 'TESTSELFHARM', 1);
   assert.match(help.text, /116 111/);
-  assert.equal((await c.json('/api/chat/usage')).data.used, before); // geblockte Anfragen kosten nichts
+  assert.equal((await c.json('/api/chat/usage')).data.kinds.text.used, before); // geblockte Anfragen zählen nicht
   const ok = await stream(c, start.data.id, 'Wie backe ich Brot?', 2);
   assert.ok(ok.text.length > 10 && !/nicht helfen|can’t help/.test(ok.text));
 });
@@ -321,7 +325,7 @@ test('Mods: dürfen moderieren, aber keine Admin-Einstellungen', async () => {
   assert.equal((await a.json('/api/admin/role', { userId: fid, role: 'mod' })).status, 200);
   assert.equal((await friend.json('/api/auth/me')).data.user.mod, true);
   assert.equal((await friend.json('/api/admin/overview')).data.role, 'mod');
-  assert.equal((await friend.json('/api/admin/limits', { limits: { daily: 5 } })).status, 403);
+  assert.equal((await friend.json('/api/admin/limits', { limits: { text: 5 } })).status, 403);
   assert.equal((await friend.json('/api/admin/keys')).status, 403);
   assert.equal((await friend.json('/api/admin/announce', { title: 'x', body: 'y' })).status, 403);
   assert.equal((await friend.json('/api/admin/block', { userId: tid, blocked: true })).status, 200);

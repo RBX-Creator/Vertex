@@ -101,7 +101,7 @@ await client.execute(`CREATE TABLE IF NOT EXISTS memories (
 )`);
 await client.execute('CREATE INDEX IF NOT EXISTS memories_user ON memories (user_id)');
 
-// Verbrauch pro Nutzer und Tag (in Punkten)
+// Verbrauch pro Nutzer und Tag (alte Punkte-Tabelle, nur noch zum Aufräumen)
 await client.execute(`CREATE TABLE IF NOT EXISTS usage (
   user_id INTEGER NOT NULL,
   day TEXT NOT NULL,

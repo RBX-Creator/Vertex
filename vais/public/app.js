@@ -3100,28 +3100,30 @@ $('#share-stop').addEventListener('click', async () => {
 $('#share-link').addEventListener('focus', (e) => e.target.select());
 
 // ── Meine Statistik ───────────────────────────────────────────────
-// Tagesverbrauch als Balken von 0 bis 100 %
+// Tagesverbrauch: je Art ein Balken von 0 bis 100 % (Antworten, Websuchen, Bilder, Agent X)
 function renderUsage(u) {
   const box = $('#usage-card');
-  if (!u) { box.hidden = true; return; }
-  const reset = new Date(u.resetsAt).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' });
-  const c = u.costs ?? {};
-  const costs = [
-    [t('Antwort', 'Answer'), c.text], ['Battle', (c.text ?? 0) * 2], [t('Websuche', 'Web search'), c.web],
-    [t('Bild', 'Image'), c.image], ['Agent X', c.agent],
-  ].filter(([, n]) => n !== undefined).map(([name, n]) => `<span>${name} <b>${n}</b></span>`).join('');
-  if (u.limit === null) {
+  if (!u?.kinds) { box.hidden = true; return; }
+  const NAMES = { text: [t('Antworten', 'Answers'), '💬'], web: [t('Websuchen', 'Web searches'), '🌐'], image: [t('Bilder', 'Images'), '🎨'], agent: ['Agent X', '🤖'] };
+  if (u.unlimited) {
+    const total = Object.values(u.kinds).reduce((a, k) => a + k.used, 0);
     box.innerHTML = `<div class="usage-top"><span>${t('Heute genutzt', 'Used today')}</span><b>∞</b></div>
-      <p class="usage-sub">${t('Du hast kein Tageslimit.', 'You have no daily limit.')} ${t(`Heute ${u.used} Punkte genutzt.`, `${u.used} points used today.`)}</p>`;
+      <p class="usage-sub">${t(`Du hast kein Tageslimit. Heute ${total} Antworten.`, `You have no daily limit. ${total} answers today.`)}</p>`;
   } else {
     const level = u.percent >= 100 ? 'full' : u.percent >= 80 ? 'high' : '';
-    const note = level === 'full' ? t('Voll – um Mitternacht geht es weiter.', 'Full – resets at midnight.')
-      : level === 'high' ? t('Fast voll', 'Almost full') : t(`Wieder 0 % um ${reset} Uhr`, `Back to 0 % at ${reset}`);
+    const rows = Object.entries(u.kinds).map(([k, v]) => {
+      const lv = v.percent >= 100 ? 'full' : v.percent >= 80 ? 'high' : '';
+      return `<div class="usage-row">
+        <div class="usage-row-top"><span>${NAMES[k][1]} ${NAMES[k][0]}</span><span><b>${v.used}</b> / ${v.limit} · ${v.percent} %</span></div>
+        <div class="usage-bar ${lv}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${v.percent}" aria-label="${NAMES[k][0]}"><i style="width:${v.percent}%"></i></div>
+      </div>`;
+    }).join('');
+    const note = level === 'full' ? t('Etwas ist voll – um Mitternacht geht es weiter.', 'Something is full – resets at midnight.')
+      : t('Alles wieder auf 0 um Mitternacht', 'Everything back to 0 at midnight');
     box.innerHTML = `
-      <div class="usage-top"><span>${t('Heute genutzt', 'Used today')}</span><b>${u.percent} %</b></div>
-      <div class="usage-bar ${level}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${u.percent}" aria-label="${t('Tageslimit', 'Daily limit')}"><i style="width:${u.percent}%"></i></div>
-      <p class="usage-sub"><span>${t(`${u.used} von ${u.limit} Punkten`, `${u.used} of ${u.limit} points`)}</span><span class="usage-note ${level}">${note}</span></p>
-      <p class="usage-costs"><small>${t('Kosten in Punkten:', 'Cost in points:')}</small>${costs}</p>`;
+      <div class="usage-top"><span>${t('Heute genutzt', 'Used today')}</span></div>
+      <div class="usage-rows">${rows}</div>
+      <p class="usage-sub"><span class="usage-note ${level}">${note}</span><span>${t('Ein Battle zählt als 2 Antworten.', 'A battle counts as 2 answers.')}</span></p>`;
   }
   box.hidden = false;
 }

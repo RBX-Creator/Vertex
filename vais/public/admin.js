@@ -180,7 +180,9 @@ async function loadUsers() {
   try {
     const { users } = await api(`users?q=${encodeURIComponent($('#user-q').value.trim())}`);
     $('#users').innerHTML = users.length ? users.map((u) => {
-      const limitText = u.limit === null ? t('unbegrenzt', 'unlimited') : `${num(u.used)} / ${num(u.limit)} ${t('Punkte', 'points')}${u.custom !== null && u.custom !== -1 ? ` (${t('eigenes Limit', 'custom')})` : ''}`;
+      const K = { text: t('Antw.', 'Answ.'), web: t('Web', 'Web'), image: t('Bilder', 'Images'), agent: 'Agent' };
+      const limitText = u.unlimited ? t('unbegrenzt', 'unlimited')
+        : `${Object.entries(u.kinds).map(([k, v]) => `${K[k]} ${num(v.used)}/${num(v.limit)}`).join(' · ')}${u.custom !== null && u.custom !== -1 ? ` (${num(u.custom)} %)` : ''}`;
       return `
       <li class="${u.blocked ? 'blocked' : ''}" data-user="${u.id}">
         <div class="adm-user-row">
@@ -190,8 +192,8 @@ async function loadUsers() {
           ${u.admin ? '<span class="adm-pill">Admin</span>' : `${role === 'admin' ? `<button class="adm-btn small" data-role="${u.id}" data-to="${u.mod ? '' : 'mod'}" data-email="${esc(u.email)}">${u.mod ? t('Mod entziehen', 'Remove mod') : t('Zum Mod machen', 'Make mod')}</button>` : ''}${u.mod && role !== 'admin' ? '' : `<button class="adm-btn small${u.blocked ? '' : ' danger'}" data-block="${u.id}" data-to="${u.blocked ? '0' : '1'}" data-email="${esc(u.email)}">${u.blocked ? t('Entsperren', 'Unblock') : t('Sperren', 'Block')}</button>`}`}
         </div>
         <div class="adm-use">
-          <span class="adm-bar${u.percent >= 100 ? ' full' : ''}"><i style="width:${u.limit === null ? 0 : u.percent}%"></i></span>
-          <span class="adm-use-text">${u.limit === null ? '∞' : `${u.percent} %`} · ${esc(limitText)}</span>
+          <span class="adm-bar${u.percent >= 100 ? ' full' : ''}"><i style="width:${u.unlimited ? 0 : u.percent}%"></i></span>
+          <span class="adm-use-text">${u.unlimited ? '∞' : `${u.percent} %`} · ${esc(limitText)}</span>
           ${u.admin || role !== 'admin' ? '' : `<button class="adm-link" data-edit="${u.id}" data-custom="${u.custom ?? ''}">${t('Limit', 'Limit')}</button>`}
           ${u.used ? `<button class="adm-link" data-reset="${u.id}">${t('Auf 0 %', 'Reset')}</button>` : ''}
         </div>
@@ -251,9 +253,9 @@ function openLimitEditor(btn) {
   const box = document.createElement('div');
   box.className = 'adm-limit-edit';
   box.innerHTML = `
-    <label><input type="radio" name="lm${id}" value="default"${mode === 'default' ? ' checked' : ''}> ${t('Standard', 'Default')} (${num(limitsCache?.daily ?? 0)})</label>
+    <label><input type="radio" name="lm${id}" value="default"${mode === 'default' ? ' checked' : ''}> ${t('Standard', 'Default')} (100 %)</label>
     <label><input type="radio" name="lm${id}" value="custom"${mode === 'custom' ? ' checked' : ''}> ${t('Eigenes:', 'Custom:')}
-      <input class="adm-input small" type="number" min="0" max="100000" inputmode="numeric" value="${mode === 'custom' ? custom : ''}" aria-label="${t('Punkte pro Tag', 'Points per day')}"></label>
+      <input class="adm-input small" type="number" min="0" max="10000" step="10" inputmode="numeric" value="${mode === 'custom' ? custom : ''}" placeholder="200" aria-label="${t('Prozent vom Standard', 'Percent of default')}"> % <small class="muted">${t('vom Standard (200 = doppelt so viel)', 'of default (200 = twice as much)')}</small></label>
     <label><input type="radio" name="lm${id}" value="unlimited"${mode === 'unlimited' ? ' checked' : ''}> ${t('Unbegrenzt', 'Unlimited')}</label>
     <div class="adm-row"><button class="adm-btn small primary" type="button" data-save-limit="${id}">${t('Speichern', 'Save')}</button><button class="adm-btn small" type="button" data-cancel-limit>${t('Abbrechen', 'Cancel')}</button></div>`;
   box.querySelector('.adm-input').addEventListener('focus', () => { box.querySelector('input[value="custom"]').checked = true; });
@@ -262,23 +264,20 @@ function openLimitEditor(btn) {
 
 // ── Tageslimit & Kosten ──────────────────────────────────────────
 const LIMIT_LABELS = {
-  daily: [t('Punkte pro Tag', 'Points per day'), t('für jeden Nutzer', 'for every user')],
-  costText: [t('Normale Antwort', 'Normal answer'), t('Text/Code, pro Modell', 'text/code, per model')],
-  costWeb: [t('Websuche', 'Web search'), t('pro Antwort', 'per answer')],
-  costImage: [t('Bild', 'Image'), t('pro Bild', 'per image')],
-  costAgent: [t('Agent X', 'Agent X'), t('pro Auftrag', 'per task')],
-  costPremium: [t('Premium-Modell', 'Premium model'), t('kostet echtes Guthaben', 'costs real credit')],
-  paidDaily: [t('Premium pro Tag', 'Premium per day'), t('Antworten, zusätzlich', 'answers, extra cap')],
+  text: [t('Antworten pro Tag', 'Answers per day'), t('normale Antworten, Übersetzer – ein Battle zählt 2', 'normal answers, translator – a battle counts 2')],
+  web: [t('Websuchen pro Tag', 'Web searches per day'), t('Antworten mit Internet-Suche', 'answers with internet search')],
+  image: [t('Bilder pro Tag', 'Images per day'), t('erstellte oder bearbeitete Bilder', 'created or edited images')],
+  agent: [t('Agent X pro Tag', 'Agent X per day'), t('Aufträge (Webseiten, Recherchen …)', 'tasks (websites, research …)')],
+  paidDaily: [t('Premium pro Tag', 'Premium per day'), t('Antworten von Premium-Modellen', 'answers from premium models')],
   burst: [t('Schutz vor Spam', 'Spam protection'), t('Antworten in 5 Minuten', 'answers in 5 minutes')],
   maxChats: [t('Chats pro Person', 'Chats per person'), t('gespeichert, 0 = unbegrenzt', 'saved, 0 = unlimited')],
 };
 let limitsCache = null;
 function limitExample() {
   const f = Object.fromEntries([...document.querySelectorAll('#limit-fields input')].map((i) => [i.name, Number(i.value) || 0]));
-  const per = (c) => (c ? Math.floor(f.daily / c) : '∞');
   $('#limit-example').textContent = t(
-    `Damit schafft jeder pro Tag z. B. ${per(f.costText)} normale Antworten, ${per(f.costText * 2)} Battles, ${per(f.costAgent)} Agent-X-Aufträge oder ${per(f.costImage)} Bilder.`,
-    `That's e.g. ${per(f.costText)} normal answers, ${per(f.costText * 2)} battles, ${per(f.costAgent)} Agent X tasks or ${per(f.costImage)} images per day.`,
+    `Jeder bekommt pro Tag ${num(f.text)} Antworten (= ${num(Math.floor(f.text / 2))} Battles), ${num(f.web)} Websuchen, ${num(f.image)} Bilder und ${num(f.agent)} Agent-X-Aufträge. Jede Art hat ihren eigenen Zähler.`,
+    `Everyone gets ${num(f.text)} answers (= ${num(Math.floor(f.text / 2))} battles), ${num(f.web)} web searches, ${num(f.image)} images and ${num(f.agent)} Agent X tasks per day. Each type has its own counter.`,
   );
 }
 async function loadLimits() {

@@ -7,7 +7,7 @@ import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { isAdmin, isStaff, ADMIN_EMAILS } from './config.js';
 import { notifyUser } from './push.js';
 import { describeModel, listModels, demoMode, keyStatus, addKey, removeKey } from './models.js';
-import { limitSettings, saveLimitSettings, LIMIT_FIELDS, usageMap, resetUsage } from './limits.js';
+import { limitSettings, saveLimitSettings, LIMIT_FIELDS, usageMap, resetUsage, KINDS, scaled } from './limits.js';
 import { clearBoards } from './chat.js';
 import { listAllSites, removeSite } from './sites.js';
 import { safetyOn, setSafety } from './safety.js';
@@ -157,9 +157,14 @@ admin.get('/users', wrap(async (req, res) => {
       ...(() => {
         const own = u.daily_limit === null || u.daily_limit === undefined ? null : Number(u.daily_limit);
         const unlimited = ADMIN_EMAILS.includes(u.email) || own === -1;
-        const max = unlimited ? null : own ?? L.daily;
-        const points = used.get(Number(u.id)) ?? 0;
-        return { custom: own, limit: max, used: points, percent: max ? Math.min(100, Math.round((points / max) * 100)) : 0 };
+        const factor = unlimited ? null : own === null ? 1 : own / 100;
+        const counts = used.get(Number(u.id)) ?? { text: 0, web: 0, image: 0, agent: 0 };
+        const kinds = Object.fromEntries(KINDS.map((k) => {
+          const max = scaled(L[k], factor);
+          return [k, { used: counts[k] ?? 0, limit: max, percent: max === null ? 0 : max === 0 ? 100 : Math.min(100, Math.round(((counts[k] ?? 0) / max) * 100)) }];
+        }));
+        const percent = Math.max(...Object.values(kinds).map((x) => (x.limit === null ? 0 : x.percent)));
+        return { custom: own, unlimited, kinds, percent, used: Object.values(counts).reduce((a, b) => a + b, 0) };
       })(),
     })),
   });
@@ -197,7 +202,7 @@ admin.post('/limits', adminOnly, wrap(async (req, res) => {
   res.json({ ok: true, limits });
 }));
 
-// Eigenes Limit für einen Nutzer: Zahl = Punkte pro Tag, -1 = unbegrenzt, null = Standard
+// Eigenes Limit für einen Nutzer: Zahl = Prozent vom Standard, -1 = unbegrenzt, null = Standard
 admin.post('/user-limit', adminOnly, wrap(async (req, res) => {
   const id = Number(req.body?.userId);
   const raw = req.body?.limit;
@@ -206,10 +211,10 @@ admin.post('/user-limit', adminOnly, wrap(async (req, res) => {
   let value = null;
   if (raw !== null && raw !== undefined && raw !== '') {
     value = Math.round(Number(raw));
-    if (!Number.isFinite(value) || value < -1 || value > 100000) throw new HttpError(400, t('Bitte eine Zahl von 0 bis 100000 eingeben (oder -1 für unbegrenzt).', 'Enter a number from 0 to 100000 (or -1 for unlimited).'));
+    if (!Number.isFinite(value) || value < -1 || value > 10000) throw new HttpError(400, t('Bitte Prozent von 0 bis 10000 eingeben (oder -1 für unbegrenzt).', 'Enter a percentage from 0 to 10000 (or -1 for unlimited).'));
   }
   await run('UPDATE users SET daily_limit = ? WHERE id = ?', value, user.id);
-  await logEvent('admin', null, `Limit für ${user.email}: ${value === null ? 'Standard' : value === -1 ? 'unbegrenzt' : value}`);
+  await logEvent('admin', null, `Limit für ${user.email}: ${value === null ? 'Standard' : value === -1 ? 'unbegrenzt' : `${value} %`}`);
   res.json({ ok: true });
 }));
 admin.post('/reset-usage', wrap(async (req, res) => {

@@ -9,7 +9,7 @@ import { isAdmin, isStaff, ADMIN_EMAILS } from './config.js';
 import { listModels, complete, demoMode, helperModel } from './models.js';
 import { notifyUser } from './push.js';
 import { checkText } from './safety.js';
-import { charge, limitSettings, refund } from './limits.js';
+import { charge, refund } from './limits.js';
 
 await run(`CREATE TABLE IF NOT EXISTS groups (
   id TEXT PRIMARY KEY,
@@ -124,13 +124,13 @@ groups.post('/:id/messages', wrap(async (req, res) => {
 // Die KI antwortet im Team-Chat (im Hintergrund; Mitglieder holen sich die Antwort beim nächsten Abfragen)
 async function answer(g, user, text) {
   thinking.set(g.id, Date.now());
-  let charged = 0;
+  let charged = null;
   try {
     const unsafe = await checkText(text, 'prompt');
     let reply;
     if (unsafe) reply = unsafe.message;
     else {
-      charged = await charge(user, (await limitSettings()).costText, t('Eine Antwort', 'An answer')).catch((err) => { reply = err.message; return 0; });
+      charged = await charge(user, 'text').catch((err) => { reply = err.message; return null; });
       if (!reply) {
         const history = await all(`SELECT x.user_id, x.content, u.email FROM group_messages x LEFT JOIN users u ON u.id = x.user_id
           WHERE x.group_id = ? ORDER BY x.id DESC LIMIT 24`, g.id);

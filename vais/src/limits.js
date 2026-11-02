@@ -1,20 +1,23 @@
-// Tageslimit pro Nutzer: jede Antwort kostet Punkte, jeder hat pro Tag ein Punkte-Budget.
+// Tageslimit pro Nutzer: jeder bekommt pro Tag eine feste Anzahl Antworten, Websuchen, Bilder und Agent-X-Aufträge.
 // So bleibt für alle genug übrig. Alles im Admin-Bereich einstellbar.
 import { get, run, all, getSetting, setSetting } from './db.js';
 import { t } from './i18n.js';
 import { HttpError } from './auth.js';
 import { isAdmin } from './config.js';
 
+// Wie viele Antworten jeder pro Tag bekommt – getrennt nach Art (keine Punkte mehr)
 export const LIMIT_FIELDS = {
-  daily: { min: 1, max: 100000, def: Number(process.env.USER_DAILY_POINTS) || 100 }, // Punkte pro Tag
-  costText: { min: 0, max: 1000, def: 1 }, // normale Antwort (Text/Code), pro Modell
-  costWeb: { min: 0, max: 1000, def: 2 }, // Antwort mit Websuche
-  costImage: { min: 0, max: 1000, def: 3 }, // Bild
-  costAgent: { min: 0, max: 1000, def: 4 }, // Agent X (viele Schritte)
-  costPremium: { min: 0, max: 1000, def: 5 }, // Premium-Modell (kostet echtes Guthaben)
+  text: { min: 0, max: 100000, def: Number(process.env.USER_DAILY_ANSWERS) || 100 }, // normale Antworten (Text/Code, Übersetzer, Team-KI)
+  web: { min: 0, max: 100000, def: 30 }, // Antworten mit Websuche
+  image: { min: 0, max: 100000, def: 20 }, // Bilder
+  agent: { min: 0, max: 100000, def: 15 }, // Agent-X-Aufträge
   paidDaily: { min: 0, max: 10000, def: Number(process.env.PAID_DAILY_LIMIT ?? 20) }, // Premium-Antworten pro Tag
   burst: { min: 1, max: 1000, def: 40 }, // höchstens so viele Antworten in 5 Minuten
   maxChats: { min: 0, max: 1000, def: 10 }, // so viele gespeicherte Chats pro Person (0 = unbegrenzt)
+};
+export const KINDS = ['text', 'web', 'image', 'agent'];
+const KIND_NAME = {
+  text: () => t('Antworten', 'answers'), web: () => t('Websuchen', 'web searches'), image: () => t('Bilder', 'images'), agent: () => t('Agent-X-Aufträge', 'Agent X tasks'),
 };
 
 let cached = null;
@@ -54,59 +57,86 @@ export function nextReset() {
   return ts;
 }
 
-// Limit eines Nutzers: eigenes (vom Admin gesetzt) oder Standard; null = unbegrenzt
-export async function userLimit(user) {
+// Eigenes Limit eines Nutzers (vom Admin): null = Standard, -1 = unbegrenzt, sonst Prozent vom Standard (200 = doppelt)
+async function userFactor(user) {
   if (isAdmin(user)) return null;
-  const row = await get('SELECT daily_limit FROM users WHERE id = ?', user.id);
-  const own = row?.daily_limit;
-  if (own === -1) return null;
-  if (Number.isInteger(Number(own)) && own !== null) return Number(own);
-  return (await limitSettings()).daily;
+  const own = (await get('SELECT daily_limit FROM users WHERE id = ?', user.id))?.daily_limit;
+  if (own === -1 || own === '-1') return null;
+  return own === null || own === undefined ? 1 : Math.max(0, Number(own)) / 100;
+}
+export const scaled = (base, factor) => (factor === null ? null : Math.round(base * factor));
+
+await run(`CREATE TABLE IF NOT EXISTS usage_kinds (
+  user_id INTEGER NOT NULL, day TEXT NOT NULL, kind TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, day, kind)
+)`);
+
+async function countsToday(userId) {
+  const rows = await all('SELECT kind, n FROM usage_kinds WHERE user_id = ? AND day = ?', userId, dayKey());
+  return Object.fromEntries(KINDS.map((k) => [k, Number(rows.find((r) => r.kind === k)?.n ?? 0)]));
 }
 
-export async function usedToday(userId) {
-  return Number((await get('SELECT points FROM usage WHERE user_id = ? AND day = ?', userId, dayKey()))?.points ?? 0);
-}
-
+// Verbrauch heute je Art, mit Prozent (0–100) – für die Statistik
 export async function usageOf(user) {
-  const [used, max] = await Promise.all([usedToday(user.id), userLimit(user)]);
+  const [L, factor, used] = await Promise.all([limitSettings(), userFactor(user), countsToday(user.id)]);
+  const kinds = Object.fromEntries(KINDS.map((k) => {
+    const max = scaled(L[k], factor);
+    return [k, { used: used[k], limit: max, percent: max === null ? 0 : max === 0 ? 100 : Math.min(100, Math.round((used[k] / max) * 100)) }];
+  }));
   return {
-    used,
-    limit: max,
-    percent: max === null ? 0 : Math.min(100, Math.round((used / Math.max(1, max)) * 100)),
+    unlimited: factor === null,
+    kinds,
+    percent: Math.max(...Object.values(kinds).map((x) => (x.limit === null ? 0 : x.percent))),
     resetsAt: nextReset(),
   };
 }
 
-// Punkte abziehen – oder ablehnen, wenn das Budget nicht reicht
-export async function charge(user, cost, what) {
-  if (!cost) return 0;
-  const max = await userLimit(user);
+// Eine Antwort zählen – oder ablehnen, wenn für diese Art heute nichts mehr übrig ist
+export async function charge(user, kind) {
+  if (!KINDS.includes(kind)) return null;
+  const [L, factor] = await Promise.all([limitSettings(), userFactor(user)]);
+  const max = scaled(L[kind], factor);
   if (max !== null) {
-    const used = await usedToday(user.id);
-    if (used + cost > max) {
-      const left = Math.max(0, max - used);
-      throw new HttpError(429, used >= max
-        ? t('Du hast dein Tageslimit erreicht (100 %). Um Mitternacht geht es weiter.', 'You reached your daily limit (100 %). It resets at midnight.')
-        : t(`Dafür reicht dein Tageslimit heute nicht mehr (${what} kostet ${cost} Punkte, du hast noch ${left}). Probier eine normale Antwort.`, `Your daily limit is not enough for this (${what} costs ${cost} points, you have ${left} left). Try a normal answer.`), { usage: true });
+    const used = (await countsToday(user.id))[kind];
+    if (used >= max) {
+      const other = kind === 'text' ? '' : t(' Normale Antworten gehen noch.', ' Normal answers still work.');
+      throw new HttpError(429, max === 0
+        ? t(`${KIND_NAME[kind]()[0].toUpperCase()}${KIND_NAME[kind]().slice(1)} sind für dich gerade nicht freigeschaltet.`, `${KIND_NAME[kind]()} are not enabled for you right now.`)
+        : t(`Du hast heute alle ${max} ${KIND_NAME[kind]()} genutzt (100 %). Um Mitternacht geht es weiter.${other}`, `You used all ${max} ${KIND_NAME[kind]()} for today (100 %). It resets at midnight.${other}`), { usage: true });
     }
   }
-  await run('INSERT INTO usage (user_id, day, points) VALUES (?, ?, ?) ON CONFLICT(user_id, day) DO UPDATE SET points = points + excluded.points', user.id, dayKey(), cost);
-  return cost;
+  await run('INSERT INTO usage_kinds (user_id, day, kind, n) VALUES (?, ?, ?, 1) ON CONFLICT(user_id, day, kind) DO UPDATE SET n = n + 1', user.id, dayKey(), kind);
+  return kind;
 }
-// Hat das Modell gar nicht geantwortet, gibt es die Punkte zurück
-export async function refund(user, cost) {
-  if (!cost) return;
-  await run('UPDATE usage SET points = MAX(0, points - ?) WHERE user_id = ? AND day = ?', cost, user.id, dayKey()).catch(() => {});
+// Hat das Modell gar nicht geantwortet, zählt es nicht
+export async function refund(user, kind) {
+  if (!KINDS.includes(kind)) return;
+  await run('UPDATE usage_kinds SET n = MAX(0, n - 1) WHERE user_id = ? AND day = ? AND kind = ?', user.id, dayKey(), kind).catch(() => {});
 }
 export async function resetUsage(userId) {
-  await run('DELETE FROM usage WHERE user_id = ? AND day = ?', userId, dayKey());
+  await run('DELETE FROM usage_kinds WHERE user_id = ? AND day = ?', userId, dayKey());
+  await run('DELETE FROM usage WHERE user_id = ? AND day = ?', userId, dayKey()).catch(() => {});
 }
+// Für den Admin: Verbrauch heute je Nutzer → { text, web, image, agent }
 export async function usageMap() {
-  const rows = await all('SELECT user_id, points FROM usage WHERE day = ?', dayKey());
-  return new Map(rows.map((r) => [Number(r.user_id), Number(r.points)]));
+  const rows = await all('SELECT user_id, kind, n FROM usage_kinds WHERE day = ?', dayKey());
+  const map = new Map();
+  for (const r of rows) {
+    const id = Number(r.user_id);
+    if (!map.has(id)) map.set(id, Object.fromEntries(KINDS.map((k) => [k, 0])));
+    map.get(id)[r.kind] = Number(r.n);
+  }
+  return map;
+}
+export async function usageHistory(userId) {
+  const rows = await all('SELECT day, kind, n FROM usage_kinds WHERE user_id = ? ORDER BY day', userId);
+  const days = new Map();
+  for (const r of rows) { if (!days.has(r.day)) days.set(r.day, { day: r.day }); days.get(r.day)[r.kind] = Number(r.n); }
+  return [...days.values()];
 }
 // Alte Tage aufräumen (älter als 60 Tage)
 setInterval(() => {
-  run('DELETE FROM usage WHERE day < ?', dayKey(new Date(Date.now() - 60 * 24 * 3600 * 1000))).catch(() => {});
+  const old = dayKey(new Date(Date.now() - 60 * 24 * 3600 * 1000));
+  run('DELETE FROM usage_kinds WHERE day < ?', old).catch(() => {});
+  run('DELETE FROM usage WHERE day < ?', old).catch(() => {});
 }, 6 * 3600 * 1000).unref();
