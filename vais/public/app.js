@@ -292,7 +292,6 @@ const PILLS = [
   { key: 'web', kind: 'modality', ico: '🌐', label: () => 'Web' },
   { key: 'image', kind: 'modality', ico: '🎨', label: () => t('Bild', 'Image') },
   { key: 'code', kind: 'modality', ico: '</>', label: () => 'Code' },
-  { key: 'agent', kind: 'mode', ico: '🤖', label: () => 'Agent X' },
 ];
 let modeBeforeAgent = null;
 function renderPills() {
