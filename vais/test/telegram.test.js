@@ -67,10 +67,14 @@ test('Start: setWebhook mit Adresse + Secret-Header, Befehle und Name werden ges
   assert.equal(hook.url, `https://vais-dvvk.onrender.com/api/telegram/${c.secret}`);
   assert.equal(hook.secret_token, c.secret);
   assert.deepEqual(hook.allowed_updates, ['message', 'callback_query']);
-  const cmds = api.calls.find((x) => x.method === 'setMyCommands').body.commands.map((x) => x.command);
-  assert.deepEqual(cmds, ['start', 'neu', 'modus', 'recherche', 'heavy', 'hilfe']);
+  const sets = api.calls.filter((x) => x.method === 'setMyCommands').map((x) => x.body);
+  const priv = sets.find((b) => b.scope?.type === 'all_private_chats' && !b.language_code).commands.map((x) => x.command);
+  const grp = sets.find((b) => b.scope?.type === 'all_group_chats' && !b.language_code).commands.map((x) => x.command);
+  assert.deepEqual(priv, ['start', 'neu', 'modus', 'recherche', 'heavy', 'bild', 'quiz', 'news', 'witz', 'fakt', 'umfrage', 'hilfe']);
+  assert.deepEqual(grp, ['hilfe', 'quiz', 'news', 'zusammenfassung', 'umfrage', 'bild', 'witz', 'fakt', 'mission', 'regeln', 'stats', 'recherche', 'heavy', 'ai', 'willkommen']);
+  assert.ok(sets.some((b) => b.language_code === 'en' && b.scope?.type === 'all_group_chats'));
   assert.equal(api.calls.find((x) => x.method === 'setMyName').body.name, 'X Agent');
-  assert.equal(COMMANDS().length, 6);
+  assert.equal(COMMANDS('private').length, 12);
 });
 
 test('Webhook: falsches Secret 404, falscher Header 401, richtig → sofort 200, Arbeit danach', async () => {
