@@ -2138,3 +2138,8 @@ body[data-view='home'] .home-stars { display: block; position: fixed; inset: 0; 
 .sources.searching .sources-head { padding: 6px 0; font-size: 14px; color: var(--muted); }
 .sources.searching .sources-head > svg:first-child { width: 18px; height: 18px; color: var(--muted); }
 .sources.open .sources-list { margin-top: 6px; border: 1px solid var(--border); border-radius: 14px; padding: 6px; }
+/* Kopfzeile oben scharf statt verschwommener Streifen (iPhone): solider Hintergrund statt durchscheinendem
+   Himmel-Verlauf, und der Bereich unter der Statusleiste ist fest in der Hintergrundfarbe */
+.topbar { background: var(--bg); }
+.shell::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 4; pointer-events: none; }
+html { background: var(--bg); }
