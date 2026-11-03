@@ -30,7 +30,7 @@ async function snapshot() {
   const a = Number(answers?.n ?? 0);
   const e = Number(errors?.n ?? 0);
   const m = await maintenance();
-  return { state: m.on ? 'maintenance' : state, maintenance: m.on ? maintenanceText(m) : null, free, total, demo: demoMode, providers: list, last24h: { answers: a, errors: e, successRate: a + e ? Math.round((a / (a + e)) * 1000) / 10 : 100 }, checkedAt: new Date().toISOString() };
+  return { state: m.on ? 'maintenance' : state, maintenance: m.on ? maintenanceText(m) : null, free, total, demo: demoMode, providers: list, last24h: { answers: a, errors: e, successRate: a + e ? Math.round((a / (a + e)) * 1000) / 10 : 100 }, telegram: globalThis.__vaisTelegram ? { on: !!globalThis.__vaisTelegram.on, webhook: !!globalThis.__vaisTelegram.webhook } : null, checkedAt: new Date().toISOString() };
 }
 
 export async function statusPage(req, res) {

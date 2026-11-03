@@ -16,6 +16,8 @@ export function langMiddleware(req, res, next) {
 }
 
 export const lang = () => store.getStore()?.lang ?? 'de';
+// Code in einer bestimmten Sprache ausführen (z. B. für den Telegram-Bot, ohne Web-Anfrage)
+export const withLang = (l, fn) => store.run({ lang: ['de', 'en', ...['tr', 'es', 'fr', 'uk']].includes(l) ? l : 'de' }, fn);
 
 // Weitere Sprachen: übersetzt aus dem Englischen (src/ui-i18n.js)
 export const EXTRA_LANGS = ['tr', 'es', 'fr', 'uk'];

@@ -12,6 +12,7 @@ const { serveSite } = await import('./src/sites.js');
 await import('./src/alarm.js');
 const { serveDict } = await import('./src/ui-i18n.js');
 const { statusPage } = await import('./src/status.js');
+const { telegramBot } = await import('./src/telegram.js');
 const { demoMode, tempImage } = await import('./src/models.js');
 const { OWNER, isStaff } = await import('./src/config.js');
 const { readFile } = await import('node:fs/promises');
@@ -63,6 +64,9 @@ app.use((req, res, next) => {
   if (process.env.COOKIE_SECURE === 'true') res.set('Strict-Transport-Security', 'max-age=15552000');
   next();
 });
+
+// Telegram-Bot „X Agent“: kommt von Telegram (ohne Origin), geschützt durch geheimen Pfad + Secret-Header
+app.use('/api/telegram', telegramBot.router);
 
 // Schutz vor Anfragen fremder Webseiten (CSRF): ändernde API-Aufrufe nur von hier
 app.use('/api', (req, res, next) => {
@@ -269,6 +273,8 @@ process.on('SIGTERM', () => {
 });
 const server = app.listen(port, () => {
   console.log(`\n  VAIs läuft auf http://localhost:${port}`);
+  // Telegram: Webhook + Befehle automatisch setzen (nur mit Token; Fehler blockieren nichts)
+  if (telegramBot.state.on && process.env.NODE_ENV !== 'test') telegramBot.start().catch(() => {});
   if (demoMode) console.log('  (Demo-Modus: kein API-Schlüssel – Platzhalter-Modelle antworten)');
   if (!mailConfigured) console.log('  (Entwicklungsmodus: Codes werden hier in der Konsole angezeigt, kein E-Mail-Versand eingerichtet)');
 });
