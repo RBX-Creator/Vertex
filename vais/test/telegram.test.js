@@ -233,3 +233,13 @@ test('Telegram-Schnittstelle: Token nie in Fehlern; nirgends im Log', async () =
   assert.ok(logged.length > 0);
   assert.ok(!logged.some((l) => l.includes(TOKEN) || l.includes('SECRET-TOKEN')), 'Token im Log!');
 });
+
+test('Token wird gesäubert (Anführungszeichen, Leerzeichen, „bot“-Präfix); Fehler beim Start werden gemeldet', async () => {
+  assert.equal(telegramConfig({ TELEGRAM_BOT_TOKEN: ` "bot${TOKEN}" ` }).token, TOKEN);
+  const api = { calls: [], async call(method) { this.calls.push(method); if (method === 'setWebhook') throw Object.assign(new Error('Telegram setWebhook: Unauthorized'), { status: 401 }); return true; } };
+  const bot = createBot({ config: cfg(), api });
+  const st = await bot.start();
+  assert.equal(st.webhook, false);
+  assert.match(st.error, /Unauthorized/);
+  assert.ok(!st.error.includes(TOKEN));
+});

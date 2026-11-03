@@ -38,7 +38,8 @@ const dayKey = () => DAY.format(new Date());
 
 // ── Einstellungen ───────────────────────────────────────────────
 export function telegramConfig(env = process.env) {
-  const token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim();
+  // Token säubern: Leerzeichen, Anführungszeichen oder ein vorangestelltes „bot“ beim Einfügen
+  const token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim().replace(/^["'`]+|["'`]+$/g, '').trim().replace(/^bot(?=\d+:)/i, '');
   if (!token) return { on: false };
   const own = String(env.TELEGRAM_WEBHOOK_SECRET ?? '').trim().replace(/[^A-Za-z0-9_-]/g, '').slice(0, 128);
   const secret = own || createHash('sha256').update(`vais-telegram:${token}`).digest('hex').slice(0, 48);
@@ -412,6 +413,7 @@ export function createBot({ config = telegramConfig(), api = null, answer = null
   router.use((req, res) => res.status(404).end());
 
   // ── Beim Start: Webhook, Befehle und Name setzen ──
+  let retryTimer = null;
   async function start() {
     if (!config.publicUrl) { state.error = 'RENDER_EXTERNAL_URL fehlt'; console.log('Telegram: keine öffentliche Adresse (RENDER_EXTERNAL_URL) – Webhook nicht gesetzt.'); return state; }
     for (let attempt = 0; attempt < 3 && !state.webhook; attempt++) {
@@ -426,6 +428,12 @@ export function createBot({ config = telegramConfig(), api = null, answer = null
       }
     }
     if (state.webhook) console.log(`Telegram: Webhook gesetzt (${new URL(config.publicUrl).host}) – Bot „${BOT_NAME}“ ist an.`);
+    else if (!retryTimer) {
+      // später nochmal (z. B. wenn Telegram kurz nicht erreichbar war)
+      retryTimer = setInterval(() => { if (state.webhook) { clearInterval(retryTimer); return; } start().catch(() => {}); }, 10 * 60 * 1000);
+      retryTimer.unref?.();
+    }
+    if (!state.webhook) return state;
     await withLang('de', () => tg.call('setMyCommands', { commands: COMMANDS() })).catch((err) => log('setMyCommands fehlgeschlagen', err));
     await withLang('en', () => tg.call('setMyCommands', { commands: COMMANDS(), language_code: 'en' })).catch(() => {});
     try {
