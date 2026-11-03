@@ -243,7 +243,7 @@ function modelLogo(m) {
 
 // ── Zustand ───────────────────────────────────────────────────────
 const state = {
-  mode: store.get('vais.mode', 'direct'),
+  mode: store.get('vais.mode', 'agent'), // Standard: Agent X
   modality: store.get('vais.modality', 'auto'),
   picks: store.get('vais.picks', [null, null]),
   models: [],
@@ -315,8 +315,9 @@ $('#mode-pills')?.addEventListener('click', (e) => {
     if (next === 'agent') modeBeforeAgent = state.mode;
     state.mode = next;
     store.set('vais.mode', next);
+    store.set('vais.modePicked', true);
   } else {
-    if (state.mode === 'agent') { state.mode = modeBeforeAgent && modeBeforeAgent !== 'agent' ? modeBeforeAgent : 'direct'; store.set('vais.mode', state.mode); }
+    if (state.mode === 'agent') { state.mode = modeBeforeAgent && modeBeforeAgent !== 'agent' ? modeBeforeAgent : 'direct'; store.set('vais.mode', state.mode); store.set('vais.modePicked', true); }
     const next = state.modality === pill.key ? 'auto' : pill.key; // nochmal tippen = aus
     state.modality = next;
     store.set('vais.modality', next);
@@ -369,6 +370,7 @@ el.modeMenu.addEventListener('click', (e) => {
   if (mode === state.mode) return;
   state.mode = mode;
   store.set('vais.mode', mode);
+  store.set('vais.modePicked', true); // selbst gewählt → bleibt
   if (state.chat) { resetChat(); toast(`${t('Neuer Chat', 'New chat')}: ${MODES[mode].label}`); }
   renderControls();
   el.prompt.focus();
@@ -3374,6 +3376,7 @@ async function showBoard() {
       $('#board-start').addEventListener('click', () => {
         state.mode = 'battle';
         store.set('vais.mode', 'battle');
+        store.set('vais.modePicked', true);
         if (boardCat === 'code' || boardCat === 'web') { state.modality = boardCat; store.set('vais.modality', boardCat); }
         go('');
         renderControls();

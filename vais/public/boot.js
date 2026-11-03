@@ -26,11 +26,20 @@
 
   // Einmalig: alte, automatisch gespeicherte Werte verwerfen (nicht selbst gewählt):
   // früher wurde Englisch als Start-Sprache und „Battle“ als Modus einfach abgelegt.
-  if (read('vais.prefsV') !== 2) {
+  var prefsV = Number(read('vais.prefsV')) || 0;
+  if (prefsV < 2) {
     try {
       if (!read('vais.langPicked')) { localStorage.removeItem('vais.lang'); document.cookie = 'vais_lang=; path=/; max-age=0'; }
       if (read('vais.mode') === 'battle') localStorage.setItem('vais.mode', JSON.stringify('direct'));
-      localStorage.setItem('vais.prefsV', '2');
+    } catch (e) { /* egal */ }
+  }
+  // Einmalig: Agent X wird Standard – für alle, die noch nie selbst einen Modus gewählt haben
+  // (kein gespeicherter Modus oder nur das frühere automatische „Direkt“). Eigene Wahl bleibt.
+  if (prefsV < 3) {
+    try {
+      var savedMode = read('vais.mode');
+      if (!read('vais.modePicked') && (!savedMode || savedMode === 'direct')) localStorage.setItem('vais.mode', JSON.stringify('agent'));
+      localStorage.setItem('vais.prefsV', '3');
     } catch (e) { /* egal */ }
   }
 
