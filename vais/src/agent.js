@@ -17,8 +17,7 @@ const REACT_TAG = /^\s*\[\[\s*react\s*:\s*([^\]\s]{1,8})\s*\]\]\s*/i;
 export function splitReaction(text) {
   const m = String(text ?? '').match(REACT_TAG);
   if (!m) return { reaction: null, text: String(text ?? '') };
-  // Unbekanntes Emoji → 👍 (sonst bliebe gar nichts übrig und es käme „keine Antwort“)
-  const emoji = REACTIONS.find((r) => r.replace(/\uFE0F/g, '') === m[1].replace(/\uFE0F/g, '')) ?? '👍';
+  const emoji = REACTIONS.find((r) => r.replace(/\uFE0F/g, '') === m[1].replace(/\uFE0F/g, '')) ?? null;
   return { reaction: emoji, text: String(text).slice(m[0].length) };
 }
 // Kurze Bestätigungen wie „ok“ oder „danke“ beantwortet Agent X nur mit einem Emoji – ohne Modell, spart das Limit
@@ -667,7 +666,7 @@ const tooBig = (err) => err?.status === 413 || (err?.status === 400 && /zu lang|
 // Ersatz, wenn das Hauptmodell voll ist oder die Anfrage zu groß war (größere Limits)
 
 // Nichts Brauchbares: kein Text und keine Emoji-Reaktion
-export const isEmptyAnswer = (content) => { const split = splitReaction(content); return !split.reaction && !split.text.trim(); };
+export const isEmptyAnswer = (content) => !REACT_TAG.test(String(content ?? '')) && !splitReaction(content).text.trim();
 const hasImagesIn = (messages) => (messages ?? []).some((m) => m.role === 'user' && Array.isArray(m.content) && m.content.some((p) => p.type === 'image_url'));
 const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 
@@ -700,6 +699,8 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
     const split = splitReaction(content);
     // Emoji nur, wenn es die ganze Antwort ist (z. B. ❤️ auf „danke“) – sonst gar keins
     if (split.reaction && !split.text.trim() && !ctx.lastHtml) { onReact(split.reaction); return undefined; }
+    // nur ein nicht erlaubtes Emoji (z. B. [[react:🦄]]) → 👍 statt „keine Antwort“
+    if (!split.text.trim() && REACT_TAG.test(String(content ?? '')) && !ctx.lastHtml) { onReact('👍'); return undefined; }
     let text = split.text || t('Ich konnte leider keine Antwort finden.', 'Sorry, I could not find an answer.');
     if (ctx.lastHtml && !hasHtmlBlock(text) && /<\/html>/i.test(ctx.lastHtml)) text += `\n\n\`\`\`html\n${ctx.lastHtml.trim()}\n\`\`\``;
     return emitText(text, onText, signal);

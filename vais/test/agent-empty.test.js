@@ -34,10 +34,10 @@ async function agent(text) {
   return { out, reaction };
 }
 
-test('Reaktion 👋 ist erlaubt, unbekannte Emojis werden 👍 statt „nichts“', () => {
+test('Reaktion 👋 ist erlaubt; nur-Emoji-Antworten zählen nicht als leer', () => {
   assert.deepEqual(splitReaction('[[react:👋]]'), { reaction: '👋', text: '' });
-  assert.equal(splitReaction('[[react:🦄]]').reaction, '👍');
   assert.equal(isEmptyAnswer('[[react:👋]]'), false);
+  assert.equal(isEmptyAnswer('[[react:🦄]]'), false);
   assert.equal(isEmptyAnswer('   '), true);
   assert.equal(isEmptyAnswer(null), true);
 });
@@ -46,6 +46,13 @@ test('„Hi“ → Modell antwortet nur mit 👋: Reaktion statt „Ich konnte l
   replies = ['[[react:👋]]'];
   const r = await agent('Hi');
   assert.equal(r.reaction, '👋');
+  assert.doesNotMatch(r.out, /keine Antwort finden/);
+});
+
+test('Nur ein unbekanntes Emoji → 👍 statt „keine Antwort“', async () => {
+  replies = ['[[react:🦄]]'];
+  const r = await agent('Hi');
+  assert.equal(r.reaction, '👍');
   assert.doesNotMatch(r.out, /keine Antwort finden/);
 });
 
