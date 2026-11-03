@@ -437,11 +437,10 @@ export function searchBudget(question = '') {
   return research ? { search: 5, read: 3, wiki: 3 } : { search: 2, read: 1, wiki: 2 };
 }
 // Bild erstellen: bestes freies Bildmodell, bei Fehler das nächste (höchstens 3 Versuche)
-const IMAGE_PREF = [/flux/i, /gpt-?image|nano|imagen|seedream/i, /z-image|qwen|kontext/i, /./];
 async function imageWithFallback(prompt, signal, ctx) {
   if (!ctx.onImage) return 'Bilder sind hier nicht verfügbar.';
   const all = (await listModels()).filter((m) => m.caps.includes('image') && !m.busy && !m.paid);
-  const order = IMAGE_PREF.flatMap((re) => all.filter((m) => re.test(m.upstream))).filter((m, i, arr) => arr.indexOf(m) === i).slice(0, 3);
+  const order = rankModels('image', all, { cap: 'image' }).slice(0, 3);
   if (!order.length) return 'Gerade ist kein Bildmodell frei – beschreibe dem Nutzer stattdessen, wie das Bild aussehen würde.';
   let lastErr = null;
   for (const m of order) {

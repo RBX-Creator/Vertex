@@ -697,6 +697,8 @@ export const RANKING = {
   agent: [M.gptoss120, M.gemma31, M.inkling, M.nemoUltra, M.qwen, M.gptoss20, M.flash],
   agentBackup: [M.qwen, M.gemma31, M.inkling, M.nemoUltra, M.gptoss20, M.flash, M.gptoss120],
   translate: [M.gptoss120, M.gemma31, M.qwen, M.inkling, M.gptoss20, M.flash, M.orFree],
+  // Bilder (Pollinations): Flux zuerst, dann andere starke, kleine Modelle zuletzt
+  image: [/^pollinations:.*flux/i, /^pollinations:.*(z-image|zimage)/i, /^pollinations:.*(gpt-?image|nano|seedream|qwen-image|kontext)/i, /^pollinations:(?!.*sana)/i, /^pollinations:/i],
   builder: [M.gptoss120, M.qwen, M.inkling, M.nemoUltra, M.gemma31, M.flash, M.gptoss20, M.mistral],
 };
 // Modelle für eine Aufgabe in der Reihenfolge der Rangliste (nur kostenlose; volle nur mit includeBusy)
@@ -800,22 +802,117 @@ export async function editImage({ model, prompt, image, signal, onStep = () => {
     if (!recipe) throw new Error(t('Das Bild konnte nicht beschrieben werden.', 'The image could not be described.'));
   }
   onStep({ kind: 'edit', text: String(prompt).slice(0, 80) });
-  return generateImage({ model, prompt: recipe, signal });
+  return generateImage({ model, prompt: recipe, signal, rewrite: false });
 }
 
-export function generateImage({ model, prompt, signal, reference }) {
-  const job = imageQueue.then(() => (signal?.aborted ? null : makeImage({ model, prompt, signal, reference })));
+// ── Bild-Prompt: aus jeder Sprache ein präziser englischer Prompt, Hauptmotiv zuerst ──
+// (Bildmodelle verstehen Englisch am besten; vorher ging der deutsche Text roh an ein kleines Modell
+//  → falsches Motiv, z. B. Bus statt Sportwagen)
+const IMAGE_PROMPT_SYS = 'You turn a user\'s image request (any language) into ONE precise English prompt for a text-to-image model. Start with the main subject exactly as requested (type of object, color, material – e.g. "a glossy red sports car"), then what it is doing, the setting, time of day and lighting, weather and surface details, camera angle, style, mood and colors. Keep EVERY detail the user gave and translate it faithfully. Never change the subject and never add new main objects. Drop phrases like "create an image of". Max 90 words. Answer with the prompt only.';
+const IMAGE_EDIT_SYS = 'Translate this image edit instruction (any language) into ONE short, precise English instruction for an image editing model. Keep every detail, add nothing. Answer with the instruction only.';
+const promptCache = new Map();
+export async function imagePrompt(prompt, { signal, edit = false } = {}) {
+  const text = String(prompt ?? '').replace(/\s+/g, ' ').trim().slice(0, 1500);
+  if (!text || demoMode) return text;
+  const key = `${edit ? 'e' : 'g'}|${text}`;
+  if (promptCache.has(key)) return promptCache.get(key);
+  try {
+    const msg = await completeBest('helper', { maxTokens: 400, reasoningEffort: 'low', timeoutMs: 25_000, messages: [{ role: 'system', content: edit ? IMAGE_EDIT_SYS : IMAGE_PROMPT_SYS }, { role: 'user', content: text }] }, { signal, tries: 3 });
+    let out = String(msg.content ?? '').replace(/^\s*(english )?prompt\s*:\s*/i, '').replace(/^["'„“\s]+|["'“”\s]+$/g, '').replace(/\s+/g, ' ').slice(0, 1200);
+    if (out.length < 8) out = text;
+    promptCache.set(key, out);
+    if (promptCache.size > 300) promptCache.delete(promptCache.keys().next().value);
+    return out;
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    return text; // Umschreiben ging nicht → Original
+  }
+}
+
+export async function generateImage({ model, prompt, signal, reference, rewrite = true }) {
+  const finalPrompt = rewrite ? await imagePrompt(prompt, { signal, edit: !!reference }) : prompt;
+  const job = imageQueue.then(() => (signal?.aborted ? null : makeImage({ model, prompt: finalPrompt, signal, reference })));
   imageQueue = job.catch(() => {});
   return job;
 }
+
+// ── Stärkere Bild-Anbieter, falls ein Schlüssel da ist (sonst/bei Fehler: Pollinations) ──
+const strongCooldown = new Map(); // Anbieter → bis wann übersprungen (kein Kontingent, Fehler)
+const timed = (signal, ms) => (signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms));
+let geminiImageModel = null;
+const STRONG_IMAGE = [
+  {
+    name: 'gemini',
+    available: () => !!PROVIDERS.gemini.keys.length,
+    async make(prompt, signal) {
+      const key = PROVIDERS.gemini.key;
+      if (!geminiImageModel) {
+        const wanted = String(process.env.GEMINI_IMAGE_MODEL ?? '').trim();
+        if (wanted) geminiImageModel = wanted;
+        else {
+          const { models = [] } = await getJson(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000&key=${encodeURIComponent(key)}`);
+          const ids = models.filter((m) => m.supportedGenerationMethods?.includes('generateContent')).map((m) => m.name.replace(/^models\//, '')).filter((id) => /^gemini-.*image/i.test(id) && !/tts|audio/i.test(id));
+          geminiImageModel = ids.sort((a, b) => b.localeCompare(a, 'en', { numeric: true }))[0] ?? 'none';
+        }
+      }
+      if (geminiImageModel === 'none') throw Object.assign(new Error('kein Gemini-Bildmodell'), { status: 404 });
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiImageModel)}:generateContent?key=${encodeURIComponent(key)}`, {
+        method: 'POST', signal: timed(signal, 120_000), headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['IMAGE', 'TEXT'] } }),
+      });
+      if (!res.ok) throw Object.assign(new Error(`Gemini ${res.status}`), { status: res.status });
+      const data = await res.json();
+      const part = (data.candidates?.[0]?.content?.parts ?? []).find((p) => p.inlineData?.data || p.inline_data?.data);
+      const inline = part?.inlineData ?? part?.inline_data;
+      if (!inline?.data) throw Object.assign(new Error('Gemini: kein Bild'), { status: 502 });
+      return `data:${inline.mimeType ?? inline.mime_type ?? 'image/png'};base64,${inline.data}`;
+    },
+  },
+  {
+    name: 'together',
+    available: () => !!String(process.env.TOGETHER_API_KEY ?? '').trim(),
+    async make(prompt, signal) {
+      const res = await fetch('https://api.together.xyz/v1/images/generations', {
+        method: 'POST', signal: timed(signal, 120_000),
+        headers: { Authorization: `Bearer ${String(process.env.TOGETHER_API_KEY).trim()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: String(process.env.TOGETHER_IMAGE_MODEL ?? '').trim() || 'black-forest-labs/FLUX.1-schnell', prompt, width: 1024, height: 1024, steps: 4, n: 1, response_format: 'b64_json' }),
+      });
+      if (!res.ok) throw Object.assign(new Error(`Together ${res.status}`), { status: res.status });
+      const data = await res.json();
+      const b64 = data.data?.[0]?.b64_json;
+      if (b64) return `data:image/png;base64,${b64}`;
+      const link = data.data?.[0]?.url;
+      if (!link) throw Object.assign(new Error('Together: kein Bild'), { status: 502 });
+      const img = await fetch(link, { signal: timed(signal, 60_000) });
+      const type = img.headers.get('content-type') || 'image/png';
+      return `data:${type.split(';')[0]};base64,${Buffer.from(await img.arrayBuffer()).toString('base64')}`;
+    },
+  },
+];
+export const strongImageProviders = () => STRONG_IMAGE.filter((p) => p.available()).map((p) => p.name);
 
 async function makeImage({ model, prompt, signal, reference }) {
   const [provider, ...rest] = model.split(':');
   const upstream = rest.join(':');
   const text = String(prompt).replace(/\s+/g, ' ').trim().slice(0, 1500);
   if (provider === 'demo') return demoImage(upstream, text);
+  // Mit Schlüssel: stärkeres Modell zuerst (nicht beim Bearbeiten mit Vorlage), sonst/bei Fehler Pollinations
+  if (!reference) {
+    for (const strong of STRONG_IMAGE) {
+      if (!strong.available() || (strongCooldown.get(strong.name) ?? 0) > Date.now()) continue;
+      try {
+        const img = await strong.make(text, signal);
+        if (img && Buffer.byteLength(img) < 6_000_000) return img;
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        if ([400, 401, 403, 404, 429].includes(err.status)) strongCooldown.set(strong.name, Date.now() + 60 * 60 * 1000);
+        console.log(`Bild über ${strong.name} nicht möglich (${String(err.message).slice(0, 80)}) – nehme Pollinations`);
+      }
+    }
+  }
   const seed = Math.floor(Math.random() * 1_000_000);
-  const query = `model=${encodeURIComponent(upstream)}&width=1024&height=1024&seed=${seed}&nologo=true&private=true${reference ? `&image=${encodeURIComponent(reference)}` : ''}`;
+  // enhance=false: wir schreiben den Prompt schon selbst um; nologo/hohe Auflösung greifen mit Schlüssel
+  const query = `model=${encodeURIComponent(upstream)}&width=1024&height=1024&seed=${seed}&nologo=true&private=true&enhance=false${reference ? `&image=${encodeURIComponent(reference)}` : ''}`;
   const url = IMAGES.key
     ? `https://gen.pollinations.ai/image/${encodeURIComponent(text)}?${query}`
     : `https://image.pollinations.ai/prompt/${encodeURIComponent(text)}?${query}`;

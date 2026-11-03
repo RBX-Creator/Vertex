@@ -141,7 +141,7 @@ export async function autoPick(text = '', { images = false, modality = 'auto', b
   const free = all.filter((m) => !m.busy);
   const find = (task, cap) => rankModels(task, free, { cap })[0];
   const any = (cap) => free.find((m) => m.caps.includes(cap)) ?? all.find((m) => m.caps.includes(cap));
-  if (modality === 'image') { const m = any('image'); return m && { model: m, kind: 'image', label: t('Bild', 'Image') }; }
+  if (modality === 'image') { const m = rankModels('image', free, { cap: 'image' })[0] ?? any('image'); return m && { model: m, kind: 'image', label: t('Bild', 'Image') }; }
   if (images) { const m = find('vision', 'vision') ?? any('vision'); return m && { model: m, kind: 'vision', label: t('Bild ansehen', 'Looking at an image') }; }
   if (modality === 'web') { const r = AUTO_RULES.find((x) => x.kind === 'web'); const m = find('web', 'web') ?? any('web'); return m && { model: m, kind: 'web', label: r.label() }; }
   const q = String(text).slice(0, 4000);
