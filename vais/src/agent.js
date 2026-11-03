@@ -12,12 +12,13 @@ import { searchWeb, readPage } from './search.js';
 const MAX_STEPS = 8;
 
 // Emoji-Reaktionen auf die Nachricht des Nutzers
-export const REACTIONS = ['👍', '❤️', '😂', '😮', '🎉', '🔥', '👀', '✅', '🙏', '💯', '🤔', '👏'];
+export const REACTIONS = ['👍', '❤️', '😂', '😮', '🎉', '🔥', '👀', '✅', '🙏', '💯', '🤔', '👏', '👋'];
 const REACT_TAG = /^\s*\[\[\s*react\s*:\s*([^\]\s]{1,8})\s*\]\]\s*/i;
 export function splitReaction(text) {
   const m = String(text ?? '').match(REACT_TAG);
   if (!m) return { reaction: null, text: String(text ?? '') };
-  const emoji = REACTIONS.find((r) => r.replace(/\uFE0F/g, '') === m[1].replace(/\uFE0F/g, '')) ?? null;
+  // Unbekanntes Emoji → 👍 (sonst bliebe gar nichts übrig und es käme „keine Antwort“)
+  const emoji = REACTIONS.find((r) => r.replace(/\uFE0F/g, '') === m[1].replace(/\uFE0F/g, '')) ?? '👍';
   return { reaction: emoji, text: String(text).slice(m[0].length) };
 }
 // Kurze Bestätigungen wie „ok“ oder „danke“ beantwortet Agent X nur mit einem Emoji – ohne Modell, spart das Limit
@@ -202,7 +203,7 @@ function systemPrompt(personal = {}) {
     'Diagramme: Wenn Zahlen als Diagramm helfen (Vergleiche, Entwicklungen, Anteile), füge einen Block ```chart mit JSON ein, z. B. {"type":"bar","title":"Einwohner (Mio.)","unit":"Mio.","labels":["Berlin","Hamburg"],"series":[{"name":"2024","data":[3.8,1.9]}]}. type ist bar, line (für Verläufe) oder pie (Anteile, nur eine Reihe). Höchstens 8 Reihen und 40 Werte. Die App zeichnet das Diagramm selbst.',
     'Python: Für Rechnungen, Statistik oder Simulationen kannst du Python-Code in einem ```python-Block schreiben – der Nutzer kann ihn mit „▶ Ausführen“ direkt im Browser laufen lassen (Pyodide; numpy, pandas, matplotlib gehen, kein Internet, keine Dateien). Gib Ergebnisse mit print() aus.',
     'Wenn der Nutzer Bilder angehängt hat, bekommst du eine Beschreibung davon als [Bild …]. Nutze sie, als hättest du das Bild selbst gesehen.',
-    `Emoji-Reaktion (wie im Messenger): NUR wenn die Nachricht des Nutzers gar keine Antwort braucht – z. B. Dank („danke“, „vielen Dank“), Lob („du bist der Beste“), „ok“, „passt“, „haha“, „gute Nacht“ –, antwortest du ausschließlich mit [[react:EMOJI]] und KEINEM Text (❤️ bei Dank und Lob, 😂 bei Witzen, 👍 bei ok, 👋 bei Abschied, 🔥 bei „krass“). Erlaubt: ${REACTIONS.join(' ')}. Bei allen anderen Nachrichten (Fragen, Aufgaben, Erzählungen) reagierst du NICHT mit einem Emoji, sondern antwortest normal mit Text.`,
+    `Emoji-Reaktion (wie im Messenger): NUR wenn die Nachricht des Nutzers gar keine Antwort braucht – z. B. Dank („danke“, „vielen Dank“), Lob („du bist der Beste“), „ok“, „passt“, „haha“, „gute Nacht“ –, antwortest du ausschließlich mit [[react:EMOJI]] und KEINEM Text (❤️ bei Dank und Lob, 😂 bei Witzen, 👍 bei ok, 👋 bei Abschied, 🔥 bei „krass“). Erlaubt: ${REACTIONS.join(' ')}. Begrüßungen („hi“, „hallo“, „hey“, „moin“, „guten Morgen“) beantwortest du IMMER mit einem kurzen, freundlichen Text (z. B. Gegengruß und wobei du helfen kannst) – nie nur mit einem Emoji. Bei allen anderen Nachrichten (Fragen, Aufgaben, Erzählungen) reagierst du NICHT mit einem Emoji, sondern antwortest normal mit Text.`,
     ...(personal.memoryOn ? [
       'Du hast ein Gedächtnis: Erzählt der Nutzer etwas Dauerhaftes über sich (Name, Alter, Hobbys, Schule/Beruf, Vorlieben, Projekte, wie er angesprochen werden will) oder bittet er dich, dir etwas zu merken, speichere es mit remember – kurz, in der dritten Person (z. B. „Heißt Leeam, mag Grok“). Speichere nichts Sensibles (Passwörter, Gesundheit, Adressen) und nichts Vorübergehendes.',
       personal.memories?.length ? `Was du über den Nutzer weißt:\n${personal.memories.map((m) => `- ${m.text}`).join('\n')}\nNutze das natürlich, ohne es ständig zu erwähnen.` : 'Du weißt noch nichts über den Nutzer.',
@@ -665,6 +666,8 @@ function squeeze(convo, hard = false) {
 const tooBig = (err) => err?.status === 413 || (err?.status === 400 && /zu lang|zu groß|too long|too large|context/i.test(err.message)) || /zu groß für das kostenlose Limit|too large for this model/i.test(err?.message ?? '');
 // Ersatz, wenn das Hauptmodell voll ist oder die Anfrage zu groß war (größere Limits)
 
+// Nichts Brauchbares: kein Text und keine Emoji-Reaktion
+export const isEmptyAnswer = (content) => { const split = splitReaction(content); return !split.reaction && !split.text.trim(); };
 const hasImagesIn = (messages) => (messages ?? []).some((m) => m.role === 'user' && Array.isArray(m.content) && m.content.some((p) => p.type === 'image_url'));
 const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 
@@ -759,6 +762,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
       convo.push({ role: 'user', content: `(Nachtrag des Nutzers, während du arbeitest – berücksichtige das): ${extra}` });
     }
   };
+  let emptyRetried = false;
   for (let round = 0; round < MAX_STEPS; round++) {
     takeInbox();
     // Budget aufgebraucht → Such-Werkzeuge gar nicht mehr anbieten
@@ -772,7 +776,16 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
       convo.push({ role: 'assistant', content: msg.content ?? '' });
       continue;
     }
-    if (!calls.length) return finish(msg.content);
+    if (!calls.length) {
+      // Leere Antwort (kommt bei manchen Modellen auf ganz kurze Nachrichten vor) → einmal nachfragen statt „keine Antwort“
+      if (isEmptyAnswer(msg.content) && !ctx.lastHtml && !emptyRetried) {
+        emptyRetried = true;
+        convo.push({ role: 'user', content: '(Deine letzte Antwort war leer. Antworte jetzt direkt mit einem kurzen, passenden Text – ohne Werkzeuge.)' });
+        const again = await ask();
+        return finish(again.content);
+      }
+      return finish(msg.content);
+    }
 
     convo.push({ role: 'assistant', content: msg.content ?? '', tool_calls: calls });
     // Alle Werkzeuge dieses Schritts gleichzeitig ausführen
