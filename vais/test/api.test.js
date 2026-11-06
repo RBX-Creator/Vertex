@@ -656,3 +656,29 @@ test('Websuche: eigene Suche, nummerierte Quellen und [n] in der Antwort', async
   assert.match(out.text, /\[1\]/);
   assert.ok(models.length);
 });
+
+test('Kontostand-API: nur eigene Daten, mit Verlauf', async () => {
+  const c = await signUp('konto@example.com');
+  assert.equal((await c.json('/api/chat/ledger')).data.balance, 0);
+  let r = await c.json('/api/chat/ledger/set', { balance: '100,00' });
+  assert.equal(r.status, 200);
+  r = await c.json('/api/chat/ledger/add', { amount: '-25,50', note: 'Spiel' });
+  assert.equal(r.data.balance, 7450);
+  assert.equal(r.data.entries[0].note, 'Spiel');
+  assert.equal((await c.json('/api/chat/ledger/add', { amount: 'x' })).status, 400);
+  const other = await signUp('konto2@example.com');
+  await other.json('/api/chat/ledger/delete', { id: r.data.entries[0].id });
+  assert.equal((await c.json('/api/chat/ledger')).data.balance, 7450);
+  assert.equal((await fetch(`${BASE}/api/chat/ledger`)).status, 401);
+});
+
+test('Agentenchats (Beta): nur für Admins und Mods', async () => {
+  const user = await signUp('normal-life@example.com');
+  assert.equal((await user.json('/api/chat/start', { mode: 'life', title: 'x' })).status, 403);
+  const admin = client();
+  await admin.json('/api/auth/login', { email: 'admin@example.com', password: 'geheim1234' });
+  const start = await admin.json('/api/chat/start', { mode: 'life', title: 'Alltag' });
+  assert.equal(start.status, 200);
+  const out = await stream(admin, start.data.id, 'Ich gehe jeden Morgen joggen');
+  assert.ok(out.lines.some((l) => l.done));
+});

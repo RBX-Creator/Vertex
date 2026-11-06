@@ -1,5 +1,5 @@
 import { t, LANG, LOCALE, LANGUAGES, EXTRA_LANGS, translateDom, setLang, getTheme, setTheme } from './i18n.js';
-import { markdown, enhance, linkCites, QSTATE, showQuestion } from './render.js';
+import { markdown, enhance, linkCites, QSTATE, showQuestion, renderChart } from './render.js';
 import { startTour, tourDone } from './tour.js';
 import { CHANGES, LATEST } from './changelog.js';
 import { openTeam, refreshTeamBadge } from './team.js';
@@ -74,14 +74,21 @@ Object.assign(ICON, {
   'm-text': svg('<path d="M5 5h14M12 5v15M9 20h6"/>'),
   'm-auto': svg('<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>'),
   preview: svg('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>'),
+  // Agentenchats (Beta): Person mit Funkel-Stern
+  life: svg('<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c.8-3.6 3.3-6 6.5-6s5.7 2.4 6.5 6"/><path d="M18.5 3l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z"/>'),
 });
 
 const MODES = {
   agent: { label: 'Agent X', desc: t('Sucht, liest und rechnet selbstständig – der stärkste Modus', 'Searches, reads and calculates on its own – the strongest mode') },
+  // nur für Mods und Admins sichtbar (siehe renderModeMenu)
+  life: { label: t('Agentenchats', 'Agent chats'), desc: t('Offen und persönlich – lernt deinen Alltag kennen und merkt sich Dinge über dich', 'Open and personal – gets to know your daily life and remembers things about you'), staff: true },
   battle: { label: 'Battle', desc: t('2 anonyme Modelle im Vergleich', '2 anonymous models head to head') },
   sxs: { label: 'Side by Side', desc: t('2 Modelle deiner Wahl vergleichen', 'Compare 2 models of your choice') },
   direct: { label: t('Direkt', 'Direct'), desc: t('Mit 1 Modell chatten', 'Chat with 1 model') },
 };
+
+let isStaffUser = false;
+const isAgentMode = (m) => m === 'agent' || m === 'life'; // Agentenchats verhalten sich wie Agent X
 
 const canSpeak = 'speechSynthesis' in window;
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -243,7 +250,7 @@ function modelLogo(m) {
 
 // ── Zustand ───────────────────────────────────────────────────────
 const state = {
-  mode: store.get('vais.mode', 'agent'), // Standard: Agent X
+  mode: 'agent', // beim Start immer Agent X (umschalten geht jederzeit über den Modus-Knopf)
   modality: store.get('vais.modality', 'auto'),
   picks: store.get('vais.picks', [null, null]),
   models: [],
@@ -262,6 +269,7 @@ const el = {
   thread: $('#thread'),
   board: $('#board'),
   stats: $('#stats'),
+  konto: $('#konto'),
   dock: $('.dock'),
   drawer: $('#drawer'),
   dList: $('#d-list'),
@@ -300,7 +308,7 @@ function renderPills() {
   box.hidden = !!state.chat;
   if (state.chat) return;
   box.innerHTML = PILLS.map((p) => {
-    const on = p.kind === 'mode' ? state.mode === 'agent' : state.mode !== 'agent' && state.modality === p.key;
+    const on = p.kind === 'mode' ? state.mode === 'agent' : !isAgentMode(state.mode) && state.modality === p.key;
     return `<button type="button" class="pill${on ? ' on' : ''}" data-pill="${p.key}" aria-pressed="${on}"><span class="pill-ico" aria-hidden="true">${escapeHtml(p.ico)}</span>${escapeHtml(p.label())}</button>`;
   }).join('');
 }
@@ -317,7 +325,7 @@ $('#mode-pills')?.addEventListener('click', (e) => {
     store.set('vais.mode', next);
     store.set('vais.modePicked', true);
   } else {
-    if (state.mode === 'agent') { state.mode = modeBeforeAgent && modeBeforeAgent !== 'agent' ? modeBeforeAgent : 'direct'; store.set('vais.mode', state.mode); store.set('vais.modePicked', true); }
+    if (isAgentMode(state.mode)) { state.mode = modeBeforeAgent && modeBeforeAgent !== 'agent' ? modeBeforeAgent : 'direct'; store.set('vais.mode', state.mode); store.set('vais.modePicked', true); }
     const next = state.modality === pill.key ? 'auto' : pill.key; // nochmal tippen = aus
     state.modality = next;
     store.set('vais.modality', next);
@@ -331,7 +339,7 @@ function renderControls() {
   queueMicrotask(renderPills);
   el.modeBtn.innerHTML = ICON[state.mode] + ICON.chev;
   el.modeBtn.setAttribute('aria-label', `${t('Modus', 'Mode')}: ${MODES[state.mode].label}`);
-  el.modalityBtn.hidden = state.mode === 'agent';
+  el.modalityBtn.hidden = isAgentMode(state.mode);
   el.modalityBtn.innerHTML = ICON[`m-${state.modality}`] + ICON.chev;
   el.modalityBtn.setAttribute('aria-label', `${t('Art', 'Type')}: ${MODALITIES[state.modality].label}`);
   el.chips.forEach((chip, slot) => {
@@ -348,7 +356,7 @@ function renderControls() {
 }
 
 function renderModeMenu() {
-  el.modeMenu.innerHTML = Object.entries(MODES).map(([key, m]) => `
+  el.modeMenu.innerHTML = Object.entries(MODES).filter(([, m]) => !m.staff || isStaffUser).map(([key, m]) => `
     <button type="button" class="mode-item" role="menuitemradio" aria-checked="${key === state.mode}" data-mode="${key}">
       ${ICON[key]}<span><b>${m.label}</b><small>${m.desc}</small></span>${key === state.mode ? ICON.check.replace('<svg ', '<svg class="check" ') : '<span></span>'}
     </button>`).join('');
@@ -478,7 +486,7 @@ el.sheet.addEventListener('click', (e) => {
 
 // ── Chat ──────────────────────────────────────────────────────────
 function labelFor(chat, side) {
-  if (chat.mode === 'agent') return 'Agent X';
+  if (isAgentMode(chat.mode)) return 'Agent X';
   if (chat.mode === 'battle') return chat.names ? chat.names[side] : `${t('Assistent', 'Assistant')} ${'AB'[side]}`;
   return chat.labels[side];
 }
@@ -491,7 +499,8 @@ function showView(view) {
   if (q) q.hidden = view !== 'thread';
   el.board.hidden = view !== 'board';
   el.stats.hidden = view !== 'stats';
-  el.dock.hidden = view === 'board' || view === 'stats';
+  el.konto.hidden = view !== 'konto';
+  el.dock.hidden = view === 'board' || view === 'stats' || view === 'konto';
   el.newChat.hidden = view === 'home';
   $('#share-chat').hidden = view !== 'thread';
   $('#suggest').hidden = view !== 'home';
@@ -499,7 +508,7 @@ function showView(view) {
   renderPills();
   if (view === 'home' || view === 'thread') paintIncognito();
   else { $('#incognito-btn').hidden = true; $('#incognito-banner').hidden = true; }
-  if (view === 'board' || view === 'stats') el.title.textContent = '';
+  if (view === 'board' || view === 'stats' || view === 'konto') el.title.textContent = '';
 }
 
 // ── Vorschläge auf der Startseite ─────────────────────────────────
@@ -965,7 +974,7 @@ async function loadThinkSummary(card, a, turnIndex, side) {
 function renderSources(card, a) {
   let box = $('.sources', card);
   const searching = a.status === 'streaming' && !a.text && !a.sources?.length
-    && (a.searchQuery || (state.chat?.modality === 'web' && state.chat?.mode !== 'agent'));
+    && (a.searchQuery || (state.chat?.modality === 'web' && !isAgentMode(state.chat?.mode)));
   if (!a.sources?.length && !searching) { box?.remove(); return; }
   if (!box) {
     box = document.createElement('div');
@@ -1163,7 +1172,7 @@ async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
     if (document.visibilityState === 'visible') haptic(got ? 'success' : 'error'); // Antwort fertig
   } catch (err) {
     flushText(a);
-    const agentSide = chat.mode === 'agent' || (chat.labels?.[side] === 'Agent X');
+    const agentSide = isAgentMode(chat.mode) || (chat.labels?.[side] === 'Agent X');
     if (ctrl.signal.aborted) a.status = a.text || a.images?.length ? 'done' : 'stopped';
     else if (err instanceof TypeError || /unterbrochen|interrupted|network|load failed/i.test(err.message)) {
       // Verbindung weg – der Server schreibt die Antwort trotzdem fertig, wir holen sie gleich nach
@@ -1183,7 +1192,7 @@ async function runSide(turnIndex, side, { fresh = false, boost = false } = {}) {
 
 function afterTurn() {
   const chat = state.chat;
-  if (!chat || chat.mode === 'direct' || chat.mode === 'agent' || chat.winner) return;
+  if (!chat || chat.mode === 'direct' || isAgentMode(chat.mode) || chat.winner) return;
   const last = chat.turns.at(-1);
   if (!last) return;
   el.vote.hidden = !last.answers.every((a) => a.status === 'done' && (a.text || a.images?.length));
@@ -1257,7 +1266,7 @@ async function send() {
 
 // Eine Frage stellen und die Antwort(en) holen
 async function runTurn(chat, text, attachments) {
-  const sides = chat.mode === 'direct' || chat.mode === 'agent' ? 1 : 2;
+  const sides = chat.mode === 'direct' || isAgentMode(chat.mode) ? 1 : 2;
   chat.turns.push({ user: text, attachments, answers: Array.from({ length: sides }, () => ({ text: '', status: 'streaming', error: null, steps: [], thinking: '', thinkMs: 0 })) });
   const index = chat.turns.length - 1;
   if (index > 0) chat.turns[index - 1].answers.forEach((_, s) => updateCard(index - 1, s)); // „Neu generieren“ dort abschalten
@@ -1343,7 +1352,7 @@ function renderQueue() {
     box.className = 'queue';
   }
   el.thread.after(box);
-  const agentRunning = state.chat?.mode === 'agent' || state.chat?.labels?.includes?.('Agent X');
+  const agentRunning = isAgentMode(state.chat?.mode) || state.chat?.labels?.includes?.('Agent X');
   box.innerHTML = items.map((q) => `
     <div class="queued" data-q="${q.id}">
       <div class="bubble"><span></span>${q.attachments.length ? `<small>📎 ${q.attachments.length}</small>` : ''}</div>
@@ -2958,6 +2967,7 @@ async function route() {
   if (h.startsWith('#g/')) return; // Team-Chat (öffnet sich als eigenes Fenster)
   if (h === '#bestenliste') return showBoard();
   if (h === '#statistik') return showStats();
+  if (h === '#kontostand') return showKonto();
   if (h === '#geraete') {
     // aus der Benachrichtigung „Neue Anmeldung“: Einstellungen bei den Geräten öffnen
     history.replaceState(null, '', location.pathname);
@@ -3025,7 +3035,7 @@ async function loadChat(id) {
     if (restoreScroll?.id === data.id) { el.stage.scrollTop = restoreScroll.top; restoreScroll = null; } else el.stage.scrollTop = el.stage.scrollHeight;
     saveLast();
   });
-  if (!data.shared && data.turns.some((tn) => tn.answers.some((a) => a.status === 'streaming'))) watchBackground(data.id, data.mode === 'agent');
+  if (!data.shared && data.turns.some((tn) => tn.answers.some((a) => a.status === 'streaming'))) watchBackground(data.id, isAgentMode(data.mode));
 }
 
 // Agent X arbeitet im Hintergrund: alle paar Sekunden nachsehen, bis er fertig ist
@@ -3299,6 +3309,7 @@ el.dSearch.addEventListener('input', renderHistory);
 $('#d-new').addEventListener('click', () => { closeDrawer(); go(''); el.prompt.focus(); });
 $('#d-board').addEventListener('click', () => { closeDrawer(); go('#bestenliste'); });
 $('#d-stats').addEventListener('click', () => { closeDrawer(); go('#statistik'); });
+$('#d-konto').addEventListener('click', () => { closeDrawer(); go('#kontostand'); });
 el.drawer.addEventListener('click', async (e) => {
   if (e.target.closest('[data-close-drawer]')) return closeDrawer();
   if (e.target.closest('[data-retry-history]')) { historyDirty = true; return openDrawer(); }
@@ -3550,6 +3561,67 @@ async function showStats() {
     sub.textContent = t('Die Statistik konnte nicht geladen werden.', 'Stats could not be loaded.');
   }
 }
+
+// ── Kontostand ────────────────────────────────────────────────────
+const euro = (cents) => (cents / 100).toLocaleString(LOCALE, { style: 'currency', currency: 'EUR' });
+const todayIso = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
+async function showKonto() {
+  if (state.chat) resetChat();
+  showView('konto');
+  if (!$('#konto-day').value) $('#konto-day').value = todayIso();
+  try {
+    const res = await fetch('/api/chat/ledger');
+    if (res.status === 401) return location.replace('/login');
+    paintKonto(await res.json());
+  } catch {
+    $('#konto-balance').textContent = t('Konnte nicht geladen werden', 'Could not be loaded');
+  }
+}
+function paintKonto(d) {
+  const bal = $('#konto-balance');
+  bal.textContent = euro(d.balance ?? 0);
+  bal.classList.toggle('neg', (d.balance ?? 0) < 0);
+  const fmtDay = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' });
+  const box = $('#konto-chart');
+  box.innerHTML = '';
+  const line = d.series?.length >= 2 && renderChart({ type: 'line', unit: '€', labels: d.series.map((p) => fmtDay(p.day)), series: [{ name: t('Kontostand', 'Balance'), data: d.series.map((p) => p.value / 100) }], maxLabels: 120 });
+  if (line) box.append(line); else box.innerHTML = `<p class="set-hint">${t('Sobald du ein paar Buchungen hast, siehst du hier deinen Verlauf.', 'Once you have a few entries, your history shows up here.')}</p>`;
+  const mbox = $('#konto-months');
+  mbox.innerHTML = '';
+  const bars = d.months?.length && renderChart({ type: 'bar', unit: '€', labels: d.months.map((m) => new Date(`${m.month}-15T12:00:00`).toLocaleDateString(LOCALE, { month: 'short', year: '2-digit' })), series: [{ name: t('Einnahmen', 'Income'), data: d.months.map((m) => m.plus / 100) }, { name: t('Ausgaben', 'Expenses'), data: d.months.map((m) => m.minus / 100) }] });
+  if (bars) mbox.append(bars); else mbox.innerHTML = `<p class="set-hint">${t('Noch keine Einnahmen oder Ausgaben.', 'No income or expenses yet.')}</p>`;
+  const rows = $('#konto-rows');
+  rows.innerHTML = (d.entries ?? []).map((e) => `<tr data-id="${e.id}"><td>${escapeHtml(fmtDay(e.day))}</td><td class="k-note"></td><td class="k-amt ${e.amount < 0 ? 'neg' : 'pos'}">${e.amount < 0 ? '−' : '+'}${escapeHtml(euro(Math.abs(e.amount)))}</td><td class="k-bal">${escapeHtml(euro(e.balance))}</td><td><button type="button" class="mem-del" data-konto-del="${e.id}" aria-label="${t('Löschen', 'Delete')}" title="${t('Löschen', 'Delete')}">×</button></td></tr>`).join('')
+    || `<tr><td colspan="5" class="set-hint">${t('Noch keine Buchungen.', 'No entries yet.')}</td></tr>`;
+  rows.querySelectorAll('tr[data-id]').forEach((tr, i) => { $('.k-note', tr).textContent = d.entries[i].note || (d.entries[i].kind === 'set' ? t('Kontostand eingetragen', 'Balance set') : '–'); });
+}
+document.querySelectorAll('[data-sign]').forEach((btn) => btn.addEventListener('click', async () => {
+  const raw = $('#konto-amount').value.trim().replace(/^[+−-]/, '');
+  if (!raw) { toast(t('Gib zuerst einen Betrag ein.', 'Enter an amount first.')); return $('#konto-amount').focus(); }
+  try {
+    const d = await post('/api/chat/ledger/add', { amount: `${btn.dataset.sign === '-1' ? '-' : ''}${raw}`, note: $('#konto-note').value, day: $('#konto-day').value });
+    $('#konto-amount').value = '';
+    $('#konto-note').value = '';
+    paintKonto(d);
+    haptic('success');
+  } catch (err) { toast(err.message); }
+}));
+$('#konto-set-btn').addEventListener('click', async () => {
+  const v = $('#konto-set-value').value.trim();
+  if (!v) return $('#konto-set-value').focus();
+  try {
+    const d = await post('/api/chat/ledger/set', { balance: v.replace(/^−/, '-'), day: $('#konto-day').value || todayIso() });
+    $('#konto-set-value').value = '';
+    $('.konto-set').open = false;
+    paintKonto(d);
+    toast(t('Kontostand übernommen ✓', 'Balance applied ✓'));
+  } catch (err) { toast(err.message); }
+});
+$('#konto-rows').addEventListener('click', async (e) => {
+  const del = e.target.closest('[data-konto-del]');
+  if (!del) return;
+  try { paintKonto(await post('/api/chat/ledger/delete', { id: Number(del.dataset.kontoDel) })); } catch (err) { toast(err.message); }
+});
 
 // ── Einstellungen ─────────────────────────────────────────────────
 const settingsEl = $('#settings');
@@ -3965,7 +4037,7 @@ async function init() {
   }
   // Admin-Links gibt es im HTML gar nicht – sie werden NUR eingefügt, wenn der Server bestätigt,
   // dass dieses Konto Admin oder Mod ist (der Admin-Bereich selbst prüft das zusätzlich auf dem Server)
-  if (user.admin === true || user.mod === true) addAdminLinks(user.mod === true);
+  if (user.admin === true || user.mod === true) { addAdminLinks(user.mod === true); isStaffUser = true; }
   // Verlauf schon im Hintergrund holen, damit die Seitenleiste sofort die Titel zeigt
   setTimeout(() => { if (historyDirty) fetchHistory(); }, 1200);
   $('#d-avatar').textContent = user.email[0].toUpperCase();

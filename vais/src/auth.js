@@ -353,6 +353,7 @@ auth.post('/delete', wrap(async (req, res) => {
   await purgeChats(me.id);
   await run('DELETE FROM sessions WHERE user_id = ?', me.id);
   await run('DELETE FROM memories WHERE user_id = ?', me.id);
+  await run('DELETE FROM ledger WHERE user_id = ?', me.id).catch(() => {});
   await run('DELETE FROM push_subs WHERE user_id = ?', me.id).catch(() => {});
   await run('DELETE FROM reminders WHERE user_id = ?', me.id).catch(() => {});
   await run('DELETE FROM sites WHERE user_id = ?', me.id).catch(() => {});

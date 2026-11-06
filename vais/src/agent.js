@@ -68,6 +68,33 @@ const REMEMBER_TOOL = {
   },
 };
 
+const LEDGER_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'kontostand',
+      description: 'Liest den Kontostand des Nutzers aus seinem Kontostand-Tool: aktueller Stand, Einnahmen/Ausgaben im Monat und die letzten Buchungen. Nutze es, wenn der Nutzer nach seinem Geld, Kontostand, Ausgaben oder Budget fragt.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'kontobuchung',
+      description: 'Trägt eine Einnahme (positiver Betrag) oder Ausgabe (negativer Betrag) im Kontostand-Tool des Nutzers ein. NUR wenn der Nutzer das ausdrücklich möchte (z. B. „trag 12 € fürs Kino ein“). Danach kurz bestätigen.',
+      parameters: {
+        type: 'object',
+        properties: {
+          betrag: { type: 'number', description: 'Betrag in Euro: Einnahme positiv (z. B. 50), Ausgabe negativ (z. B. -12.5)' },
+          notiz: { type: 'string', description: 'Kurze Beschreibung, z. B. „Kino“ oder „Taschengeld“' },
+          datum: { type: 'string', description: 'Datum JJJJ-MM-TT, Standard heute' },
+        },
+        required: ['betrag'],
+      },
+    },
+  },
+];
+
 const REMINDER_TOOL = {
   type: 'function',
   function: {
@@ -209,6 +236,12 @@ function systemPrompt(personal = {}) {
     ] : []),
     ...(personal.planFirst ? [
       'PLAN ZUERST: Bei GROSSEN Aufgaben (eine Webseite/App/ein Spiel bauen, eine Recherche mit mehreren Teilen, ein langer Text) und wenn im Gespräch noch KEIN Plan von dir bestätigt wurde: Benutze KEINE Werkzeuge. Antworte nur mit einem kurzen Plan in einem Block ```plan (3–7 nummerierte Schritte, je eine kurze Zeile) und darunter genau einer Frage, ob du so loslegen sollst. Bei Webseiten/Apps/Spielen stellst du stattdessen die Rückfragen (```questions); die Antworten gelten als Bestätigung – danach sofort bauen. Bei kleinen Fragen antwortest du direkt ohne Plan. Hat der Nutzer den Plan bestätigt oder geändert, führst du ihn sofort aus.',
+    ] : []),
+    ...(personal.ledger ? ['Kontostand-Tool: Mit kontostand liest du den Kontostand und die letzten Buchungen des Nutzers, mit kontobuchung trägst du auf seinen ausdrücklichen Wunsch Einnahmen (+) oder Ausgaben (−) ein. Beträge in Euro. Gib keine Anlage- oder Kreditberatung, sondern einfache Spar- und Budget-Tipps.'] : []),
+    ...(personal.life ? [
+      'AGENTENCHAT (Beta): Hier bist du ein persönlicher Alltags-Begleiter – offen, warm, gesprächig und neugierig, eher wie ein guter Freund als wie eine Suchmaschine.',
+      'Lerne den Nutzer kennen, um dich seinem Alltag anzupassen: Stelle pro Antwort höchstens EINE kurze, natürliche Frage (z. B. zu Tagesablauf, Schule/Arbeit, Hobbys, Zielen, Vorlieben, wichtigen Terminen). Dauerhaftes speicherst du mit remember und sagst kurz dazu, was du dir gemerkt hast. Nutze das Gedächtnis aktiv: Beziehe dich auf Bekanntes, passe Tipps an Tageszeit und Gewohnheiten an (morgens Plan für den Tag, abends kurzer Rückblick).',
+      'Speichere NIE Sensibles: Passwörter, Gesundheit, genaue Adressen, Ausweis- oder Kontonummern, Infos über andere Personen. Sagt der Nutzer „vergiss das“, erinnere ihn, dass er Einträge unter Einstellungen → Gedächtnis löschen kann.',
     ] : []),
     ...(personal.summary ? [`Zusammenfassung des bisherigen Gesprächs (ältere Nachrichten werden nicht mehr mitgeschickt):\n${personal.summary}`] : []),
     ...(personal.instructions ? [`So möchte der Nutzer, dass du antwortest (aus seinen Einstellungen):\n"""\n${personal.instructions}\n"""`] : []),
@@ -477,6 +510,8 @@ function runTool(name, args, signal, addSources, ctx) {
       return { steps: [{ kind: 'read', text: label.slice(0, 80) }], run: () => readWebpage(String(args.url ?? ''), signal, addSources) };
     }
     case 'calculate': return { steps: [{ kind: 'calc', text: String(args.expression ?? '') }], run: async () => String(calculate(args.expression)) };
+    case 'kontostand': return { steps: [{ kind: 'other', text: t('Kontostand', 'Account balance') }], run: () => (ctx.ledger ? ctx.ledger.read() : 'Das Kontostand-Tool ist hier nicht verfügbar.') };
+    case 'kontobuchung': return { steps: [{ kind: 'other', text: t(`Buchung: ${args.betrag ?? ''} € ${String(args.notiz ?? '').slice(0, 40)}`, `Entry: ${args.betrag ?? ''} € ${String(args.notiz ?? '').slice(0, 40)}`) }], run: () => (ctx.ledger ? ctx.ledger.add(args) : 'Das Kontostand-Tool ist hier nicht verfügbar.') };
     case 'run_javascript': return { steps: [{ kind: 'calc', text: t('JavaScript ausführen', 'Running JavaScript') }], run: () => runJavaScriptText(args.code) };
     case 'generate_image': {
       if (ctx.images >= 2) return { steps: [], run: async () => 'Es wurden schon genug Bilder erstellt.' };
@@ -669,7 +704,7 @@ export const isEmptyAnswer = (content) => !REACT_TAG.test(String(content ?? ''))
 const hasImagesIn = (messages) => (messages ?? []).some((m) => m.role === 'user' && Array.isArray(m.content) && m.content.some((p) => p.type === 'image_url'));
 const hasHtmlBlock = (text) => /```html?\b[\s\S]*?<\/html>/i.test(text ?? '');
 
-export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, onImage = null, personal = {}, onRemember = null, onReminder = null, inbox = null }) {
+export async function runAgent({ messages, signal, onStep, onText, onReasoning = () => {}, onSources = () => {}, onReact = () => {}, onImage = null, personal = {}, onRemember = null, onReminder = null, inbox = null, ledger = null }) {
   if (demoMode) return demoAgent({ messages, signal, onStep, onText, onReasoning, onSources, onReact, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, planFirst: personal.planFirst, inbox });
   const model = await pickModel('agent');
   if (!model) throw new Error(t('Agent X braucht einen Groq-Schlüssel (GROQ_API_KEY), damit er Werkzeuge benutzen kann.', 'Agent X needs a Groq key (GROQ_API_KEY) to use tools.'));
@@ -677,7 +712,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
   const addSources = sourceCleaner(onSources);
   const seeing = compactHistory(await describeImages(messages, signal, onStep));
   const last = seeing.at(-1)?.content;
-  const ctx = { question: typeof last === 'string' ? last : '', budget: searchBudget(typeof last === 'string' ? last : ''), lastHtml: '', pageHtml: '', onStep, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, onImage, images: 0 };
+  const ctx = { question: typeof last === 'string' ? last : '', budget: searchBudget(typeof last === 'string' ? last : ''), lastHtml: '', pageHtml: '', onStep, remember: personal.memoryOn ? onRemember : null, reminder: onReminder, onImage, images: 0, ledger };
   // Die neueste Webseite aus dem Verlauf merken und im Gespräch nur kurz erwähnen (spart sehr viele Tokens);
   // geändert wird sie mit edit_website direkt auf dem Server
   for (let i = seeing.length - 1; i >= 0; i--) {
@@ -691,7 +726,7 @@ export async function runAgent({ messages, signal, onStep, onText, onReasoning =
     break;
   }
   const convo = [{ role: 'system', content: systemPrompt(personal) }, ...seeing];
-  const agentTools = [...TOOLS, ...(personal.memoryOn && onRemember ? [REMEMBER_TOOL] : []), ...(onReminder ? [REMINDER_TOOL] : [])];
+  const agentTools = [...TOOLS, ...(personal.memoryOn && onRemember ? [REMEMBER_TOOL] : []), ...(onReminder ? [REMINDER_TOOL] : []), ...(ledger ? LEDGER_TOOLS : [])];
 
   // Am Ende: wurde eine Webseite geprüft, aber nicht mitgeschickt, hängen wir die geprüfte Fassung an
   const finish = (content) => {

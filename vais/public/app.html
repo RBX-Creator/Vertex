@@ -104,6 +104,38 @@
           <ol class="board-list" id="stat-used"></ol>
         </div>
       </section>
+      <section class="board konto" id="konto" hidden>
+        <div class="board-inner">
+          <h1 class="board-title" data-en="Account balance">Kontostand</h1>
+          <p class="board-sub" data-en="Enter what comes in and goes out. Agent X can read it and add entries for you.">Trag ein, was reinkommt und rausgeht. Agent X kann es lesen und auf Wunsch für dich eintragen.</p>
+          <div class="konto-balance"><small data-en="Current balance">Aktueller Kontostand</small><b id="konto-balance">–</b></div>
+          <form class="konto-form" id="konto-form" autocomplete="off">
+            <input class="input" id="konto-amount" inputmode="decimal" placeholder="Betrag, z. B. 12,50" data-en-placeholder="Amount, e.g. 12.50" aria-label="Betrag" data-en-aria-label="Amount">
+            <input class="input" id="konto-note" maxlength="120" placeholder="Wofür? (z. B. Taschengeld)" data-en-placeholder="What for? (e.g. pocket money)" aria-label="Wofür" data-en-aria-label="What for">
+            <input class="input" id="konto-day" type="date" aria-label="Datum" data-en-aria-label="Date">
+            <div class="konto-btns">
+              <button type="button" class="btn konto-plus" data-sign="1" data-en="+ Income">+ Einnahme</button>
+              <button type="button" class="btn konto-minus" data-sign="-1" data-en="− Expense">− Ausgabe</button>
+            </div>
+          </form>
+          <details class="konto-set">
+            <summary data-en="Set balance">Kontostand eintragen</summary>
+            <div class="konto-set-row">
+              <input class="input" id="konto-set-value" inputmode="decimal" placeholder="Aktueller Stand, z. B. 250,00" data-en-placeholder="Current balance, e.g. 250.00" aria-label="Kontostand" data-en-aria-label="Balance">
+              <button type="button" class="btn" id="konto-set-btn" data-en="Apply">Übernehmen</button>
+            </div>
+          </details>
+          <h2 class="stat-h" data-en="History">Verlauf</h2>
+          <div class="konto-chart" id="konto-chart"></div>
+          <h2 class="stat-h" data-en="Income &amp; expenses per month">Einnahmen &amp; Ausgaben pro Monat</h2>
+          <div class="konto-chart" id="konto-months"></div>
+          <h2 class="stat-h" data-en="Entries">Buchungen</h2>
+          <div class="table-wrap"><table class="konto-table">
+            <thead><tr><th data-en="Date">Datum</th><th data-en="What for">Wofür</th><th data-en="Amount">Betrag</th><th data-en="Balance">Stand</th><th></th></tr></thead>
+            <tbody id="konto-rows"></tbody>
+          </table></div>
+        </div>
+      </section>
       <section class="board" id="board" hidden>
         <div class="board-inner">
           <h1 class="board-title" data-en="Leaderboard">Bestenliste</h1>
@@ -197,6 +229,10 @@
       <button class="drawer-item" id="d-translate">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h8M8 3v2M10 5c0 4-2.5 7-6 8.5M6 9c1 2 3 3.5 5.5 4.5"/><path d="m13 21 4-9 4 9M14.5 18h5"/></svg>
         <span data-en="Translator">Übersetzer</span>
+      </button>
+      <button class="drawer-item" id="d-konto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18a1 1 0 0 1 1 1v2"/><rect x="3" y="7.5" width="18" height="12" rx="2.5"/><path d="M16 13.5h2"/></svg>
+        <span data-en="Account balance">Kontostand</span>
       </button>
       <button class="drawer-item" id="d-stats">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 6-6"/></svg>

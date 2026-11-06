@@ -15,11 +15,12 @@ export async function personalFor(userId) {
   return { instructions: String(u?.instructions ?? '').trim(), memoryOn, planFirst: !u?.plan_off, memories: memories.map((m) => ({ id: Number(m.id), text: m.text })) };
 }
 
-export async function remember(userId, raw) {
+// force: auch wenn das Gedächtnis in den Einstellungen aus ist (Agentenchats, Beta)
+export async function remember(userId, raw, { force = false } = {}) {
   const text = String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_MEMORY_CHARS);
   if (!text) throw new Error('Leerer Eintrag.');
   const u = await get('SELECT memory_off FROM users WHERE id = ?', userId);
-  if (u?.memory_off) return 'Das Gedächtnis ist ausgeschaltet – nichts gespeichert.';
+  if (u?.memory_off && !force) return 'Das Gedächtnis ist ausgeschaltet – nichts gespeichert.';
   const same = await get('SELECT id FROM memories WHERE user_id = ? AND lower(text) = lower(?)', userId, text);
   if (same) return 'Schon gespeichert.';
   await run('INSERT INTO memories (user_id, text, created_at) VALUES (?, ?, ?)', userId, text, Date.now());

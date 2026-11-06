@@ -11,6 +11,7 @@ import { currentUser, HttpError, wrap, errorHandler } from './auth.js';
 import { runAgent, quickReaction } from './agent.js';
 import { profile, personalFor, instructionsPrompt, remember } from './profile.js';
 import { basePrompt } from './prompt.js';
+import { ledger, ledgerOf, ledgerText, ledgerAddText } from './ledger.js';
 import { searchWeb, resultsPrompt } from './search.js';
 import { push, addReminder, notifyUser } from './push.js';
 import { sites } from './sites.js';
@@ -85,6 +86,7 @@ chat.get('/maintenance', wrap(async (req, res) => {
 }));
 
 chat.use('/profile', profile);
+chat.use('/ledger', ledger);
 chat.use('/push', push);
 chat.use('/sites', sites);
 
@@ -190,6 +192,10 @@ chat.post('/start', wrap(async (req, res) => {
   const modality = MODALITY_CAP[req.body?.modality] ? req.body.modality : 'auto';
   let picked;
   if (mode === 'agent') {
+    picked = ['agent'];
+  } else if (mode === 'life') {
+    // Agentenchats (Beta): vorerst nur für Mods und Admins
+    if (!isStaff(req.user)) throw new HttpError(403, t('Agentenchats sind noch in der Beta und nur für Mods und Admins.', 'Agent chats are still in beta and only for mods and admins.'));
     picked = ['agent'];
   } else if (mode === 'battle') {
     const cap = modality === 'image' ? 'image' : req.body?.images ? 'vision' : MODALITY_CAP[modality];
@@ -374,6 +380,10 @@ chat.post('/stream', wrap(async (req, res) => {
   try { charged = blocked || faq ? null : await charge(req.user, kind, cost); } catch (err) { if (kind) undoIpAnswer(req.ip, kind); throw err; }
   const giveBack = async () => { await refund(req.user, charged, cost); if (charged) undoIpAnswer(req.ip, kind); }; // nichts geantwortet → zählt nicht
   const personal = await personalFor(req.user.id);
+  // Agentenchats (Beta): nutzen das Gedächtnis auch, wenn es sonst aus ist
+  if (row.mode === 'life' && !personal.memoryOn && !row.incognito) {
+    personal.memories = (await all('SELECT id, text FROM memories WHERE user_id = ? ORDER BY id', req.user.id)).map((m) => ({ id: Number(m.id), text: m.text }));
+  }
   if (row.incognito) { personal.memoryOn = false; personal.memories = []; } // Inkognito: nichts merken
   const custom = row.modality === 'image' ? null : instructionsPrompt(personal.instructions);
 
@@ -505,9 +515,11 @@ chat.post('/stream', wrap(async (req, res) => {
           onSources,
           onReact,
           onImage: (img) => { images.push(img); out(`${JSON.stringify({ image: img })}\n`); },
-          personal: { ...personal, summary: fitted.summary },
+          // Agentenchats: Gedächtnis immer an (außer Inkognito), offener und persönlicher
+          personal: { ...personal, summary: fitted.summary, ledger: true, ...(row.mode === 'life' && !row.incognito ? { life: true, memoryOn: true } : {}) },
+          ledger: { read: () => ledgerText(req.user.id), add: (args) => ledgerAddText(req.user.id, args) },
           inbox,
-          onRemember: (fact) => remember(req.user.id, fact),
+          onRemember: (fact) => remember(req.user.id, fact, { force: row.mode === 'life' && !row.incognito }),
           onReminder: (args) => addReminder(req.user.id, args.text, args.when, args.in_minutes),
           onStep: (step) => { steps.push(step); out(`${JSON.stringify({ step })}\n`); },
         });
@@ -1000,10 +1012,11 @@ chat.get('/export', wrap(async (req, res) => {
     const data = await loadChatData(row);
     out.push({ id: row.id, title: data.title, mode: data.mode, modality: data.modality, created: new Date(Number(row.created_at)).toISOString(), models: data.labels ?? null, winner: data.winner ?? null, shared: data.shared, turns: data.turns });
   }
-  const [memories, reminders, usage] = await Promise.all([
+  const [memories, reminders, usage, konto] = await Promise.all([
     all('SELECT text, created_at FROM memories WHERE user_id = ? ORDER BY id', uid).catch(() => []),
     all('SELECT text, due_at, sent_at FROM reminders WHERE user_id = ? ORDER BY due_at', uid).catch(() => []),
     usageHistory(uid).catch(() => []),
+    ledgerOf(uid).catch(() => null),
   ]);
   const file = {
     exportedAt: new Date().toISOString(),
@@ -1013,6 +1026,7 @@ chat.get('/export', wrap(async (req, res) => {
     memories: memories.map((m) => ({ text: m.text, created: new Date(Number(m.created_at)).toISOString() })),
     reminders: reminders.map((r) => ({ text: r.text, due: new Date(Number(r.due_at)).toISOString(), sent: r.sent_at ? new Date(Number(r.sent_at)).toISOString() : null })),
     usagePerDay: usage,
+    kontostand: konto?.count ? { balanceEuro: konto.balance / 100, entries: [...konto.entries].reverse().map((e) => ({ day: e.day, amountEuro: e.amount / 100, note: e.note, kind: e.kind })) } : null,
     chats: out,
   };
   res.set('Content-Disposition', `attachment; filename="vais-daten-${new Date().toISOString().slice(0, 10)}.json"`);
@@ -1121,7 +1135,7 @@ async function loadChatData(row, { forShare = false } = {}) {
     modality: row.modality || 'auto',
     title: row.title || t('Chat', 'Chat'),
     winner: row.winner,
-    models: forShare || row.mode === 'battle' || row.mode === 'agent' ? null : ids,
+    models: forShare || row.mode === 'battle' || row.mode === 'agent' || row.mode === 'life' ? null : ids,
     labels: reveal ? names : null,
     shared: forShare ? undefined : Boolean(row.share_id),
     incognito: forShare ? undefined : Boolean(row.incognito),
